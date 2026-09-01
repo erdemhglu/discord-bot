@@ -14,7 +14,7 @@ Rust ile yazıldı, cevapları openrouter üzerinden alıyor.
 - 6 saatte bir hacker news + Sözcü gündeminden gruba uygun bir haber atar, 2 saat yorum bekler
 - 4 saatte bir Türkiye gündemini gezer (Sözcü RSS, firecrawl varsa sayfayı okur), kendi görüşünü günlüğüne yazar; kişilik buradan da beslenir
 - geceleri uyur (01-09), nadiren uykusuz gece geçirir (gerginse daha sık); uyurken yazmaz, etiketlenirse uyanınca döner
-- etiketlenince, adı geçince ya da mesajına yanıt verilince her zaman cevap verir
+- etiketlenince, adı geçince ya da mesajına yanıt verilince her zaman cevap verir; cevabı son yazanın mesajına bağlayıp onu etiketler
 - bayram, uzun hafta sonu, yaz, festival zamanlarında seyahatte gibi davranır: az yazar, yoldan mesaj atar, gitmeden haber verir
 - arada `resimler/` klasöründen bir görsel atar; bazen hacklenmiş taklidiyle (3 mesaj sürer,
   sonra kendine gelir; link atmaz, kimseden bir şey istemez)
@@ -104,7 +104,7 @@ süreleri, şaka sıklığı, favori kişi.
 
 ## güvenlik
 
-- mention'lar kapalı gönderilir, model `@everyone` yazsa bile kimse pinglenmez
+- mention'lar kapalı gönderilir; yalnız sohbet yanıtının sahibi ve hoş geldindeki yeni üye pinglenebilir
 - diğer botlara ve webhook'lara cevap vermez, bot-bot döngüsü oluşmaz
 - aynı kanalda aynı anda tek cevap üretir, spam ile api faturası şişirilemez
 - her istekte `max_tokens` sınırı var, http istekleri 60 saniyede kesilir
