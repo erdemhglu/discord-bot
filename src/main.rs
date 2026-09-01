@@ -80,7 +80,8 @@ struct Sohbet {
     sayac: u32,
     hackli: u32, // 0 değilse hacklenmiş taklidi sürüyor, her cevapta bir azalır
     son_mesaj: Option<MessageId>, // cevaplanacak mesaj (discord yanıtı olarak)
-    gelen: u32,  // gelen kullanıcı mesajı sayısı; cevap yazarken yenisi geldi mi anlamak için
+    gelen: u32,
+    etiketli: bool, // son gelen mesaj botu etiketledi mi (cevap yanıt olarak gider)  // gelen kullanıcı mesajı sayısı; cevap yazarken yenisi geldi mi anlamak için
 }
 
 #[derive(Default)]
@@ -648,6 +649,28 @@ impl Bot {
                 (cevap.chars().count() as u64 * 25).clamp(350, 2500),
             ))
             .await;
+            // insan gibi: kalabalıkta, araya mesaj girdiyse ya da etiketlendiyse yanıtla; yoksa düz yaz
+            let yanitla = {
+                let d = self.durum();
+                let s = d.sohbetler.get(&kanal);
+                let etiketli = s.is_some_and(|s| s.etiketli);
+                let araya_girdi = s.is_some_and(|s| s.gelen > gelen);
+                let bot_onek = format!("{}: ", d.bot_adi);
+                let konusan: HashSet<&str> = d
+                    .kanal_gecmisi
+                    .get(&kanal)
+                    .map(|g| {
+                        g.iter()
+                            .rev()
+                            .take(5)
+                            .filter(|l| !l.starts_with(&bot_onek))
+                            .filter_map(|l| l.split_once(": ").map(|(i, _)| i))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                etiketli || araya_girdi || konusan.len() >= 2
+            };
+            let yanit = if yanitla { yanit } else { None };
             self.gonder(ctx, kanal, &cevap, None, None, yanit).await;
 
             let biten = {
@@ -1435,6 +1458,7 @@ impl EventHandler for Handler {
             if let Some(s) = d.sohbetler.get_mut(&kanal) {
                 s.gecmis.push(kullanici(format!("{isim}: {metin}")));
                 s.son_mesaj = Some(msg.id);
+                s.etiketli = etiketlendi;
                 s.gelen += 1;
                 if s.gecmis.len() > SOHBET_BOYU {
                     s.gecmis.drain(..s.gecmis.len() - SOHBET_BOYU);

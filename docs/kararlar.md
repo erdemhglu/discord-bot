@@ -52,6 +52,7 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
 - **Few-shot örnek cümle yok.** İlk gece bot promptttaki örnek cevabı ("napıyım yavaş mı yazayım")
   kelimesi kelimesine kopyaladı. Örnek çiftler kaldırıldı; ton örneği yalnız grubun kendi gerçek
   mesajlarından (`ornek_mesajlar`) geliyor. "Argoyu zorlama" maddesi eklendi.
+- **Yanıt referansı duruma göre** (2026-09-02): her cevabı yanıt olarak atmak robotik duruyordu; tek kişiyle baş başa konuşurken düz yazar, kalabalıkta/etiketlenince/araya mesaj girince yanıtlar.
 - **Cevap discord yanıtı olarak gider.** "Kime cevap veriyorsa etiketlesin" isteği; isim yazmak
   yerine `reference_message` + `replied_user`, kalabalık kanalda kimin muhatap olduğu belli.
   Kısa okuma payından sonra geçmiş yeniden alınır; mesaj yağmurunda eski satıra cevap verilmez.
