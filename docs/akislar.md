@@ -1,6 +1,7 @@
 # Akışlar (olay → sırayla ne olur)
 
 ## Bir mesaj geldi
+0. Metin `!sifirla` ile başlıyorsa: o kanalın yasağı, açık sohbeti, haber beklemesi ve meşgul bayrağı silinir (`hepsi` geçiyorsa tüm kanallar); mesaja 👍 tepkisi, başka cevap yok.
 1. `Handler::message`: bot/webhook/DM → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.

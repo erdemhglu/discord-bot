@@ -1055,6 +1055,26 @@ impl EventHandler for Handler {
         let isim = ad(&msg.author);
         let bot_id = ctx.cache.current_user().id;
 
+        // !sifirla: bu kanaldaki 3 saatlik yasağı ve açık sohbeti sıfırlar; "!sifirla hepsi" tüm kanalları
+        if metin.trim().starts_with("!sifirla") {
+            {
+                let mut d = self.bot.durum();
+                if metin.contains("hepsi") {
+                    d.yasakli.clear();
+                    d.sohbetler.clear();
+                    d.haber_bekleyen.clear();
+                    d.mesgul.clear();
+                } else {
+                    d.yasakli.remove(&kanal);
+                    d.sohbetler.remove(&kanal);
+                    d.haber_bekleyen.remove(&kanal);
+                    d.mesgul.remove(&kanal);
+                }
+            }
+            let _ = msg.react(&ctx.http, '👍').await;
+            return;
+        }
+
         let cevap_ver = {
             let mut d = self.bot.durum();
             // etiketlendi mi, adı geçti mi, mesajına yanıt mı verildi

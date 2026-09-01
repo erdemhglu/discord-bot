@@ -85,6 +85,10 @@ cargo run --release
 discord developer portal'da **Message Content** ve **Server Members** intent'leri açık olmalı.
 Şakalarda atılacak görselleri `resimler/` içine koy (png, jpg, gif, webp); klasör git'e girmez.
 
+## komutlar
+
+- `!sifirla` — o kanaldaki 3 saatlik yasağı ve açık sohbeti sıfırlar (test için). `!sifirla hepsi` tüm kanallar.
+
 ## ayarlar
 
 `src/main.rs` başındaki sabitler: mesaj sınırı, veda eşiği, araya girme şansı, bekleme
