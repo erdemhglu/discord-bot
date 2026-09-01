@@ -1,0 +1,17 @@
+[package]
+name = "discord-bot"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+serenity = { version = "0.12", features = ["cache"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "fs"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dotenvy = "0.15"
+rand = "0.8"
+
+[profile.release]
+strip = true
+lto = true
