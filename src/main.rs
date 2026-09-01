@@ -279,6 +279,17 @@ fn temizle(mut metin: String, bot_adi: &str) -> String {
     metin
 }
 
+// hata gövdesini tek satıra indirir
+fn kirp_hata(metin: &str) -> String {
+    metin
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(300)
+        .collect()
+}
+
 // ```json ... ``` gibi süslerin içinden json'u çıkarır
 fn json_ayikla(metin: &str) -> &str {
     match (metin.find('{'), metin.rfind('}')) {
@@ -305,16 +316,21 @@ struct Icerik {
 impl Bot {
     // openrouter'a ham istek; her şey buradan geçer
     async fn sor_ham(&self, govde: serde_json::Value) -> Result<String, Hata> {
-        let yanit: Yanit = self
+        let cevap = self
             .http
             .post(&self.api_adres)
             .bearer_auth(&self.anahtar)
             .json(&govde)
             .send()
-            .await?
-            .error_for_status()?
-            .json()
             .await?;
+        let durum = cevap.status();
+        let govde_metni = cevap.text().await?;
+        if !durum.is_success() {
+            // 404 çoğunlukla "bu isimde model yok" demek; gövdedeki mesajı ve modeli göster
+            let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
+            return Err(format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into());
+        }
+        let yanit: Yanit = serde_json::from_str(&govde_metni)?;
         let metin = yanit
             .choices
             .into_iter()
