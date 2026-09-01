@@ -91,9 +91,11 @@ discord developer portal'da **Message Content** ve **Server Members** intent'ler
 
 - `!sifirla` — o kanaldaki 3 saatlik yasağı ve açık sohbeti sıfırlar. `!sifirla hepsi` tüm kanallar.
 - `!haber` — şimdi haber seç ve at (HN + gündem).
+- `!sorun` — yazılım derdi atıp "nasıl çözerim" diye sorar (kendiliğinden de laf atma turlarının %25'inde, haber kanalına).
 - `!gez` — gündem gezintisini şimdi yap (gundem.md güncellenir).
 - `!saka` / `!hack` — görsel şakası / hacklenmiş taklidi şimdi.
 - `!ajanlar` — profilci ve hocayı şimdi çalıştır.
+- konuşmalar `durum/kanallar/<id>.md`'de kalır; sohbet bitse ya da bot yeniden başlasa da son 10 satırla devam eder
 - `!uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `!uyu [saat]` — test için uyutur (varsayılan 8 saat).
 - `!durum` — evre, sayaçlar, model, uyku, seyahat.
 - `!model` — şu anki model. `!model <id>` değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.

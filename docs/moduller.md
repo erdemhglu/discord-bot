@@ -17,6 +17,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 ### Yardımcılar
 - `simdi_unix() -> i64` — şu an, unix saniye.
 - `ad(&User) -> String` — görünen ad (`global_name`), yoksa kullanıcı adı. Hafıza ve kişi dosyaları bu adla.
+- `kanal_not(&mut Durum, kanal, satir)` — kanal geçmişine (bellek 60 + `durum/kanallar/<id>.md`) ekler; kullanıcı satırları `message`'dan, bot satırları `gonder`'dan.
 - `hatirla(&mut Durum, isim, metin)` — ham hafızaya "isim: metin" ekler, 2000'i aşarsa baştan atar.
 - `son_mesajlar(&Durum, n) -> String` — ham hafızanın son n satırı, `\n` ile.
 - `dokum(&[Mesaj], bot_adi) -> String` — sohbeti "isim: metin" satırlarına çevirir, bot satırları `bot_adi:` ile.
@@ -35,7 +36,8 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `sistem_metni(&Durum, talimat, getirilen) -> String` — bölümleri sırayla ekler (mimari.md listesi). Serbest fonksiyon, kilit çağıranda.
 
 ### Sohbet motoru
-- `sohbet_baslat(&mut Durum, kanal, acilis: Option<String>) -> &mut Sohbet` — varsa mevcut sohbeti döner (`entry().or_insert`), yoksa yeni; açılış varsa `asistan` mesajı + `sayac=1`.
+- `Bot::sorun_at(ctx, kanal)` — `uret(SORUN, 160)` ile uydurma kod derdi, gönder, sohbet aç. Dürtme döngüsü (%25) ve `!sorun`.
+- `sohbet_baslat(&mut Durum, kanal, acilis: Option<String>) -> &mut Sohbet` — kanal geçmişinin son 10 satırıyla tohumlar (bot satırları assistant), açılış mesajı geçmişte zaten varsa iki kez koymaz;  varsa mevcut sohbeti döner (`entry().or_insert`), yoksa yeni; açılış varsa `asistan` mesajı + `sayac=1`.
 - `sohbet_bitir(&mut Durum, kanal) -> Option<Sohbet>` — haber bekleme silinir, kanal 3 saat yasaklanır, sohbet çıkarılıp döner (günlükçüye gider).
 - `girebilir_mi(&Durum, kanal) -> bool` — yasak süresi geçmiş mi.
 - `Bot::komut(ctx, msg, komut, arg) -> bool` — test/yönetim komutları (bkz README). `Bot::model_var_mi(id)` OpenRouter `/models` listesinde arar; liste çekilemezse engel olmaz.

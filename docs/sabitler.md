@@ -7,12 +7,14 @@
 | MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-medium-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
 | MAX_MESAJ | 12 | bir sohbette botun yazacağı en fazla mesaj |
 | VEDA_ESIGI | 9 | bu sayaçtan sonra "toparla" talimatı |
-| SANS | 0.10 | mesaj başına araya girme olasılığı (seyahatte × YOLDA_SANS_CARPANI) |
+| SANS | 0.35 | mesaj başına araya girme olasılığı (seyahatte × YOLDA_SANS_CARPANI) |
 | BEKLEME | 3 saat | sohbet bitince kanala girmeme süresi |
 | YORUM_SURESI | 2 saat | haber attıktan sonra yorum bekleme |
 | HABER_ARALIGI | 6 saat | haber turu ve 6 saatlik ajanlar |
 | DURTME_ARALIGI / DURTME_SANSI | 1 saat / 0.3 | kendiliğinden laf atma |
 | SAKA_ARALIGI / SAKA_SANSI / HACK_PAYI / HACK_MESAJI | 3 saat / 0.1 / 0.3 / 3 | görsel ve hack şakası |
+| SORUN_PAYI | 0.25 | laf atma turlarının kod derdi olma payı |
+| KANAL_GECMIS / SOHBET_TOHUM | 60 / 10 | kanal başına saklanan satır / yeni sohbete tohum |
 | GECMIS_GUN | 14 | açılış taramasının derinliği |
 | HAFIZA_BOYU | 2000 | ham hafıza satırı |
 | SOHBET_BOYU | 20 | modele giden sohbet geçmişi |
@@ -49,5 +51,5 @@ SAGLAYICI=mistral (zorlama) · MODEL (model kimliği, sağlayıcının varsayıl
 FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı)
 
 ## src/gelisim.rs
-ISIM_EVRESI 2 (yerlesik) · EVRELER: yeni (0 gün, 0 sohbet, sans×0.5, dürtme×0.3) · isinma (3g, 8s, ×0.8, ×0.7) ·
+ISIM_EVRESI 2 (yerlesik) · EVRELER: yeni (0 gün, 0 sohbet, sans×0.7, dürtme×0.4) · isinma (3g, 8s, ×0.8, ×0.7) ·
 yerlesik (10g, 25s, ×1, ×1) · eski-toprak (30g, 80s, ×1, ×1.2)

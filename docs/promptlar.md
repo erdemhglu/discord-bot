@@ -14,6 +14,7 @@ doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken 
 | DURUP_DURURKEN | durup-dururken.md | görev | `durtme_dongusu` | — | 120 |
 | YOLDA | yolda.md | görev | `durtme_dongusu` (seyahatte) | — | 120 |
 | GIDIYORUM | gidiyorum.md | görev | `durtme_dongusu` (yarın seyahat) | — | 120 |
+| SORUN | sorun.md | görev | `sorun_at` | — | 160 |
 | HABER_TANIT | haber-tanit.md | görev | `haber_dongusu` | — | 200 |
 | RESIM_AT | resim-at.md | görev (görselli) | `resimci` | — | 120 |
 | HACK_GIRIS / HACK_DEVAM / HACK_CIKIS | hack-*.md | görev | `saka_dongusu`, `cevapla` | — | 150 / 250 / 250 |

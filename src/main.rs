@@ -28,7 +28,7 @@ const MISTRAL_ADRES: &str = "https://api.mistral.ai/v1/chat/completions";
 const MISTRAL_MODEL: &str = "mistral-medium-latest";
 const MAX_MESAJ: u32 = 12; // bir sohbette en fazla kaç mesaj yazar
 const VEDA_ESIGI: u32 = 9; // bu sayıdan sonra konuyu kapatmaya çalışır
-const SANS: f64 = 0.10; // normal mesajlaşmaya %10 ihtimalle dalar
+const SANS: f64 = 0.35; // normal mesajlaşmaya %10 ihtimalle dalar
 const BEKLEME: Duration = Duration::from_secs(3 * 60 * 60); // sohbetten kaçınca 3 saat o kanala girmez
 const YORUM_SURESI: Duration = Duration::from_secs(2 * 60 * 60); // haber attıktan sonra 2 saat yorum bekler
 const HABER_ARALIGI: Duration = Duration::from_secs(6 * 60 * 60); // ne sıklıkla hacker news'e bakar (ajanlar da bu turda çalışır)
@@ -37,9 +37,12 @@ const DURTME_SANSI: f64 = 0.3; // her denemede %30 ihtimalle atar
 const SAKA_ARALIGI: Duration = Duration::from_secs(3 * 60 * 60); // ne sıklıkla resim/hack şakası dener
 const SAKA_SANSI: f64 = 0.1; // her denemede %10 (ortalama 30 saatte bir)
 const HACK_PAYI: f64 = 0.3; // şakaların %30'u hacklenmiş taklidi, gerisi düz resim
+const SORUN_PAYI: f64 = 0.25; // laf atma turlarının bu kadarı yazılım kanalına "sikko sorun"
 const HACK_MESAJI: u32 = 3; // hack taklidi kaç cevap sürer (sonuncusu kendine geliş)
 const GECMIS_GUN: i64 = 14; // açılışta kaç günlük mesaj okur
 const HAFIZA_BOYU: usize = 2000; // akılda tuttuğu son mesaj sayısı
+const KANAL_GECMIS: usize = 60; // kanal başına diskte tutulan son satır (bot dahil)
+const SOHBET_TOHUM: usize = 10; // yeni sohbet açılırken kanal geçmişinden alınan satır
 const SOHBET_BOYU: usize = 20; // bir sohbette modele giden son mesaj sayısı
 const MESAJ_SINIRI: usize = 1900; // discord 2000 kabul ediyor, pay bırakıyoruz
 const FAVORI: u64 = 259669117248864257; // bu kişiyi ne olursa olsun sever
@@ -105,8 +108,10 @@ struct Durum {
     gundem: String, // gezgin: son okudukları ve düşündükleri
     planlar: Vec<uyku::Plan>,
     uyuyor: bool,
-    bekleyen_etiketler: Vec<(ChannelId, String)>, // uyurken etiketlenmişse uyanınca döner
-    gelisim: gelisim::Gelisim,                    // evre, sayaçlar, seçtiği isim
+    uyanik_zorla: i64, // !uyan sonrası bu ana kadar uyku planı işlemez (unix)
+    kanal_gecmisi: HashMap<ChannelId, VecDeque<String>>, // kanal başına son satırlar, diskte de durur
+    bekleyen_etiketler: Vec<(ChannelId, String)>,        // uyurken etiketlenmişse uyanınca döner
+    gelisim: gelisim::Gelisim,                           // evre, sayaçlar, seçtiği isim
     kullanici_adi: String, // discord kullanıcı adı; bot_adi seçilen isim olabilir
     model: String,         // kullanılan model; !model ile değişir, durum/model.md'de kalır
     son_yol_mesaji: i64,   // seyahatte en son hangi gün yoldan yazdı
@@ -124,6 +129,10 @@ impl Durum {
             dizin: hafiza::dizin_yenile(),
             gundem: gundem::son_gundem(&hafiza::oku("gundem.md")),
             gelisim: gelisim::yukle(),
+            kanal_gecmisi: hafiza::kanal_gecmisi_yukle()
+                .into_iter()
+                .map(|(id, v)| (ChannelId::new(id), v))
+                .collect(),
             ..Durum::default()
         }
     }
@@ -236,6 +245,17 @@ fn ornek_mesajlar(d: &Durum) -> String {
         .map(|s| s.as_str())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+// kanalın geçmişine satır ekler ve dosyaya yazar; sohbet bitse, bot yeniden başlasa da kalır
+fn kanal_not(d: &mut Durum, kanal: ChannelId, satir: String) {
+    let g = d.kanal_gecmisi.entry(kanal).or_default();
+    g.push_back(satir);
+    while g.len() > KANAL_GECMIS {
+        g.pop_front();
+    }
+    let icerik = g.iter().cloned().collect::<Vec<_>>().join("\n");
+    hafiza::yaz(&format!("kanallar/{}.md", kanal.get()), &icerik);
 }
 
 fn son_mesajlar(d: &Durum, n: usize) -> String {
@@ -423,6 +443,8 @@ impl Bot {
         if d.kendi_mesajlarim.len() > 50 {
             d.kendi_mesajlarim.pop_front();
         }
+        let satir = format!("{}: {}", d.bot_adi, metin);
+        kanal_not(&mut d, kanal, satir);
     }
 }
 
@@ -485,7 +507,25 @@ fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> String {
 
 fn sohbet_baslat(d: &mut Durum, kanal: ChannelId, acilis: Option<String>) -> &mut Sohbet {
     let mut s = Sohbet::default();
+    // kanalın son satırlarıyla başla ki daha önce ne konuşulduğunu bilsin
+    let onek = format!("{}: ", d.bot_adi);
+    if let Some(g) = d.kanal_gecmisi.get(&kanal) {
+        let atla = g.len().saturating_sub(SOHBET_TOHUM);
+        for satir in g.iter().skip(atla) {
+            match satir.strip_prefix(&onek) {
+                Some(m) => s.gecmis.push(asistan(m)),
+                None => s.gecmis.push(kullanici(satir.clone())),
+            }
+        }
+    }
     if let Some(a) = acilis {
+        // açılış mesajı zaten gönderilip geçmişe düşmüş olabilir, iki kez olmasın
+        if s.gecmis
+            .last()
+            .is_some_and(|m| m.role == "assistant" && m.content == a)
+        {
+            s.gecmis.pop();
+        }
         s.gecmis.push(asistan(a));
         s.sayac = 1;
     }
@@ -532,7 +572,7 @@ impl Bot {
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
             sleep(Duration::from_millis(400 + (rand::random::<u64>() % 800))).await;
-            let (gecmis, yanit, gelen, sinir, en_cok_cumle) = {
+            let (gecmis, yanit, gelen, sinir, en_cok_cumle, token) = {
                 let d = self.durum();
                 let Some(s) = d.sohbetler.get(&kanal) else {
                     drop(d);
@@ -554,26 +594,36 @@ impl Bot {
                     })
                     .unwrap_or("")
                     .to_lowercase();
+                // üç kademe: sıradan laf kısa; soru/orta boy mesaj orta; ciddi konu uzun
+                let gecen = |liste: &[&str]| liste.iter().any(|k| son.contains(k));
+                let ciddi = gecen(&[
+                    "ciddi",
+                    "anlat",
+                    "açıkla",
+                    "ne düşün",
+                    "felsefe",
+                    "sence",
+                    "neden",
+                ]) || son.chars().count() > 150;
                 let soru = son.contains('?')
-                    || [
-                        "ciddi",
-                        "anlat",
-                        "ne düşün",
-                        "nasıl",
-                        "neden",
-                        "olsa",
-                        "olsan",
-                    ]
-                    .iter()
-                    .any(|k| son.contains(k));
-                let (sinir, en_cok_cumle) = if soru || son.chars().count() > 60 {
-                    ((ort * 4).clamp(140, 360), 3)
+                    || gecen(&["nasıl", "olsa", "olsan", "mı ", "mi ", "mu ", "mü "]);
+                let (sinir, en_cok_cumle, token) = if ciddi {
+                    ((ort * 6).clamp(220, 600), 5, 220)
+                } else if soru || son.chars().count() > 60 {
+                    ((ort * 4).clamp(140, 360), 3, 140)
                 } else {
-                    ((ort * 2).clamp(40, 220), 2)
+                    ((ort * 2).clamp(40, 220), 2, 90)
                 };
-                (s.gecmis.clone(), s.son_mesaj, s.gelen, sinir, en_cok_cumle)
+                (
+                    s.gecmis.clone(),
+                    s.son_mesaj,
+                    s.gelen,
+                    sinir,
+                    en_cok_cumle,
+                    token,
+                )
             };
-            let cevap = match self.uret(&gecmis, talimat, 90).await {
+            let cevap = match self.uret(&gecmis, talimat, token).await {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("ai hatası: {e}");
@@ -839,6 +889,18 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
 }
 
 impl Bot {
+    // küçük, uydurma ama inandırıcı bir yazılım derdi atar, "nasıl çözerim" diye sorar
+    async fn sorun_at(&self, ctx: &Context, kanal: ChannelId) {
+        let son = son_mesajlar(&self.durum(), 30);
+        match self.uret(&[kullanici(son)], SORUN, 160).await {
+            Ok(laf) => {
+                self.gonder(ctx, kanal, &laf, None, None, None).await;
+                sohbet_baslat(&mut self.durum(), kanal, Some(laf));
+            }
+            Err(e) => eprintln!("ai hatası: {e}"),
+        }
+    }
+
     // seçilmiş bir haberi kanala atar ve yorum bekleme sohbeti açar
     async fn haber_at(&self, ctx: &Context, kanal: ChannelId) -> bool {
         let h = match self.haberci().await {
@@ -937,6 +999,15 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
             GIDIYORUM
         } else {
             if rand::random::<f64>() > DURTME_SANSI * gelisim::evre(&bot.durum().gelisim).durtme {
+                continue;
+            }
+            if rand::random::<f64>() < SORUN_PAYI {
+                // yazılım kanalına küçük bir kod derdi at
+                if let Some(kanal) = varsayilan_kanal(&bot, &ctx) {
+                    if !bot.durum().sohbetler.contains_key(&kanal) {
+                        bot.sorun_at(&ctx, kanal).await;
+                    }
+                }
                 continue;
             }
             DURUP_DURURKEN
@@ -1080,6 +1151,10 @@ impl Bot {
                     soyle("haber bulamadım".into()).await;
                 }
             }
+            "sorun" => {
+                self.durum().sohbetler.remove(&kanal);
+                self.sorun_at(ctx, kanal).await;
+            }
             "gez" => {
                 self.gezgin().await;
                 let _ = msg.react(&ctx.http, '👍').await;
@@ -1096,13 +1171,18 @@ impl Bot {
             }
             "uyan" => {
                 {
+                    // planı silme: silinirse dakika sonra yeniden kurulup tekrar uyutur.
+                    // onun yerine planlı uyku bitene kadar "zorla uyanık" kal
                     let mut d = self.durum();
                     let simdi = simdi_unix();
-                    for p in d.planlar.iter_mut() {
-                        if p.bas <= simdi && simdi < p.bit {
-                            p.bit = simdi; // bu uykuyu şimdi bitir
-                        }
-                    }
+                    let bitis = d
+                        .planlar
+                        .iter()
+                        .filter(|p| p.bas <= simdi && simdi < p.bit)
+                        .map(|p| p.bit)
+                        .max()
+                        .unwrap_or(simdi + 6 * 3600);
+                    d.uyanik_zorla = bitis;
                 }
                 let _ = msg.react(&ctx.http, '👍').await;
                 self.uyku_gecisi(ctx).await;
@@ -1112,6 +1192,7 @@ impl Bot {
                     let mut d = self.durum();
                     let simdi = simdi_unix();
                     let sure: i64 = arg.parse().unwrap_or(8); // saat
+                    d.uyanik_zorla = 0;
                     d.planlar.push(uyku::Plan {
                         gun: -1,
                         uykusuz_bas: None,
@@ -1359,6 +1440,7 @@ impl EventHandler for Handler {
                     s.gecmis.drain(..s.gecmis.len() - SOHBET_BOYU);
                 }
             }
+            kanal_not(&mut d, kanal, format!("{isim}: {metin}"));
             acik
         };
 
@@ -1415,7 +1497,7 @@ async fn main() -> Result<(), Hata> {
         Ok(v) if !v.trim().is_empty() => Some(ChannelId::new(v.trim().parse()?)),
         _ => None,
     };
-    for k in ["kisiler", "konular", "olaylar", "arsiv"] {
+    for k in ["kisiler", "konular", "olaylar", "arsiv", "kanallar"] {
         std::fs::create_dir_all(PathBuf::from(DURUM_KLASORU).join(k))?;
     }
     std::fs::create_dir_all(RESIM_KLASORU)?;

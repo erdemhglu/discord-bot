@@ -57,6 +57,15 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   Kısa okuma payından sonra geçmiş yeniden alınır; mesaj yağmurunda eski satıra cevap verilmez.
 - **Model çalışırken değişir, `!model`.** Yalnız FAVORI; OpenRouter listesinde doğrulanır;
   `durum/model.md` env'i ezer. Test komutları (`!haber` vb.) herkes için, sunucu onların.
+- **2026-09-02 · Kanal geçmişi diske, yeni sohbet tohumlu.** "Balık hafızalı": sohbet 12 mesajda
+  kapanınca ve yeniden başlatınca her şey uçuyordu, botun kendi mesajları ham hafızada da yoktu.
+  Artık kanal başına son 60 satır (bot dahil) `durum/kanallar/`'da, yeni sohbet son 10 satırla açılır.
+- **Uzunluk üç kademe.** Sıradan laf 2 cümle; soru/orta mesaj 3; ciddi konu ("anlat", "sence",
+  150+ karakter) 5 cümle ve 600 karaktere kadar. Token da kademeli (90/140/220).
+- **`!uyan` planı silmez, zorla uyanık tutar.** Plan silinince dakika sonra yeniden kurulup
+  tekrar uyutuyordu.
+- **Araya girme şansı 0.10 → 0.35, yeni evre ×0.7.** "Bottan bahsetmiyorsak iplemiyor".
+- **Sikko sorun.** Laf atma turlarının %25'i yazılım kanalına uydurma kod derdi; muhabbet açar.
 - **ICE hayranlığı çekirdek kişilikte, sınırıyla.** Emin'in isteği; futbol takımı tutar gibi
   absürt bir gag. Milliyet/etnik köken/din/göçmenlik hedef alma, tehdit ve şiddet övgüsü promptta
   yasak; hoca bu maddeyi kaldıramaz (çekirdek `kisilik.md`'de).

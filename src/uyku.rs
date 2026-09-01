@@ -110,6 +110,9 @@ pub fn guncelle(d: &mut Durum) {
 
 pub fn uyanik_mi(d: &Durum) -> bool {
     let s = simdi_unix();
+    if s < d.uyanik_zorla {
+        return true; // !uyan denmiş
+    }
     !d.planlar.iter().any(|p| p.bas <= s && s < p.bit)
 }
 

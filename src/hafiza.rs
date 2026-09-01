@@ -208,6 +208,30 @@ pub fn olay_ekle(kanal: &str, olay: &str) {
     );
 }
 
+// ---------- kanal geçmişi ----------
+
+// durum/kanallar/<id>.md dosyalarını okur: (kanal id, son satırlar)
+pub fn kanal_gecmisi_yukle() -> Vec<(u64, VecDeque<String>)> {
+    let mut v = Vec::new();
+    for p in dosyalar("kanallar") {
+        let Some(id) = p
+            .file_stem()
+            .and_then(|f| f.to_str())
+            .and_then(|f| f.parse::<u64>().ok())
+        else {
+            continue;
+        };
+        let satirlar: VecDeque<String> = fs::read_to_string(&p)
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.to_string())
+            .collect();
+        v.push((id, satirlar));
+    }
+    v
+}
+
 // ---------- dizin ----------
 
 fn dosyalar(klasor: &str) -> Vec<PathBuf> {

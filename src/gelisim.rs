@@ -21,8 +21,8 @@ pub const EVRELER: &[Evre] = &[
         ad: "yeni",
         min_gun: 0,
         min_sohbet: 0,
-        sans: 0.5,
-        durtme: 0.3,
+        sans: 0.7,
+        durtme: 0.4,
         aciklama: "Sunucuya yeni geldin. Herkesi tanımıyorsun; az konuş, çok dinle, soru sor, iç şakalara \
                    henüz girme, yanlış anlamaktan çekin. Kendine bir yer arıyorsun, biraz temkinlisin.",
     },

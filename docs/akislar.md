@@ -1,7 +1,8 @@
 # Akışlar (olay → sırayla ne olur)
 
 ## Bir mesaj geldi
-0. Metin `!` ya da `/` ile başlıyorsa `Bot::komut`: sifirla · haber · gez · saka · hack · ajanlar · uyan · uyu · durum · model. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır.
+0. Her mesaj (bot dahil, `gonder` üstünden) kanalın geçmişine düşer: `kanal_not` → bellek (60 satır) + `durum/kanallar/<id>.md`. Yeni sohbet açılırken son 10 satır tohum olur (`sohbet_baslat`), böylece sohbet bitmiş ya da bot yeniden başlamış olsa da bağlam kaybolmaz.
+0. Metin `!` ya da `/` ile başlıyorsa `Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · model. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır.
 1. `Handler::message`: bot/webhook/DM → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.
@@ -41,6 +42,7 @@ Talimat önceliği: hack devam > hack çıkış > son mesaj (sayac ≥ 11) > ved
 uyanık değil → geç · seyahatte → profilci, hoca, geç · profilci → gunlukcu("gözlem", son 300) → hoca → kanalda sohbet açıksa geç → haberci (HN 12 + Sözcü 12, atılmamışlar) → seçim → tanıtım (`uret`) → gönder → sohbet aç, 2 saat yorum bekle, haberi "atıldı" say.
 
 ## Dürtme (saatte bir)
+%25 (`SORUN_PAYI`): varsayılan kanala `sorun_at` (uydurma kod derdi + soru), sohbet açılır. Aksi halde aşağıdaki akış.
 uyanık değil → geç · seyahatte: bugün yazdıysa geç, %25 → `YOLDA` · yarın seyahat: bir kez `GIDIYORUM` · değilse %30 → `DURUP_DURURKEN` · `bos_kanal` yoksa geç → `uret(son 40 satır)` → gönder → sohbet aç.
 
 ## Şaka (3 saatte bir, %10)
@@ -50,6 +52,7 @@ uyanık ∧ seyahatte değil ∧ boş kanal ∧ `resimler/` dolu → %30 hack (`
 rss 20 → seçim (`GEZGIN_SEC`, huy+profil) → ≤3 sayfa (`sayfa_oku`: firecrawl ya da düz) → `uret(GEZGIN_NOT)` botun kendi günlüğü → `gundem.md` (12 giriş, eskisi arşiv) → `Durum.gundem` son 3 → her cevabın "GÜNDEM" bölümü ve hoca girdisi.
 
 ## Uyku (dakikada bir)
+`!uyan`: aktif planın bitişine kadar `uyanik_zorla` (planı silmek işe yaramaz, dakika sonra yeniden kurulup uyutur). `!uyu [saat]`: geçici plan, zorlama sıfırlanır.
 `guncelle`: dün+bugün için plan yoksa kur (gergin ise %20, değilse %7 uykusuz gece). Uyanık→uyudu / uyudu→uyandı geçişi loglanır. Uyanınca bekleyen etiket varsa son etiketin kanalına `UYANDIM` ile tek mesaj + sohbet. Uyurken: cevap yok, döngüler geçer, hafıza kaydı devam eder. Uykusuz gecede 01-06 arası "uyuyamadın" modu "ŞU AN" satırında.
 
 ## Seyahat (takvimden)
