@@ -45,6 +45,20 @@ const KANAL_GECMIS: usize = 60; // kanal başına diskte tutulan son satır (bot
 const SOHBET_TOHUM: usize = 10; // yeni sohbet açılırken kanal geçmişinden alınan satır
 const SOHBET_BOYU: usize = 20; // bir sohbette modele giden son mesaj sayısı
 const MESAJ_SINIRI: usize = 1900; // discord 2000 kabul ediyor, pay bırakıyoruz
+const AKIS_DUZENLEME: Duration = Duration::from_millis(1200); // stream düzenlemeleri bundan sık olmaz (discord edit sınırı)
+
+// sohbet cevabı token bütçesi: derleme durumuna göre değişir.
+// release'de None → model sonuna kadar konuşur, bütçe yok.
+// debug'da Some → geliştirme/test turunda token yakmasın diye küçük kapak.
+macro_rules! cevap_butcesi {
+    () => {
+        if cfg!(debug_assertions) {
+            Some(2000u32)
+        } else {
+            None
+        }
+    };
+}
 const FAVORI: u64 = 259669117248864257; // bu kişiyi ne olursa olsun sever
 const GEZGIN_ARALIGI: Duration = Duration::from_secs(4 * 60 * 60); // ne sıklıkla internette gezer
 const RESIM_KLASORU: &str = "resimler"; // şakalarda atılacak görseller
@@ -173,66 +187,52 @@ fn hatirla(d: &mut Durum, isim: &str, metin: &str) {
     }
 }
 
-// grubun son mesajlarının ortalama boyu (karakter); bot bunun iki katını geçemez
-fn ortalama_boy(d: &Durum) -> usize {
-    let son: Vec<usize> = d
-        .hafiza
-        .iter()
-        .rev()
-        .take(200)
-        .map(|s| {
-            s.split_once(": ")
-                .map(|(_, m)| m.chars().count())
-                .unwrap_or(0)
-        })
-        .filter(|n| *n > 0)
-        .collect();
-    if son.is_empty() {
-        60
-    } else {
-        son.iter().sum::<usize>() / son.len()
+// uzun metni en çok sinir karakterlik parçalara böler: önce cümle sınırı,
+// sonra boşluk, o da yoksa tam sınırdan sert keser; hiçbir şey atılmaz
+fn bol(metin: &str, sinir: usize) -> Vec<String> {
+    let mut parcalar: Vec<String> = Vec::new();
+    let mut kalan = metin.trim().to_string();
+    while kalan.chars().count() > sinir {
+        let kes = kesim_noktasi(&kalan, sinir);
+        let bas: String = kalan.chars().take(kes).collect();
+        kalan = kalan.chars().skip(kes).collect();
+        let bas = bas.trim().to_string();
+        if !bas.is_empty() {
+            parcalar.push(bas);
+        }
+        kalan = kalan.trim_start().to_string();
     }
+    if !kalan.is_empty() {
+        parcalar.push(kalan);
+    }
+    parcalar
 }
 
-// cevabı cümle sınırında keser: önce ilk iki cümle, sonra karakter sınırı
-fn kisalt(metin: &str, sinir: usize, en_cok_cumle: usize) -> String {
-    let mut sonuc = String::new();
+// ilk sinir karakter içindeki en iyi kesim yeri; çok ufak parça çıkmasın diye
+// cümle/boşluk kesimi sınırın dörtte birinden sonra değilse sert kese düşer
+fn kesim_noktasi(metin: &str, sinir: usize) -> usize {
     let mut cumle = 0;
-    for c in metin.chars() {
-        sonuc.push(c);
+    let mut bosluk = 0;
+    for (i, c) in metin.chars().take(sinir).enumerate() {
         if matches!(c, '.' | '!' | '?' | '\n') {
-            cumle += 1;
-            if cumle >= en_cok_cumle {
-                break;
-            }
-        }
-        if sonuc.chars().count() >= sinir {
-            // kelime ortasında kesmesin
-            if let Some(i) = sonuc.rfind(' ') {
-                if i > sinir / 2 {
-                    sonuc.truncate(i);
-                }
-            }
-            break;
+            cumle = i + 1;
+        } else if c == ' ' {
+            bosluk = i;
         }
     }
-    sonuc.trim().trim_end_matches(['.', ',']).to_string()
+    let asgari = sinir / 4;
+    if cumle > asgari {
+        cumle
+    } else if bosluk > asgari {
+        bosluk
+    } else {
+        sinir
+    }
 }
 
-// Son mesaja göre cevap bütçesi: gündelik laf kısa, açık anlatım isteği biraz geniş.
-fn cevap_olcusu(metin: &str, ortalama: usize) -> (usize, usize, u32) {
-    let son = metin.to_lowercase();
-    let gecen = |liste: &[&str]| liste.iter().any(|k| son.contains(k));
-    let ciddi =
-        gecen(&["ciddi", "anlat", "açıkla", "detaylı", "ne düşün"]) || son.chars().count() > 150;
-    let soru = son.contains('?') || gecen(&["nasıl", "olsa", "olsan", "mı ", "mi ", "mu ", "mü "]);
-    if ciddi {
-        ((ortalama * 4).clamp(160, 420), 3, 140)
-    } else if soru || son.chars().count() > 60 {
-        ((ortalama * 3).clamp(100, 280), 2, 100)
-    } else {
-        ((ortalama * 2).clamp(40, 180), 1, 70)
-    }
+// discord spoiler'ı; içindeki dik çizgiler kaçırılır ki spoiler bozulmasın
+fn spoiler(metin: &str) -> String {
+    format!("||{}||", metin.replace('|', "\\|"))
 }
 
 // kanalın geçmişine satır ekler ve dosyaya yazar; sohbet bitse, bot yeniden başlasa da kalır
@@ -270,8 +270,8 @@ fn dokum(gecmis: &[Mesaj], bot_adi: &str) -> String {
         .join("\n")
 }
 
-// modelden gelen metni discord'a göndermeden önce toparlar
-fn temizle(mut metin: String, bot_adi: &str) -> String {
+// modelin başa ekleyebildiği ad öneki ve tırnakları soyar
+fn soy(mut metin: String, bot_adi: &str) -> String {
     metin = metin.trim().to_string();
     // "isim: metin" kalıbını taklit edip başına kendi adını koyabiliyor
     let onek = format!("{bot_adi}:");
@@ -281,6 +281,13 @@ fn temizle(mut metin: String, bot_adi: &str) -> String {
     if metin.len() > 1 && metin.starts_with('"') && metin.ends_with('"') {
         metin = metin[1..metin.len() - 1].to_string();
     }
+    metin
+}
+
+// stream'siz yollar tek mesajla sınırlı: soy + 1900 kapak.
+// stream yolu soy'dan sonra bol() ile bölerek gönderir, kırpma yok.
+fn temizle(metin: String, bot_adi: &str) -> String {
+    let mut metin = soy(metin, bot_adi);
     if metin.chars().count() > MESAJ_SINIRI {
         metin = metin.chars().take(MESAJ_SINIRI).collect();
     }
@@ -321,6 +328,122 @@ struct Icerik {
     content: Option<String>,
 }
 
+// stream parçası: reasoning modellerde düşünce de gelir, düz modellerde yalnız content
+#[derive(Default, Clone, PartialEq)]
+struct Parca {
+    metin: String,
+    dusunce: String,
+}
+
+#[derive(Deserialize)]
+struct AkisYaniti {
+    choices: Vec<AkisSecenegi>,
+}
+#[derive(Deserialize)]
+struct AkisSecenegi {
+    delta: AkisParcasi,
+}
+#[derive(Deserialize, Default)]
+struct AkisParcasi {
+    #[serde(default)]
+    content: Option<String>,
+    // openrouter "reasoning" der, openai uyumlu router'lar "reasoning_content"
+    #[serde(default)]
+    reasoning: Option<String>,
+    #[serde(default)]
+    reasoning_content: Option<String>,
+}
+
+// tek bir "data: ..." SSE satırını çözer; boş ya da [DONE] ise None
+fn sse_ayikla(satir: &str) -> Option<Parca> {
+    let veri = satir.trim().strip_prefix("data:")?.trim();
+    if veri == "[DONE]" {
+        return None;
+    }
+    let yanit: AkisYaniti = serde_json::from_str(veri).ok()?;
+    let delta = yanit.choices.into_iter().next()?.delta;
+    let metin = delta.content.unwrap_or_default();
+    let dusunce = [delta.reasoning, delta.reasoning_content]
+        .into_iter()
+        .flatten()
+        .find(|s| !s.is_empty())
+        .unwrap_or_default();
+    (!metin.is_empty() || !dusunce.is_empty()).then_some(Parca { metin, dusunce })
+}
+
+// stream isteğinin okuyucusu; her çağrıda sıradaki parçayı verir, akış bitince None
+struct AkisOkuyucu {
+    cevap: reqwest::Response,
+    tampon: Vec<u8>,    // henüz satıra bölünmemiş baytlar
+    kuyruk: Vec<Parca>, // çözülmüş, verilmeyi bekleyen parçalar
+    bitti: bool,
+}
+
+impl AkisOkuyucu {
+    async fn sonraki(&mut self) -> Result<Option<Parca>, Hata> {
+        loop {
+            if let Some(p) = self.kuyruk.pop() {
+                return Ok(Some(p));
+            }
+            if self.bitti {
+                if self.tampon.is_empty() {
+                    return Ok(None);
+                }
+                // sonda satır sonu olmayan parça kalabilir
+                let satir = String::from_utf8_lossy(&self.tampon).into_owned();
+                self.tampon.clear();
+                if let Some(p) = sse_ayikla(&satir) {
+                    return Ok(Some(p));
+                }
+                continue;
+            }
+            match self.cevap.chunk().await? {
+                Some(p) => {
+                    self.tampon.extend_from_slice(&p);
+                    self.satirlari_isle();
+                }
+                None => self.bitti = true,
+            }
+        }
+    }
+
+    // yalnız tam satırlar işlenir; eksik sondaki baytlar tamponda bekler
+    // (utf-8 karakter chunk ortasında bölünse bile satır tamamlanınca çözülür)
+    fn satirlari_isle(&mut self) {
+        let mut sinir = 0;
+        let mut yeniler = Vec::new();
+        for (i, b) in self.tampon.iter().enumerate() {
+            if *b == b'\n' {
+                let satir = String::from_utf8_lossy(&self.tampon[sinir..i]);
+                if let Some(p) = sse_ayikla(&satir) {
+                    yeniler.push(p);
+                }
+                sinir = i + 1;
+            }
+        }
+        self.tampon.drain(..sinir);
+        yeniler.reverse(); // pop ile ilk gelen ilk verilir
+        self.kuyruk.extend(yeniler);
+    }
+}
+
+// stream gönderiminin sonucu
+enum AkisSonuc {
+    Gonderildi(String), // son metin gönderildi
+    Eski, // üretim sırasında yeni mesaj geldi; açılanlar silindi, güncel bağlamla yeniden üret
+    Bos,  // akıştan kullanılır bir şey çıkmadı
+}
+
+// gonder_akis'in cevap bağlamı; argüman yığını yerine tek yapı
+struct AkisBaglam<'a> {
+    bot_adi: &'a str,
+    yanit: Option<MessageId>,
+    gelen: u32,
+    gecmis: &'a [Mesaj],
+    talimat: &'a str,
+    butce: Option<u32>,
+}
+
 impl Bot {
     // openrouter'a ham istek; her şey buradan geçer
     async fn sor_ham(&self, govde: serde_json::Value) -> Result<String, Hata> {
@@ -349,44 +472,84 @@ impl Bot {
     }
 
     async fn sor(&self, sistem: &str, gecmis: &[Mesaj], max_tokens: u32) -> Result<String, Hata> {
-        self.sor_bolumlu(sistem, "", gecmis, max_tokens).await
+        self.sor_bolumlu(sistem, "", gecmis, Some(max_tokens)).await
     }
 
     // sistem mesajı iki blok: sabit blok cache_control ile işaretli (anthropic/gemini önbelleğe alır,
-    // openai zaten öneki kendi önbellekler); değişken blok her seferinde yeniden okunur
+    // openai zaten öneki kendi önbellekler); değişken blok her seferinde yeniden okunur.
+    // butce None ise max_tokens gitmez, model bütçesiz konuşur.
     async fn sor_bolumlu(
         &self,
         sabit: &str,
         degisken: &str,
         gecmis: &[Mesaj],
-        max_tokens: u32,
+        butce: Option<u32>,
     ) -> Result<String, Hata> {
-        let sistem = if degisken.is_empty() {
-            serde_json::json!({ "role": "system", "content": sabit })
-        } else {
-            serde_json::json!({ "role": "system", "content": [
-                { "type": "text", "text": sabit, "cache_control": { "type": "ephemeral" } },
-                { "type": "text", "text": degisken }
-            ]})
-        };
-        let mut mesajlar = vec![sistem];
+        let mut mesajlar = vec![sistem_json(sabit, degisken)];
         mesajlar.extend(
             gecmis
                 .iter()
                 .map(|m| serde_json::json!({ "role": m.role, "content": m.content })),
         );
-        self.sor_ham(serde_json::json!({
+        let mut govde = serde_json::json!({
             "model": self.durum().model.clone(),
             "messages": mesajlar,
-            "max_tokens": max_tokens,
             "temperature": 0.7,
-        }))
-        .await
+        });
+        if let Some(t) = butce {
+            govde["max_tokens"] = serde_json::json!(t);
+        }
+        self.sor_ham(govde).await
     }
 
-    // kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma, şakalar.
-    // sohbette kim var, ne konuşuluyor bakıp hafızadan yalnız ilgili parçaları getirir.
-    async fn uret(&self, gecmis: &[Mesaj], talimat: &str, max_tokens: u32) -> Result<String, Hata> {
+    // stream istek: hata kontrolü sor_ham ile aynı, gövdeye stream eklenir.
+    // butce None ise max_tokens gitmez, model bütçesiz konuşur (release sohbet yolu).
+    async fn sor_ham_akis(
+        &self,
+        sabit: &str,
+        degisken: &str,
+        gecmis: &[Mesaj],
+        butce: Option<u32>,
+    ) -> Result<AkisOkuyucu, Hata> {
+        let mut mesajlar = vec![sistem_json(sabit, degisken)];
+        mesajlar.extend(
+            gecmis
+                .iter()
+                .map(|m| serde_json::json!({ "role": m.role, "content": m.content })),
+        );
+        let mut govde = serde_json::json!({
+            "model": self.durum().model.clone(),
+            "messages": mesajlar,
+            "temperature": 0.7,
+            "stream": true,
+        });
+        if let Some(t) = butce {
+            govde["max_tokens"] = serde_json::json!(t);
+        }
+        let cevap = self
+            .http
+            .post(&self.api_adres)
+            .bearer_auth(&self.anahtar)
+            .json(&govde)
+            .send()
+            .await?;
+        let durum = cevap.status();
+        if !durum.is_success() {
+            let govde_metni = cevap.text().await?;
+            let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
+            return Err(format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into());
+        }
+        Ok(AkisOkuyucu {
+            cevap,
+            tampon: Vec::new(),
+            kuyruk: Vec::new(),
+            bitti: false,
+        })
+    }
+
+    // sohbet cevabının sistem mesajı: kim konuşuyor, ne konuşuluyor bakıp
+    // hafızadan yalnız ilgili parçaları getirir; uret ve uret_akis ortak kullanır
+    fn sohbet_sistemi(&self, gecmis: &[Mesaj], talimat: &str) -> (String, String, String) {
         let mut katilimcilar: Vec<String> = Vec::new();
         let mut metinler: Vec<String> = Vec::new();
         for m in gecmis.iter().filter(|m| m.role == "user") {
@@ -401,16 +564,35 @@ impl Bot {
             }
         }
         let anahtar = hafiza::anahtarlar(&metinler);
-        let (sabit, degisken, bot_adi) = {
-            let d = self.durum();
-            let getirilen = hafiza::getir(&katilimcilar, &anahtar, &d.hafiza, SOHBET_BOYU);
-            let (sabit, degisken) = sistem_metni(&d, talimat, &getirilen);
-            (sabit, degisken, d.bot_adi.clone())
-        };
-        let cevap = self
-            .sor_bolumlu(&sabit, &degisken, gecmis, max_tokens)
-            .await?;
+        let d = self.durum();
+        let getirilen = hafiza::getir(&katilimcilar, &anahtar, &d.hafiza, SOHBET_BOYU);
+        let (sabit, degisken) = sistem_metni(&d, talimat, &getirilen);
+        (sabit, degisken, d.bot_adi.clone())
+    }
+
+    // kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma, şakalar.
+    // butce None ise max_tokens gitmez; sohbet cevapları bunu cevap_butcesi! ile belirler.
+    async fn uret(
+        &self,
+        gecmis: &[Mesaj],
+        talimat: &str,
+        butce: Option<u32>,
+    ) -> Result<String, Hata> {
+        let (sabit, degisken, bot_adi) = self.sohbet_sistemi(gecmis, talimat);
+        let cevap = self.sor_bolumlu(&sabit, &degisken, gecmis, butce).await?;
         Ok(temizle(cevap, &bot_adi))
+    }
+
+    // sohbet cevabını akış olarak açar; parçalar geldikçe okuyucudan okunur
+    async fn uret_akis(
+        &self,
+        gecmis: &[Mesaj],
+        talimat: &str,
+        butce: Option<u32>,
+    ) -> Result<(AkisOkuyucu, String), Hata> {
+        let (sabit, degisken, bot_adi) = self.sohbet_sistemi(gecmis, talimat);
+        let okuyucu = self.sor_ham_akis(&sabit, &degisken, gecmis, butce).await?;
+        Ok((okuyucu, bot_adi))
     }
 
     // kişiliksiz, düz analiz: ajanlar bunu kullanır
@@ -459,11 +641,178 @@ impl Bot {
         let satir = format!("{}: {}", d.bot_adi, metin);
         kanal_not(&mut d, kanal, satir);
     }
+
+    // sohbet cevabını akışla gönderir: mesaj erken belirir, aralıklarla düzenlenir.
+    // thinking kırpılmadan spoiler bloklarında durur; 1900'ü aşan cevap yeni mesaja bölünür.
+    // yanıt bağı yalnız ilk mesajda, mention yalnız onunla gider.
+    async fn gonder_akis(
+        &self,
+        ctx: &Context,
+        kanal: ChannelId,
+        mut okuyucu: AkisOkuyucu,
+        baglam: AkisBaglam<'_>,
+    ) -> Result<AkisSonuc, Hata> {
+        let mut metin = String::new();
+        let mut dusunce = String::new();
+        let mut gonderilenler: Vec<Message> = Vec::new();
+        let mut son_yazma = Instant::now();
+        let mut ilk = true;
+        let mut akis_hatasi: Option<Hata> = None;
+
+        loop {
+            match okuyucu.sonraki().await {
+                Ok(Some(p)) => {
+                    metin.push_str(&p.metin);
+                    dusunce.push_str(&p.dusunce);
+                    if ilk || son_yazma.elapsed() >= AKIS_DUZENLEME {
+                        ilk = false;
+                        let yerlesim =
+                            akis_yerlesimi(&dusunce, &soy(metin.clone(), baglam.bot_adi));
+                        if !yerlesim.is_empty() {
+                            yaz_akis(ctx, kanal, &mut gonderilenler, &yerlesim, baglam.yanit).await;
+                            son_yazma = Instant::now();
+                        }
+                    }
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    akis_hatasi = Some(e);
+                    break;
+                }
+            }
+        }
+
+        // üretim sırasında yeni mesaj geldiyse eski hedefe cevap yollama
+        if yeni_mesaj_var(&self.durum(), kanal, baglam.gelen) {
+            sil_mesajlar(ctx, gonderilenler).await;
+            return Ok(AkisSonuc::Eski);
+        }
+
+        let mut cevap = soy(metin, baglam.bot_adi);
+        // boş ya da önceki mesajın kırıntısı ("'cım" gibi) gitmesin
+        if cevap.chars().count() < 3 || cevap.starts_with('\'') {
+            sil_mesajlar(ctx, gonderilenler).await;
+            return match akis_hatasi {
+                Some(e) => Err(e),
+                None => Ok(AkisSonuc::Bos),
+            };
+        }
+        // aynı lafı iki kez etmesin: bir kez yeniden üret, yine aynıysa susar
+        if self.tekrar_mi(kanal, &cevap) {
+            let t2 = format!("{}\n\nAz önce aynen şunu yazdın: \"{cevap}\". Aynısını ya da benzerini yazma; başka bir açıdan gir ya da konuyu değiştir.", baglam.talimat);
+            match self.uret(baglam.gecmis, &t2, baglam.butce).await {
+                Ok(y) if !self.tekrar_mi(kanal, &y) && y.chars().count() >= 3 => cevap = y,
+                _ => {
+                    sil_mesajlar(ctx, gonderilenler).await;
+                    return Ok(AkisSonuc::Bos);
+                }
+            }
+        }
+        let yerlesim = akis_yerlesimi(&dusunce, &cevap);
+        yaz_akis(ctx, kanal, &mut gonderilenler, &yerlesim, baglam.yanit).await;
+
+        // gönderilenler kayda geçer; thinking kayda girmez, hoca ve eleştirmen yalnız cevabı görür
+        let mut d = self.durum();
+        d.kendi_mesajlarim.push_back(cevap.clone());
+        if d.kendi_mesajlarim.len() > 50 {
+            d.kendi_mesajlarim.pop_front();
+        }
+        let satir = format!("{}: {}", d.bot_adi, cevap);
+        kanal_not(&mut d, kanal, satir);
+        drop(d);
+        if let Some(e) = akis_hatasi {
+            eprintln!("akis yarıda kesildi, elimizdeki gönderildi: {e}");
+        }
+        Ok(AkisSonuc::Gonderildi(cevap))
+    }
 }
 
-// her cevabın sistem mesajı: çekirdek kişilik + ajanların öğrettikleri + o anki görev
+// stream'in discord mesajlarına dizilişi: önce thinking spoiler'ları, sonra cevap;
+// 1900'ü aşan her parça yeni mesaj olur, hiçbir şey kırpılmaz
+fn akis_yerlesimi(dusunce: &str, cevap: &str) -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    let dusunce = dusunce.trim();
+    if !dusunce.is_empty() {
+        // "||||" dört karakter yer tutar
+        for p in bol(dusunce, MESAJ_SINIRI - 4) {
+            v.push(spoiler(&p));
+        }
+    }
+    v.extend(bol(cevap, MESAJ_SINIRI));
+    v
+}
+
+// yerleşimi açık mesajlarla uzlaştırır: değişenler düzenlenir, eksikler açılır,
+// metin kısalırsa (ad öneki soyulması gibi) fazla mesajlar silinir
+async fn yaz_akis(
+    ctx: &Context,
+    kanal: ChannelId,
+    gonderilenler: &mut Vec<Message>,
+    yerlesim: &[String],
+    yanit: Option<MessageId>,
+) {
+    let _ = kanal.broadcast_typing(&ctx.http).await;
+    for (i, icerik) in yerlesim.iter().enumerate() {
+        match gonderilenler.get_mut(i) {
+            Some(m) if m.content != *icerik => {
+                if let Err(e) = m
+                    .edit(&ctx.http, EditMessage::new().content(icerik.clone()))
+                    .await
+                {
+                    eprintln!("düzenlenemedi ({kanal}): {e}");
+                }
+            }
+            Some(_) => {}
+            None => {
+                let mut izin = CreateAllowedMentions::new();
+                let mut mesaj = CreateMessage::new().content(icerik);
+                if i == 0 {
+                    if let Some(id) = yanit {
+                        izin = izin.replied_user(true);
+                        mesaj = mesaj.reference_message((kanal, id));
+                    }
+                }
+                match kanal
+                    .send_message(&ctx.http, mesaj.allowed_mentions(izin))
+                    .await
+                {
+                    Ok(m) => gonderilenler.push(m),
+                    Err(e) => {
+                        eprintln!("gönderilemedi ({kanal}): {e}");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    while gonderilenler.len() > yerlesim.len() {
+        if let Some(m) = gonderilenler.pop() {
+            let _ = m.delete(&ctx.http).await;
+        }
+    }
+}
+
+async fn sil_mesajlar(ctx: &Context, mesajlar: Vec<Message>) {
+    for m in mesajlar {
+        let _ = m.delete(&ctx.http).await;
+    }
+}
+
+// sistem mesajını OpenAI uyumlu bloğa çevirir: değişken boşsa düz metin,
+// değilse sabit blok cache_control ile işaretli iki metin bloğu
+fn sistem_json(sabit: &str, degisken: &str) -> serde_json::Value {
+    if degisken.is_empty() {
+        serde_json::json!({ "role": "system", "content": sabit })
+    } else {
+        serde_json::json!({ "role": "system", "content": [
+            { "type": "text", "text": sabit, "cache_control": { "type": "ephemeral" } },
+            { "type": "text", "text": degisken }
+        ]})
+    }
+}
+
 // her cevabın sistem mesajı iki parça: SABİT (kişilik, huy, profil, dizin...; ajan çalışınca
-// değişir, prompt cache buradan kazanır) ve DEĞİŞKEN (örnek mesajlar, getirilenler, saat, görev)
+// değişir, prompt cache buradan kazanır) ve DEĞİŞKEN (getirilenler, saat, görev)
 fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> (String, String) {
     let favori_satiri = match &d.favori_adi {
         Some(f) => FAVORI_SATIRI.replace("{favori}", f),
@@ -601,14 +950,13 @@ impl Bot {
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
             sleep(Duration::from_millis(150 + (rand::random::<u64>() % 200))).await;
-            let (gecmis, yanit, gelen, sinir, en_cok_cumle, token, son_metin) = {
+            let (gecmis, yanit, gelen, son_metin) = {
                 let d = self.durum();
                 let Some(s) = d.sohbetler.get(&kanal) else {
                     drop(d);
                     self.durum().mesgul.remove(&kanal);
                     return;
                 };
-                let ort = ortalama_boy(&d);
                 let son_metin = s
                     .gecmis
                     .iter()
@@ -622,72 +970,79 @@ impl Bot {
                     })
                     .unwrap_or("")
                     .to_string();
-                let (sinir, en_cok_cumle, token) = cevap_olcusu(&son_metin, ort);
-                (
-                    s.gecmis.clone(),
-                    s.son_mesaj,
-                    s.gelen,
-                    sinir,
-                    en_cok_cumle,
-                    token,
-                    son_metin,
-                )
+                (s.gecmis.clone(), s.son_mesaj, s.gelen, son_metin)
             };
             // istendiyse internete bak (haber, araştır, link) ve bulduklarını göreve ekle
-            let mut talimat_tam = talimat.to_string();
-            let mut token = token;
+            let mut talimat = talimat.to_string();
             if let Some(bulgu) = self.arastir(&son_metin).await {
-                talimat_tam = format!(
+                talimat = format!(
                     "{talimat}\n\nİNTERNETTEN ŞİMDİ ÇEKTİKLERİN (istendiği için baktın; kendi ağzınla anlat, liste yapma, \"kaynak\" deme):\n{bulgu}"
                 );
-                token = token.max(220);
             }
-            // Model çağrısı sürerken yazıyor göstergesi görünsün; cevap hazır olunca bekletme.
+            // Model çağrısı sürerken yazıyor göstergesi görünsün; stream mesajı ilk delta ile açılır.
             let _ = kanal.broadcast_typing(&ctx.http).await;
-            let cevap = match self.uret(&gecmis, &talimat_tam, token).await {
-                Ok(c) => c,
+            let butce = cevap_butcesi!();
+            let (okuyucu, bot_adi) = match self.uret_akis(&gecmis, &talimat, butce).await {
+                Ok(x) => x,
                 Err(e) => {
                     eprintln!("ai hatası: {e}");
                     self.durum().mesgul.remove(&kanal);
                     return;
                 }
             };
-            let cevap = if talimat.is_empty() || talimat == VEDA_YAKLASIYOR || talimat == SON_MESAJ
+            let cevap = match self
+                .gonder_akis(
+                    ctx,
+                    kanal,
+                    okuyucu,
+                    AkisBaglam {
+                        bot_adi: &bot_adi,
+                        yanit,
+                        gelen,
+                        gecmis: &gecmis,
+                        talimat: &talimat,
+                        butce,
+                    },
+                )
+                .await
             {
-                kisalt(&cevap, sinir, en_cok_cumle)
-            } else {
-                cevap
-            };
-            // boş ya da önceki mesajın kırıntısı ("'cım" gibi) gitmesin
-            if cevap.chars().count() < 3 || cevap.starts_with('\'') {
-                self.durum().mesgul.remove(&kanal);
-                return;
-            }
-            if yeni_mesaj_var(&self.durum(), kanal, gelen) {
-                self.durum().mesgul.remove(&kanal);
-                continue;
-            }
-            // aynı lafı iki kez etmesin: son 5 mesajıyla aynıysa bir kez daha dener, yine aynıysa susar
-            let cevap = if self.tekrar_mi(kanal, &cevap) {
-                let t2 = format!("{talimat_tam}\n\nAz önce aynen şunu yazdın: \"{cevap}\". Aynısını ya da benzerini yazma; başka bir açıdan gir ya da konuyu değiştir.");
-                match self.uret(&gecmis, &t2, token).await {
-                    Ok(c) if !self.tekrar_mi(kanal, &c) && c.chars().count() >= 3 => {
-                        kisalt(&c, sinir, en_cok_cumle)
-                    }
-                    _ => {
+                Ok(AkisSonuc::Gonderildi(c)) => c,
+                Ok(AkisSonuc::Eski) => {
+                    self.durum().mesgul.remove(&kanal);
+                    continue;
+                }
+                Ok(AkisSonuc::Bos) => {
+                    // akıştan kullanılır bir şey çıkmadı; bir kez stream'siz dene
+                    if yeni_mesaj_var(&self.durum(), kanal, gelen) {
                         self.durum().mesgul.remove(&kanal);
-                        return;
+                        continue;
+                    }
+                    match self.uret(&gecmis, &talimat, butce).await {
+                        Ok(c)
+                            if c.chars().count() >= 3
+                                && !c.starts_with('\'')
+                                && !self.tekrar_mi(kanal, &c) =>
+                        {
+                            self.gonder(ctx, kanal, &c, None, None, yanit).await;
+                            c
+                        }
+                        Ok(_) => {
+                            self.durum().mesgul.remove(&kanal);
+                            return;
+                        }
+                        Err(e) => {
+                            eprintln!("ai hatası: {e}");
+                            self.durum().mesgul.remove(&kanal);
+                            return;
+                        }
                     }
                 }
-            } else {
-                cevap
+                Err(e) => {
+                    eprintln!("ai hatası: {e}");
+                    self.durum().mesgul.remove(&kanal);
+                    return;
+                }
             };
-            // Üretim sırasında yeni mesaj geldiyse eski hedefe cevap yollama.
-            if yeni_mesaj_var(&self.durum(), kanal, gelen) {
-                self.durum().mesgul.remove(&kanal);
-                continue;
-            }
-            self.gonder(ctx, kanal, &cevap, None, None, yanit).await;
 
             let biten = {
                 let mut d = self.durum();
@@ -845,7 +1200,7 @@ impl Bot {
     // kendine isim seçer, takma adını her sunucuda değiştirir, gruba söyler
     async fn isim_sec(&self, ctx: &Context) {
         let cevap = match self
-            .uret(&[kullanici("isim seçme vakti")], ISIM_SEC, 12)
+            .uret(&[kullanici("isim seçme vakti")], ISIM_SEC, Some(12))
             .await
         {
             Ok(c) => c,
@@ -874,7 +1229,7 @@ impl Bot {
             .uret(
                 &[kullanici("ismini seçtin")],
                 &ISIM_DUYURU.replace("{isim}", &isim),
-                150,
+                Some(150),
             )
             .await
         {
@@ -1021,7 +1376,7 @@ impl Bot {
     // küçük, uydurma ama inandırıcı bir yazılım derdi atar, "nasıl çözerim" diye sorar
     async fn sorun_at(&self, ctx: &Context, kanal: ChannelId) {
         let son = son_mesajlar(&self.durum(), 30);
-        match self.uret(&[kullanici(son)], SORUN, 160).await {
+        match self.uret(&[kullanici(son)], SORUN, Some(160)).await {
             Ok(laf) => {
                 self.gonder(ctx, kanal, &laf, None, None, None).await;
                 sohbet_baslat(&mut self.durum(), kanal, Some(laf));
@@ -1045,7 +1400,7 @@ impl Bot {
             format!("https://news.ycombinator.com/item?id={}", h.id)
         };
         let girdi = match self
-            .uret(&[kullanici(h.title.clone())], HABER_TANIT, 200)
+            .uret(&[kullanici(h.title.clone())], HABER_TANIT, Some(200))
             .await
         {
             Ok(g) => g,
@@ -1072,7 +1427,7 @@ impl Bot {
             return;
         };
         let metin = if hack {
-            self.uret(&[kullanici("şaka başlıyor")], HACK_GIRIS, 150)
+            self.uret(&[kullanici("şaka başlıyor")], HACK_GIRIS, Some(150))
                 .await
         } else {
             self.resimci(&resim).await
@@ -1145,7 +1500,7 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
             continue;
         };
 
-        let laf = match bot.uret(&[kullanici(son)], talimat, 120).await {
+        let laf = match bot.uret(&[kullanici(son)], talimat, Some(120)).await {
             Ok(l) => l,
             Err(e) => {
                 eprintln!("ai hatası: {e}");
@@ -1234,7 +1589,7 @@ impl Bot {
             .uret(
                 &[kullanici(format!("uyurken sana yazılanlar:\n{liste}"))],
                 UYANDIM,
-                200,
+                Some(200),
             )
             .await
         {
@@ -1465,7 +1820,7 @@ impl EventHandler for Handler {
             .uret(
                 &[kullanici(format!("{isim} sunucuya yeni katıldı."))],
                 HOS_GELDIN,
-                200,
+                Some(200),
             )
             .await
         {
@@ -1621,6 +1976,12 @@ async fn main() -> Result<(), Hata> {
         (OPENROUTER_ADRES, ayar("OPENROUTER_KEY")?, OPENROUTER_MODEL)
     };
     let model = ayar("MODEL").unwrap_or_else(|_| varsayilan_model.to_string());
+    // API_ADRES varsa sağlayıcının varsayılan adresini ezer: openai uyumlu
+    // kendi router'ına (ör. yerel ağ) yönlendirmek için
+    let api_adres = match std::env::var("API_ADRES") {
+        Ok(v) if !v.trim().is_empty() => v.trim().to_string(),
+        _ => api_adres.to_string(),
+    };
     println!("sağlayıcı: {api_adres} · model: {model}");
     let haber_kanali = match std::env::var("HABER_KANALI") {
         Ok(v) if !v.trim().is_empty() => Some(ChannelId::new(v.trim().parse()?)),
@@ -1683,27 +2044,6 @@ mod test {
     use super::*;
 
     #[test]
-    fn kisalt_iki_cumle() {
-        let m = "tamam la. sen bilirsin. ama bak sonra ağlama. cidden.";
-        assert_eq!(kisalt(m, 200, 2), "tamam la. sen bilirsin");
-        assert_eq!(
-            kisalt(m, 200, 3),
-            "tamam la. sen bilirsin. ama bak sonra ağlama"
-        );
-        assert_eq!(
-            kisalt("napıyım yavaş mı yazayım", 200, 2),
-            "napıyım yavaş mı yazayım"
-        );
-    }
-
-    #[test]
-    fn cevap_olcusu_mesaja_uyar() {
-        assert_eq!(cevap_olcusu("felsefe konuşak mı la", 30), (100, 2, 100));
-        assert_eq!(cevap_olcusu("bunu detaylı anlat", 30), (160, 3, 140));
-        assert_eq!(cevap_olcusu("olm ne diyon", 30), (60, 1, 70));
-    }
-
-    #[test]
     fn yeni_mesaj_eski_cevabi_gecersiz_kilar() {
         let kanal = ChannelId::new(7);
         let mut d = Durum::default();
@@ -1719,11 +2059,152 @@ mod test {
     }
 
     #[test]
-    fn kisalt_karakter() {
-        let uzun = "bu cümle hiç bitmeyecek gibi devam ediyor ve virgüllerle uzuyor da uzuyor abi";
-        let k = kisalt(uzun, 40, 2);
-        assert!(k.chars().count() <= 40);
-        assert!(!k.ends_with(' '));
-        assert_eq!(k, "bu cümle hiç bitmeyecek gibi devam");
+    fn bol_cumle_siniri() {
+        let m = "birinci cümle burada. ikinci cümle şurada. üçüncüsü de ötede.";
+        let p = bol(m, 30);
+        assert!(p.len() >= 2);
+        for parca in &p {
+            assert!(parca.chars().count() <= 30);
+        }
+        let birlesik: String = p.join(" ");
+        assert_eq!(birlesik.replace(' ', ""), m.replace(' ', ""));
+    }
+
+    #[test]
+    fn bol_bosluga_duser() {
+        // noktalama yoksa boşlukta keser
+        let m = "aaaa bbbb cccc dddd eeee";
+        let p = bol(m, 12);
+        assert_eq!(p, vec!["aaaa bbbb", "cccc dddd", "eeee"]);
+    }
+
+    #[test]
+    fn bol_sert_keser() {
+        // hiç boşluk yoksa tam sınırdan keser, hiçbir şey atmaz
+        let m = "a".repeat(50);
+        let p = bol(&m, 20);
+        assert_eq!(p.len(), 3);
+        assert_eq!(p.iter().map(|s| s.chars().count()).sum::<usize>(), 50);
+    }
+
+    #[test]
+    fn kisaysa_degmez() {
+        assert_eq!(bol("kısa", 100), vec!["kısa"]);
+        assert_eq!(bol("  ", 100), Vec::<String>::new());
+    }
+
+    #[test]
+    fn spoiler_kacar() {
+        assert_eq!(spoiler("düşünce"), "||düşünce||");
+        assert_eq!(spoiler("a|b"), "||a\\|b||");
+    }
+
+    #[test]
+    fn sse_ayristirilir() {
+        let p = sse_ayikla(r#"data: {"choices":[{"delta":{"content":"sel","reasoning":"düş"}}]}"#)
+            .unwrap();
+        assert_eq!(p.metin, "sel");
+        assert_eq!(p.dusunce, "düş");
+        // reasoning yoksa (mistral tarzı) content yine gelir
+        let p = sse_ayikla(r#"data: {"choices":[{"delta":{"content":"merhaba"}}]}"#).unwrap();
+        assert_eq!(p.metin, "merhaba");
+        assert!(p.dusunce.is_empty());
+        // openai uyumlu router'lar reasoning_content kullanır
+        let p = sse_ayikla(
+            r#"data: {"choices":[{"delta":{"content":"","reasoning_content":"qwen düşüncesi"}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(p.dusunce, "qwen düşüncesi");
+        assert!(p.metin.is_empty());
+        assert!(sse_ayikla("data: [DONE]").is_none());
+        assert!(sse_ayikla(": keepalive").is_none());
+        assert!(sse_ayikla("data: bozuk json").is_none());
+        assert!(sse_ayikla(r#"data: {"choices":[{"delta":{}}]}"#).is_none());
+    }
+
+    #[test]
+    fn akis_yerlesimi_bolunur() {
+        let dusunce = "düşün ".repeat(700); // ~4200 karakter, birden çok spoiler ister
+        let cevap = "kelime ".repeat(400); // ~2800 karakter, birden çok mesaj ister
+        let v = akis_yerlesimi(&dusunce, &cevap);
+        assert!(v.len() >= 5);
+        for (i, m) in v.iter().enumerate() {
+            assert!(m.chars().count() <= MESAJ_SINIRI, "parça {i} çok uzun");
+        }
+        // thinking parçaları spoiler içinde, cevap parçaları değil
+        assert!(v[0].starts_with("||") && v[0].ends_with("||"));
+        assert!(v[1].starts_with("||"));
+        assert!(!v[v.len() - 1].starts_with("||"));
+    }
+
+    #[test]
+    fn yerlesim_dusuncesiz() {
+        let v = akis_yerlesimi("", "kısa cevap");
+        assert_eq!(v, vec!["kısa cevap"]);
+    }
+
+    // cevap bütçesi derleme durumuna göre değişir: ikisi de Option<u32>;
+    // hangi değerin geldiği profile'a bağlı, burada tip ve tutarlılık denenir
+    #[test]
+    fn cevap_butcesi_tutarli() {
+        let b: Option<u32> = cevap_butcesi!();
+        if cfg!(debug_assertions) {
+            assert!(b.is_some());
+        } else {
+            assert!(b.is_none());
+        }
+    }
+
+    // sahte bir SSE sunucusundan gerçek reqwest akışı okur: utf-8 chunk
+    // ortasında bölünse, reasoning ve content karışık gelse de doğru birikir
+    #[tokio::test]
+    async fn akis_okuyucu_sse_ayiklar() {
+        use std::io::{Read, Write};
+        let dinleyici = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let adres = dinleyici.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut baglanti, _) = dinleyici.accept().unwrap();
+            let mut gelen = Vec::new();
+            let mut tek = [0u8; 512];
+            while !gelen.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = baglanti.read(&mut tek).unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                gelen.extend_from_slice(&tek[..n]);
+            }
+            let govde = concat!(
+                "data: {\"choices\":[{\"delta\":{\"reasoning\":\"önce düşün\"}}]}\n\n",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Güne\"}}]}\n\n",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"ş bugün güzel\"}}]}\n\n",
+                "data: [DONE]\n\n",
+            );
+            let cevap = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\n\r\n{govde}",
+                govde.len()
+            );
+            baglanti.write_all(cevap.as_bytes()).unwrap();
+            baglanti.flush().unwrap();
+        });
+        let cevap = reqwest::Client::new()
+            .post(format!("http://{adres}/"))
+            .json(&serde_json::json!({"stream": true}))
+            .send()
+            .await
+            .unwrap();
+        let mut okuyucu = AkisOkuyucu {
+            cevap,
+            tampon: Vec::new(),
+            kuyruk: Vec::new(),
+            bitti: false,
+        };
+        let mut metin = String::new();
+        let mut dusunce = String::new();
+        while let Some(p) = okuyucu.sonraki().await.unwrap() {
+            metin.push_str(&p.metin);
+            dusunce.push_str(&p.dusunce);
+        }
+        assert_eq!(dusunce, "önce düşün");
+        assert_eq!(metin, "Güneş bugün güzel");
     }
 }

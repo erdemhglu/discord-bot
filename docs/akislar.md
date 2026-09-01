@@ -12,14 +12,16 @@
 7. Sohbet açıksa kullanıcı satırını geçmişe ekle (son 20).
 8. Kilit dışı: `cevapla`.
 
-## cevapla (bir sohbet turu)
+## cevapla (bir sohbet turu, stream)
 ```
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
-bekle 0,15-0,35 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── yazıyor… ── uret(70/100/140 token) ── kisalt(1/2/3 cümle) ── tekrar_mi? bir kez yeniden üret, yine tekrarsa sus
-üretim sırasında yeni mesaj geldiyse eski cevabı göndermeden başa dön; gelmediyse hemen son kullanıcı mesajına Discord yanıtı olarak gonder ve kişiyi etiketle
+bekle 0,15-0,35 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── yazıyor…
+uret_akis(stream, bütçe: cevap_butcesi!; release'de bütçe yok) ── (hata: meşgul=0, çık)
+gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── thinking ||spoiler|| bloklarında kırpılmadan, uzunsa yeni mesaj ── cevap 1900'ü aşarsa yeni mesaj ── discord yanıtı her cevapta ilk mesajda
+tekrar_mi? bir kez yeniden üret, yine tekrarsa açılanları sil ve sus; üretim sırasında yeni mesaj geldiyse açılanları sil, güncel bağlamla başa dön
+stream hiçbir şey üretmediyse uret ile stream'siz yedek
 … bitti değilse: yeni mesaj yoksa çık
-kilit ── meşgul=0 ── asistan satırı ekle ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
-bitti ise: gunlukcu → ozetleyici → elestirmen
+kilit ── meşgul=0 ── asistan satırı ekle (yalnız cevap, thinking değil) ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
 ```
 Talimat önceliği: hack devam > hack çıkış > son mesaj (sayac ≥ 11) > veda (sayac ≥ 9) > boş.
 
@@ -34,6 +36,7 @@ Talimat önceliği: hack devam > hack çıkış > son mesaj (sayac ≥ 11) > ved
 2. `anahtarlar(metinler)` → ≤40 kelime.
 3. Kilit: `getir(katilimcilar, anahtar, ham hafıza, 20)` → bütçeli bağlam; `sistem_metni`.
 4. `sor` → `temizle` (ad öneki, tırnak, 1900).
+Sohbet cevapları bunu kullanmaz; `uret_akis` aynı sistemi kurup stream açar (`gonder_akis` yazar), kırpma yoktur.
 
 ## Sunucuya bağlanınca
 `guild_create` (sunucu başına bir kez) → arka planda: 14 gün geriye tarama (izinli kanallar, 100'lük sayfalar) → ham hafıza son 2000 → profilci → hoca (huy boşsa). Yeniden bağlanmada tekrar taranmaz.

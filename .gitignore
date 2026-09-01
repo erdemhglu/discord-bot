@@ -3,3 +3,4 @@ target/
 durum/
 resimler/*
 !resimler/.gitkeep
+bot.log

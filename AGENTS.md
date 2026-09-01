@@ -16,7 +16,7 @@ cargo build            # derle
 cargo test             # 12 birim test (hafiza, gundem, seyahat)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
-cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, FIRECRAWL_KEY, HABER_KANALI isteğe bağlı
+cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI isteğe bağlı
 ```
 
 ## Yön levhası
@@ -37,13 +37,15 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 1. **Kilit await üstünde tutulmaz.** `Bot::durum()` `std::sync::MutexGuard` döner; her zaman
    `{ let d = bot.durum(); ... }` bloğunda alınır, `.await` görmeden bırakılır.
 2. **Model çıktısı sınırlanır, koda güvenilir.** Puanlar `clamp`, dosya boyları sabit, mesaj
-   1900 karakter, `max_tokens` her çağrıda. Model ne derse desin favori +10.
+   başına 1900 karakter (aşan cevap kırpılmaz, yeni mesaja bölünür). Sohbet cevabı bütçesi
+   `cevap_butcesi!()` makrosunda: release'de max_tokens gitmez, debug'da kapak var; diğer
+   çağrılarda max_tokens sabit. Model ne derse desin favori +10.
 3. **Mention'lar kapalı gider** (`CreateAllowedMentions::new()`), yalnız hoş geldin pingler.
 4. **Botlara, webhook'lara, DM'lere cevap yok.** Uyurken cevap yok (etiket bekletilir).
 5. **Hiçbir hafıza silinmez**: sınırı aşan dosya özetlenir, ham parça `durum/arsiv/`'e gider.
-6. **Kişilikle konuşan tek fonksiyon `Bot::uret`**, analiz yapan tek fonksiyon `Bot::analiz`.
-   Ajanlar kişiliksizdir. Yeni bir "konuşma" mutlaka `uret`'ten, yeni bir "değerlendirme"
-   mutlaka `analiz`'den geçer.
+6. **Kişilikle konuşan tek yol `Bot::uret` / `Bot::uret_akis`**, analiz yapan tek fonksiyon
+   `Bot::analiz`. Ajanlar kişiliksizdir. Yeni bir "konuşma" mutlaka `uret`'ten (sohbet cevabı
+   stream'de `uret_akis`'ten), yeni bir "değerlendirme" mutlaka `analiz`'den geçer.
 7. **Prompt metni Rust'a yazılmaz**, `promptlar/*.md`'ye yazılır ve `src/promptlar.rs`'de
    `include_str!` ile bağlanır. Yer tutucular `{ad}` gibi süslü parantezli, `replace` ile dolar.
 8. **Tanımlayıcılar Türkçe ve ASCII** (ü, ş yok). Yorumlar Türkçe. Kod "yapay zeka yazmış"
@@ -57,6 +59,10 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 
 ## Bilinen açıklar / doğrulanmamış
 - Canlı Discord akışı hiç test edilmedi (token yok). Serenity çağrıları derleyiciden geçti.
+- Stream + thinking yalnızca birim testleriyle doğrulandı (sahte SSE sunucusu); canlı edit
+  temposu (1,2 sn) Discord'ta ayrıca görülmedi.
+- Thinking yalnız model üretirse görünür (`reasoning` / `reasoning_content`); gpt-4o-mini
+  üretmez, o modelde bugünkü davranış aynen sürer.
 - gpt-4o-mini görsel yorumu (resimci) canlıda görülmedi; başarısızsa metin yedeğine düşer.
 - Kişi dosyaları görünen ada göre; aynı görünen adlı iki kişi çakışır.
 - Anahtar kelime eşleme düz alt-dize; kök bulma yok.

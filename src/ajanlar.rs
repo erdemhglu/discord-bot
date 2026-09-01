@@ -372,7 +372,7 @@ impl Bot {
                         "bir görsel atıyorsun ama ne olduğunu hatırlamıyorsun",
                     )],
                     RESIM_AT,
-                    120,
+                    Some(120),
                 )
                 .await?
             }

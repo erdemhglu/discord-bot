@@ -21,21 +21,30 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `hatirla(&mut Durum, isim, metin)` — ham hafızaya "isim: metin" ekler, 2000'i aşarsa baştan atar.
 - `son_mesajlar(&Durum, n) -> String` — ham hafızanın son n satırı, `\n` ile.
 - `dokum(&[Mesaj], bot_adi) -> String` — sohbeti "isim: metin" satırlarına çevirir, bot satırları `bot_adi:` ile.
-- `temizle(String, bot_adi) -> String` — model çıktısı: baştaki `bot_adi:` kalıbı ve dış tırnak atılır, 1900 karakterde kesilir.
-- `ortalama_boy(&Durum) -> usize` — son 200 ham mesajın ortalama karakteri (boşsa 60). Sohbet cevabı sınırı = 2× bu, 40..220.
-- `kisalt(metin, sinir) -> String` — ilk iki cümlede ya da karakter sınırında (kelime sonunda) keser; son nokta/virgülü atar. Yalnız normal/veda sohbet cevaplarına uygulanır (hack, hoş geldin vb. hariç).
-- `cevap_olcusu(metin, ortalama)` — son mesaja göre karakter/cümle/token bütçesi: gündelik 1/70, soru 2/100, açık anlatım isteği 3/140.
+- `soy(String, bot_adi) -> String` — model çıktısı: baştaki `bot_adi:` kalıbı ve dış tırnak atılır.
+- `temizle(String, bot_adi) -> String` — `soy` + 1900 karakterde keser; yalnız stream'siz yollarda (tek mesaj). Stream yolu kırpılmaz, bölünür.
+- `bol(metin, sinir) -> Vec<String>` — metni en çok `sinir` karakterlik parçalara böler: önce cümle sınırı, sonra boşluk, o da yoksa sert keser; hiçbir şey atılmaz. Cevap 1900'ü aşınca ve uzun thinking'te kullanılır.
+- `kesim_noktasi(metin, sinir) -> usize` — `bol`'ün kesim yeri; sınırın dörtte birinden önceki cümle/boşluk sayılmaz.
+- `spoiler(metin) -> String` — `||...||`; içindeki `|` kaçırılır.
+- `akis_yerlesimi(dusunce, cevap) -> Vec<String>` — stream'in mesaj dizilişi: thinking kırpılmadan `bol(_, 1896)` ile spoiler bloklarına, cevap `bol(_, 1900)` ile düz mesajlara.
+- `cevap_butcesi!()` — makro; sohbet cevabı token bütçesi derleme durumuna göre: release `None` (bütçe yok, model sonuna kadar konuşur), debug `Some(2000)` (maliyet koruması).
 - `json_ayikla(&str) -> &str` — ilk `{` ile son `}` arası (kod bloğu süsünü atar).
 
 ### OpenRouter (impl Bot)
 - `sor_ham(Value) -> Result<String>` — POST `/chat/completions`, `choices[0].message.content`; boşsa hata. Tek HTTP noktası. Zaman aşımı istemciden (60 sn).
-- `sor(sistem, gecmis, max_tokens)` — `system` + geçmiş → `sor_ham`.
-- `uret(gecmis, talimat, max_tokens)` — **kişilikle konuşan tek yol.** Geçmişteki `user` mesajlarından katılımcı adlarını (`"isim: "` öneki) ve metinleri çıkarır → `hafiza::anahtarlar` → kilit altında `hafiza::getir` + `sistem_metni` → `sor` → `temizle`. Çağıranlar: cevapla, dürtme, şaka, haber tanıtma, hoş geldin, uyandım, gezgin notu, resimci yedeği.
+- `sor(sistem, gecmis, max_tokens)` — `system` + geçmiş → `sor_bolumlu` (bütçe `Some`).
+- `uret(gecmis, talimat, butce: Option<u32>)` — **kişilikle konuşan tek yol.** `sohbet_sistemi` ile sistem mesajını kurar → `sor_bolumlu` → `temizle`. Bütçe `None` ise max_tokens gitmez. Çağıranlar: stream yedeği/tekrar denemesi, dürtme, şaka, haber tanıtma, hoş geldin, uyandım, gezgin notu, resimci yedeği, isim.
+- `sohbet_sistemi(gecmis, talimat) -> (sabit, degisken, bot_adi)` — geçmişteki `user` mesajlarından katılımcı adlarını (`"isim: "` öneki) ve metinleri çıkarır → `hafiza::anahtarlar` → kilit altında `hafiza::getir` + `sistem_metni`. `uret` ve `uret_akis` ortak kullanır.
+- `sor_ham_akis(sabit, degisken, gecmis, butce) -> Result<AkisOkuyucu>` — `stream:true` POST; hata kontrolü `sor_ham` ile aynı. `Parca{metin,dusunce}` döndüren `AkisOkuyucu::sonraki()` SSE satırlarını çözer (`sse_ayikla`; reasoning `reasoning` ya da `reasoning_content` alanından), utf-8 chunk ortasında bölünse de tamponda bekletir.
+- `uret_akis(gecmis, talimat, butce) -> Result<(AkisOkuyucu, bot_adi)>` — sohbet cevabını akış olarak açar. Çağıran: yalnız `cevapla`.
+- `gonder_akis(ctx, kanal, okuyucu, AkisBaglam) -> Result<AkisSonuc>` — parçaları biriktirir, `AKIS_DUZENLEME` aralıkla `yaz_akis`; bitince `yeni_mesaj_var` (Eski), `soy` + boş/kırıntı denetimi (Bos), `tekrar_mi` ise bir kez `uret` ile yeniden üretim, final yerleşim + `kendi_mesajlarim`/`kanal_not` (yalnız cevap, thinking değil). `AkisSonuc::{Gonderildi(String),Eski,Bos}`; `AkisBaglam{bot_adi,yanit,gelen,gecmis,talimat,butce}` argüman yığını yerine tek yapı.
+- `yaz_akis(ctx, kanal, &mut Vec<Message>, yerlesim, yanit)` — serbest fonksiyon. Yerleşimi açık mesajlarla uzlaştırır: değişeni `EditMessage` ile düzenler, eksiği açar (yalnız ilk mesaj yanıt/mention taşır), fazlasını siler. `sil_mesajlar(ctx, Vec<Message>)` açılanları geri alır.
 - `analiz(metin, talimat, max_tokens)` — **kişiliksiz tek yol.** Sistem = `ANALIST`; kullanıcı mesajı = `metin + "---" + talimat`. Çağıranlar: profilci, gunlukcu, hoca, elestirmen, ozetleyici, haberci seçim, gezgin seçim.
 - `gonder(ctx, kanal, metin, ping, dosya, yanit: Option<MessageId>)` — `yanit` verilirse discord yanıtı (`reference_message`) olur ve yanıtlanan kişi pinglenir (`replied_user`).  mention'lar kapalı (`CreateAllowedMentions::new()`, yalnız `ping` açılır), isteğe bağlı ek dosya; başarılıysa `kendi_mesajlarim`'a (50) ekler. Kilit gönderimden SONRA alınır.
-- `Bot::sor_bolumlu(sabit, degisken, gecmis, max_tokens)` — sistem mesajını iki metin bloğu olarak gönderir, ilki `cache_control: ephemeral`. `sor` bunu boş değişkenle çağırır.
+- `Bot::sor_bolumlu(sabit, degisken, gecmis, butce: Option<u32>)` — sistem mesajını `sistem_json` ile iki metin bloğu olarak gönderir, ilki `cache_control: ephemeral`; bütçe `None` ise max_tokens yok.
+- `sistem_json(sabit, degisken) -> Value` — değişken boşsa düz system, değilse iki blok. Serbest fonksiyon.
 - `Bot::tekrar_mi(kanal, cevap)` — kanal geçmişindeki son 5 bot satırıyla aynı mı. `Bot::arastir(metin) -> Option<String>` — link/haber/araştır tetiklerine göre sayfa, RSS ya da Firecrawl arama sonucu.
-- `sistem_metni(&Durum, talimat, getirilen) -> (String, String)` — (sabit, değişken);  bölümleri sırayla ekler (mimari.md listesi). Serbest fonksiyon, kilit çağıranda.
+- `sistem_metni(&Durum, talimat, getirilen) -> (String, String)` — (sabit, değişken); bölümleri sırayla ekler (mimari.md listesi). Serbest fonksiyon, kilit çağıranda.
 
 ### Sohbet motoru
 - `Bot::sorun_at(ctx, kanal)` — `uret(SORUN, 160)` ile uydurma kod derdi, gönder, sohbet aç. Dürtme döngüsü (%25) ve `!sorun`.
@@ -45,7 +54,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `Bot::komut(ctx, msg, komut, arg) -> bool` — test/yönetim komutları (bkz README). `Bot::model_var_mi(id)` OpenRouter `/models` listesinde arar; liste çekilemezse engel olmaz.
 - `Bot::haber_at(ctx, kanal) -> bool` — haberci → link → tanıtım → gönder → sohbet + 2 saat yorum bekleme. `haber_dongusu` ve `!haber` çağırır.
 - `Bot::saka_yap(ctx, kanal, hack)` — görsel seç, hack ise `HACK_GIRIS`, değilse `resimci`; gönder; sohbet (`hackli=3`). `saka_dongusu` ve `!saka`/`!hack` çağırır.
-- `Bot::cevapla(ctx, kanal)` — döngü: (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç ve meşgul işaretle. (2) 0,15-0,35 sn mesaj biriktirme payından sonra güncel geçmişi ve hedef mesajı al; `broadcast_typing`; `uret` (70/100/140 token); `kisalt` (1/2/3 cümle). (3) üretim sırasında yeni mesaj geldiyse eski cevabı göndermeden güncel bağlamla yeniden başlar; yoksa hemen `gonder`. (4) meşgul kaldır, geçmiş ve sayaçları ilerlet. Biten sohbet `gunlukcu` ve `elestirmen`e gider.
+- `Bot::cevapla(ctx, kanal)` — döngü: (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç ve meşgul işaretle. (2) 0,15-0,35 sn mesaj biriktirme payı; güncel geçmiş, hedef mesaj, `gelen`; `arastir` bulgusu göreve eklenir; `broadcast_typing`. (3) `uret_akis` (bütçe `cevap_butcesi!()`) ile stream açılır. (4) `gonder_akis`: mesaj ilk delta ile belirir, thinking spoiler'da, 1900'ü aşan kısım yeni mesaj; üretim sırasında yeni mesaj geldiyse açılanları silip güncel bağlamla başa döner (Eski); tekrar_mi bir kez yeniden üretir. (5) stream kullanılır bir şey üretmezse `uret` ile stream'siz yedek (Bos). (6) meşgul kaldır, asistan satırı ekle, sayaçları ilerlet. Yeni mesaj geldiyse başa dön; biten sohbet `gunlukcu` ve `elestirmen`'e gider.
 
 ### Hafıza (discord tarafı)
 - `gecmisi_oku(bot, ctx, guild)` — botun üyeliğini çeker, izinli (`VIEW_CHANNEL|READ_MESSAGE_HISTORY`) metin kanallarını pozisyon sırasıyla gezer, `GetMessages` 100'lük sayfalarla 14 gün geriye okur, bot/boş mesajları atlar, `content_safe` ile mention'ları ada çevirir, zamana göre sıralar, son 2000'i `hatirla`; favori id görürse `favori_adi` yazar.

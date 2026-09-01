@@ -248,7 +248,7 @@ impl Bot {
             okunan += &format!("## {}\n{}\n{}\n\n", h.baslik, h.link, icerik);
         }
 
-        let not = match self.uret(&[kullanici(okunan)], GEZGIN_NOT, 350).await {
+        let not = match self.uret(&[kullanici(okunan)], GEZGIN_NOT, Some(350)).await {
             Ok(n) => n,
             Err(e) => return eprintln!("gezgin: {e}"),
         };
