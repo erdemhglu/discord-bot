@@ -1,5 +1,7 @@
 # discord-bot
 
+> Geliştirici ve yapay zeka ajanları için giriş: [AGENTS.md](AGENTS.md) · ayrıntı [docs/](docs/)
+
 Sunucuda takılan, insanları tanıyan, zamanla kişilik kazanan bir discord botu.
 Rust ile yazıldı, cevapları openrouter üzerinden alıyor.
 
@@ -9,7 +11,11 @@ Rust ile yazıldı, cevapları openrouter üzerinden alıyor.
 - yeni gelenle tanışır, sohbete girer
 - arada mesajlaşmaya dalar, en fazla 12 mesaj yazıp kaçar, 3 saat o kanala geri gelmez
 - saatte bir %30 ihtimalle durup dururken laf atar, eski konulara gönderme yapar
-- 6 saatte bir hacker news'ten gruba uygun bir haber atar, 2 saat yorum bekler
+- 6 saatte bir hacker news + Sözcü gündeminden gruba uygun bir haber atar, 2 saat yorum bekler
+- 4 saatte bir Türkiye gündemini gezer (Sözcü RSS, firecrawl varsa sayfayı okur), kendi görüşünü günlüğüne yazar; kişilik buradan da beslenir
+- geceleri uyur (01-09), nadiren uykusuz gece geçirir (gerginse daha sık); uyurken yazmaz, etiketlenirse uyanınca döner
+- etiketlenince, adı geçince ya da mesajına yanıt verilince her zaman cevap verir
+- bayram, uzun hafta sonu, yaz, festival zamanlarında seyahatte gibi davranır: az yazar, yoldan mesaj atar, gitmeden haber verir
 - arada `resimler/` klasöründen bir görsel atar; bazen hacklenmiş taklidiyle (3 mesaj sürer,
   sonra kendine gelir; link atmaz, kimseden bir şey istemez)
 - `FAVORI` id'li kişi istisnadır, ne olursa olsun sever
