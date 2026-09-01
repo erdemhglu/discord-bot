@@ -311,6 +311,26 @@ fn kirp_hata(metin: &str) -> String {
         .collect()
 }
 
+// "DÜŞÜNCE: ... / CEVAP: ..." biçiminden yalnız cevabı alır; biçim yoksa metnin kendisi
+fn cevap_ayikla(metin: &str) -> String {
+    let m = metin.trim();
+    for etiket in ["CEVAP:", "Cevap:", "cevap:"] {
+        if let Some(i) = m.rfind(etiket) {
+            return m[i + etiket.len()..].trim().trim_matches('"').to_string();
+        }
+    }
+    // düşünce satırı var ama cevap etiketi yoksa düşünceyi at
+    let temiz: Vec<&str> = m
+        .lines()
+        .filter(|l| !l.trim_start().to_uppercase().starts_with("DÜŞÜNCE"))
+        .collect();
+    temiz.join("\n").trim().to_string()
+}
+
+const DUSUN_SONRA_CEVAPLA: &str = "\n\nÖNCE tek satır düşün, şu biçimde: \"DÜŞÜNCE: kim yazdı, ne istiyor (şaka mı, laf sokma mı, \
+istek mi, ciddi soru mu), buna nasıl bir cevap yakışır (kısa/uzun, sert/tatlı, ciddi/dalga).\" \
+SONRA \"CEVAP: \" satırında yalnız gönderilecek mesajı yaz. Düşünce satırı kimseye gitmez, cevap satırı gider.";
+
 // ```json ... ``` gibi süslerin içinden json'u çıkarır
 fn json_ayikla(metin: &str) -> &str {
     match (metin.find('{'), metin.rfind('}')) {
@@ -392,6 +412,7 @@ impl Bot {
             "model": self.durum().model.clone(),
             "messages": mesajlar,
             "max_tokens": max_tokens,
+            "temperature": 0.8,
         }))
         .await
     }
@@ -688,6 +709,9 @@ impl Bot {
                 );
                 token = token.max(220);
             }
+            // küçük modeller için: önce bir satır düşün (kimseye gitmez), sonra cevap
+            talimat_tam.push_str(DUSUN_SONRA_CEVAPLA);
+            let token = token + 70;
             let cevap = match self.uret(&gecmis, &talimat_tam, token).await {
                 Ok(c) => c,
                 Err(e) => {
@@ -696,6 +720,7 @@ impl Bot {
                     return;
                 }
             };
+            let cevap = cevap_ayikla(&cevap);
             let cevap = if talimat.is_empty() || talimat == VEDA_YAKLASIYOR || talimat == SON_MESAJ
             {
                 kisalt(&cevap, sinir, en_cok_cumle)
@@ -711,8 +736,10 @@ impl Bot {
             let cevap = if self.tekrar_mi(kanal, &cevap) {
                 let t2 = format!("{talimat_tam}\n\nAz önce aynen şunu yazdın: \"{cevap}\". Aynısını ya da benzerini yazma; başka bir açıdan gir ya da konuyu değiştir.");
                 match self.uret(&gecmis, &t2, token).await {
-                    Ok(c) if !self.tekrar_mi(kanal, &c) && c.chars().count() >= 3 => {
-                        kisalt(&c, sinir, en_cok_cumle)
+                    Ok(c)
+                        if !self.tekrar_mi(kanal, &cevap_ayikla(&c)) && c.chars().count() >= 3 =>
+                    {
+                        kisalt(&cevap_ayikla(&c), sinir, en_cok_cumle)
                     }
                     _ => {
                         self.durum().mesgul.remove(&kanal);
@@ -1762,6 +1789,16 @@ mod test {
             kisalt("napıyım yavaş mı yazayım", 200, 2),
             "napıyım yavaş mı yazayım"
         );
+    }
+
+    #[test]
+    fn cevap_ayiklanir() {
+        assert_eq!(
+            cevap_ayikla("DÜŞÜNCE: laf sokuyor, sert dön\nCEVAP: sen kendine bak olm"),
+            "sen kendine bak olm"
+        );
+        assert_eq!(cevap_ayikla("düz mesaj"), "düz mesaj");
+        assert_eq!(cevap_ayikla("DÜŞÜNCE: bir şey\nsonra düz"), "sonra düz");
     }
 
     #[test]

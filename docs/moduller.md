@@ -25,6 +25,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `ortalama_boy(&Durum) -> usize` — son 200 ham mesajın ortalama karakteri (boşsa 60). Sohbet cevabı sınırı = 2× bu, 40..220.
 - `kisalt(metin, sinir) -> String` — ilk iki cümlede ya da karakter sınırında (kelime sonunda) keser; son nokta/virgülü atar. Yalnız normal/veda sohbet cevaplarına uygulanır (hack, hoş geldin vb. hariç).
 - `ornek_mesajlar(&Durum) -> String` — son 300 ham mesajdan 4..100 karakterlik 12 tanesi; sistem mesajında "GRUBUN GERÇEK MESAJLARI" bölümü (boy ve ton örneği).
+- `cevap_ayikla(&str) -> String` — "DÜŞÜNCE: … / CEVAP: …" çıktısından cevabı alır; `DUSUN_SONRA_CEVAPLA` sabiti göreve eklenir.
 - `json_ayikla(&str) -> &str` — ilk `{` ile son `}` arası (kod bloğu süsünü atar).
 
 ### OpenRouter (impl Bot)

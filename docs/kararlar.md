@@ -75,6 +75,7 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   → Firecrawl arama (anahtar varsa, yoksa RSS). Bulgular göreve "İNTERNETTEN ŞİMDİ ÇEKTİKLERİN" diye eklenir.
 - **Altta kalmama ve istek yapma promptta.** "ne alaka / sa naber" refleksi yasak; sıralama, seçim,
   tahmin istenince kanaat puanlarıyla yapılır; "yapamam" yasak. Kimlik: Nişantaşı Üniversitesi, beyaz Tofaş.
+- **Gizli düşünce satırı.** Küçük modellerde alakasız cevap ("ne alaka") azalsın diye sohbet cevabından önce tek satır "DÜŞÜNCE:" (kim, ne istiyor, nasıl cevap yakışır), sonra "CEVAP:"; kod yalnız cevabı gönderir (`cevap_ayikla`). +70 token. Sıcaklık 0.8.
 - **ICE hayranlığı çekirdek kişilikte, sınırıyla.** Emin'in isteği; futbol takımı tutar gibi
   absürt bir gag. Milliyet/etnik köken/din/göçmenlik hedef alma, tehdit ve şiddet övgüsü promptta
   yasak; hoca bu maddeyi kaldıramaz (çekirdek `kisilik.md`'de).

@@ -15,7 +15,7 @@
 ## cevapla (bir sohbet turu)
 ```
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
-bekle 0,4-1,2 sn ── güncel geçmiş + son mesajı al ── uret(90 token) ── (hata: meşgul=0, çık) ── kisalt(2 cümle, ≤2×ortalama boy)
+bekle 0,4-1,2 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── uret(90/140/220 +70 token, DÜŞÜNCE/CEVAP biçimi) ── cevap_ayikla ── kisalt(2/3/5 cümle) ── tekrar_mi? bir kez yeniden üret, yine tekrarsa sus
 yazıyor… ── bekle 25 ms × karakter (0,35-2,5 sn) ── gonder (discord yanıtı yalnız: etiketlendiyse, cevap yazarken araya mesaj girdiyse ya da son 5 satırda 2+ kişi konuşuyorsa; yoksa düz mesaj)
 … bitti değilse: cevap yazarken yeni mesaj geldiyse (`gelen` arttıysa) başa dön, yoksa çık
 kilit ── meşgul=0 ── asistan satırı ekle ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
