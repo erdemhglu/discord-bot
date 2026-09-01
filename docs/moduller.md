@@ -21,6 +21,9 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `son_mesajlar(&Durum, n) -> String` — ham hafızanın son n satırı, `\n` ile.
 - `dokum(&[Mesaj], bot_adi) -> String` — sohbeti "isim: metin" satırlarına çevirir, bot satırları `bot_adi:` ile.
 - `temizle(String, bot_adi) -> String` — model çıktısı: baştaki `bot_adi:` kalıbı ve dış tırnak atılır, 1900 karakterde kesilir.
+- `ortalama_boy(&Durum) -> usize` — son 200 ham mesajın ortalama karakteri (boşsa 60). Sohbet cevabı sınırı = 2× bu, 40..220.
+- `kisalt(metin, sinir) -> String` — ilk iki cümlede ya da karakter sınırında (kelime sonunda) keser; son nokta/virgülü atar. Yalnız normal/veda sohbet cevaplarına uygulanır (hack, hoş geldin vb. hariç).
+- `ornek_mesajlar(&Durum) -> String` — son 300 ham mesajdan 4..100 karakterlik 12 tanesi; sistem mesajında "GRUBUN GERÇEK MESAJLARI" bölümü (boy ve ton örneği).
 - `json_ayikla(&str) -> &str` — ilk `{` ile son `}` arası (kod bloğu süsünü atar).
 
 ### OpenRouter (impl Bot)
@@ -35,7 +38,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `sohbet_baslat(&mut Durum, kanal, acilis: Option<String>) -> &mut Sohbet` — varsa mevcut sohbeti döner (`entry().or_insert`), yoksa yeni; açılış varsa `asistan` mesajı + `sayac=1`.
 - `sohbet_bitir(&mut Durum, kanal) -> Option<Sohbet>` — haber bekleme silinir, kanal 3 saat yasaklanır, sohbet çıkarılıp döner (günlükçüye gider).
 - `girebilir_mi(&Durum, kanal) -> bool` — yasak süresi geçmiş mi.
-- `Bot::cevapla(ctx, kanal)` — (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç (hackli>1 → HACK_DEVAM, hackli==1 → HACK_CIKIS, sayac≥11 → SON_MESAJ, sayac≥9 → VEDA_YAKLASIYOR, yoksa boş); geçmişi klonla; meşgul işaretle. (2) `uret` (250 token). Hata → meşgul kaldır, çık. (3) `gonder`. (4) kilit: meşgul kaldır, asistan mesajını ekle, `sayac++`, `hackli--`, `sayac≥12` ise `sohbet_bitir`. (5) bitti ise: `gunlukcu(dokum, "biten sohbet", kanal adı)` sonra `elestirmen(dokum)`. Aynı kanalda eşzamanlı ikinci `cevapla` meşgul bayrağına takılır; o sırada gelen mesajlar `message` içinde geçmişe eklenmiştir ve sonraki turda görülür.
+- `Bot::cevapla(ctx, kanal)` — (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç (hackli>1 → HACK_DEVAM, hackli==1 → HACK_CIKIS, sayac≥11 → SON_MESAJ, sayac≥9 → VEDA_YAKLASIYOR, yoksa boş); geçmişi klonla; meşgul işaretle. (2) 2-6 sn okuma beklemesi; `uret` (90 token); `kisalt` (2 cümle / 2×ortalama boy); boşsa çık. (3) `broadcast_typing` + karakter×45 ms (1-9 sn) bekleme; `gonder`. (4) kilit: meşgul kaldır, asistan mesajını ekle, `sayac++`, `hackli--`, `sayac≥12` ise `sohbet_bitir`. (5) bitti ise: `gunlukcu(dokum, "biten sohbet", kanal adı)` sonra `elestirmen(dokum)`. Aynı kanalda eşzamanlı ikinci `cevapla` meşgul bayrağına takılır; o sırada gelen mesajlar `message` içinde geçmişe eklenmiştir ve sonraki turda görülür.
 
 ### Hafıza (discord tarafı)
 - `gecmisi_oku(bot, ctx, guild)` — botun üyeliğini çeker, izinli (`VIEW_CHANNEL|READ_MESSAGE_HISTORY`) metin kanallarını pozisyon sırasıyla gezer, `GetMessages` 100'lük sayfalarla 14 gün geriye okur, bot/boş mesajları atlar, `content_safe` ile mention'ları ada çevirir, zamana göre sıralar, son 2000'i `hatirla`; favori id görürse `favori_adi` yazar.

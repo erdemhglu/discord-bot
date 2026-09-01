@@ -13,8 +13,8 @@
 ## cevapla (bir sohbet turu)
 ```
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── geçmişi klonla ── meşgul=1 ── kilit bırak
-uret ── (hata: meşgul=0, çık)
-gonder
+bekle 2-6 sn ── uret(90 token) ── (hata: meşgul=0, çık) ── kisalt(2 cümle, ≤2×ortalama boy)
+yazıyor… ── bekle 45 ms × karakter (1-9 sn) ── gonder
 kilit ── meşgul=0 ── asistan satırı ekle ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
 bitti ise: gunlukcu → ozetleyici → elestirmen
 ```

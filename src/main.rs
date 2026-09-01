@@ -162,6 +162,80 @@ fn hatirla(d: &mut Durum, isim: &str, metin: &str) {
     }
 }
 
+// grubun son mesajlarının ortalama boyu (karakter); bot bunun iki katını geçemez
+fn ortalama_boy(d: &Durum) -> usize {
+    let son: Vec<usize> = d
+        .hafiza
+        .iter()
+        .rev()
+        .take(200)
+        .map(|s| {
+            s.split_once(": ")
+                .map(|(_, m)| m.chars().count())
+                .unwrap_or(0)
+        })
+        .filter(|n| *n > 0)
+        .collect();
+    if son.is_empty() {
+        60
+    } else {
+        son.iter().sum::<usize>() / son.len()
+    }
+}
+
+// cevabı cümle sınırında keser: önce ilk iki cümle, sonra karakter sınırı
+fn kisalt(metin: &str, sinir: usize) -> String {
+    let mut sonuc = String::new();
+    let mut cumle = 0;
+    for c in metin.chars() {
+        sonuc.push(c);
+        if matches!(c, '.' | '!' | '?' | '\n') {
+            cumle += 1;
+            if cumle >= 2 {
+                break;
+            }
+        }
+        if sonuc.chars().count() >= sinir {
+            // kelime ortasında kesmesin
+            if let Some(i) = sonuc.rfind(' ') {
+                if i > sinir / 2 {
+                    sonuc.truncate(i);
+                }
+            }
+            break;
+        }
+    }
+    sonuc.trim().trim_end_matches(['.', ',']).to_string()
+}
+
+// grubun gerçek mesajlarından boy ve ton örneği: kısa olanlardan 12 tane
+fn ornek_mesajlar(d: &Durum) -> String {
+    let uygun: Vec<&String> = d
+        .hafiza
+        .iter()
+        .rev()
+        .take(300)
+        .filter(|s| {
+            let n = s
+                .split_once(": ")
+                .map(|(_, m)| m.chars().count())
+                .unwrap_or(0);
+            (4..=100).contains(&n)
+        })
+        .collect();
+    if uygun.is_empty() {
+        return String::new();
+    }
+    let adim = (uygun.len() / 12).max(1);
+    uygun
+        .iter()
+        .step_by(adim)
+        .take(12)
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn son_mesajlar(d: &Durum, n: usize) -> String {
     let atla = d.hafiza.len().saturating_sub(n);
     d.hafiza
@@ -350,6 +424,14 @@ fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> String {
     bolum(&mut s, "BU GRUP HAKKINDA BİLDİKLERİN", &d.profil);
     bolum(
         &mut s,
+        &format!(
+            "GRUBUN GERÇEK MESAJLARI (boy ve ton örneği; ortalama {} karakter, sen bunu geçme)",
+            ortalama_boy(d)
+        ),
+        &ornek_mesajlar(d),
+    );
+    bolum(
+        &mut s,
         "HAFIZA DİZİNİ (kimi ve neyi biliyorsun; ayrıntı gerekince getiriliyor)",
         &d.dizin,
     );
@@ -423,7 +505,13 @@ impl Bot {
             (gecmis, talimat)
         };
 
-        let cevap = match self.uret(&gecmis, talimat, 250).await {
+        // insan gibi: önce okur (2-6 sn), sonra yazar
+        sleep(Duration::from_millis(2000 + (rand::random::<u64>() % 4000))).await;
+        let sinir = {
+            let d = self.durum();
+            (ortalama_boy(&d) * 2).clamp(40, 220)
+        };
+        let cevap = match self.uret(&gecmis, talimat, 90).await {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("ai hatası: {e}");
@@ -431,6 +519,21 @@ impl Bot {
                 return;
             }
         };
+        let cevap = if talimat.is_empty() || talimat == VEDA_YAKLASIYOR || talimat == SON_MESAJ {
+            kisalt(&cevap, sinir)
+        } else {
+            cevap
+        };
+        if cevap.is_empty() {
+            self.durum().mesgul.remove(&kanal);
+            return;
+        }
+        // "yazıyor..." gösterip boyuna göre bekler (karakter başına 45 ms, 1-9 sn)
+        let _ = kanal.broadcast_typing(&ctx.http).await;
+        sleep(Duration::from_millis(
+            (cevap.chars().count() as u64 * 45).clamp(1000, 9000),
+        ))
+        .await;
         self.gonder(ctx, kanal, &cevap, None, None).await;
 
         let biten = {
@@ -1107,4 +1210,30 @@ async fn main() -> Result<(), Hata> {
 
     client.start().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn kisalt_iki_cumle() {
+        assert_eq!(
+            kisalt("tamam la. sen bilirsin. ama bak sonra ağlama. cidden.", 200),
+            "tamam la. sen bilirsin"
+        );
+        assert_eq!(
+            kisalt("napıyım yavaş mı yazayım", 200),
+            "napıyım yavaş mı yazayım"
+        );
+    }
+
+    #[test]
+    fn kisalt_karakter() {
+        let uzun = "bu cümle hiç bitmeyecek gibi devam ediyor ve virgüllerle uzuyor da uzuyor abi";
+        let k = kisalt(uzun, 40);
+        assert!(k.chars().count() <= 40);
+        assert!(!k.ends_with(' '));
+        assert_eq!(k, "bu cümle hiç bitmeyecek gibi devam");
+    }
 }
