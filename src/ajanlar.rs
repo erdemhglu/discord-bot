@@ -1,18 +1,52 @@
 // Botun arka planda çalışan ajanları. Hiçbiri kişilikle konuşmaz; hepsi düz analiz yapar
-// ve sonucu duruma yazar. Sohbet eden taraf (main.rs) sadece bu sonuçları okur.
+// ve sonucu durum/ klasörüne yazar. Sohbet eden taraf (main.rs) sadece bu sonuçları okur.
 //
-//   profilci   grubu tanır                      -> profil
-//   kanaatci   insanlar hakkında ne düşünüyor   -> kanaatler
-//   hoca       nasıl biri olmalı                -> huy
-//   elestirmen son sohbette nerede hata yaptı   -> duzeltmeler
-//   haberci    hacker news'ten ne atmalı        -> seçilen haber
-//   resimci    ekteki görsele ne demeli         -> tek satır yorum
+//   profilci    grubu tanır                       -> profil.md
+//   gunlukcu    biten sohbetten hafıza kaydı       -> kisiler/, konular/, olaylar/, kendim.md
+//   hoca        nasıl biri olmalı                 -> huy.md
+//   elestirmen  son sohbette nerede hata yaptı    -> duzeltmeler.md
+//   ozetleyici  sınırı aşan dosyayı küçültür      -> dosya küçülür, taşan arsiv/'e gider
+//   haberci     hacker news'ten ne atmalı         -> seçilen haber
+//   resimci     ekteki görsele ne demeli          -> tek satır yorum
 
 use super::*;
+use crate::hafiza::{self, Kisi};
 use crate::promptlar::*;
 use base64::Engine;
 use serde::Deserialize;
 use std::path::PathBuf;
+
+#[derive(Deserialize, Default)]
+struct Kayit {
+    #[serde(default)]
+    olay: String,
+    #[serde(default)]
+    kisiler: Vec<KisiKaydi>,
+    #[serde(default)]
+    konular: Vec<KonuKaydi>,
+    #[serde(default)]
+    kendim: String,
+}
+#[derive(Deserialize, Default)]
+struct KisiKaydi {
+    #[serde(default)]
+    isim: String,
+    #[serde(default)]
+    puan_degisimi: i32,
+    #[serde(default)]
+    not: String,
+    #[serde(default)]
+    bilgiler: Vec<String>,
+    #[serde(default)]
+    etiketler: Vec<String>,
+}
+#[derive(Deserialize, Default)]
+struct KonuKaydi {
+    #[serde(default)]
+    ad: String,
+    #[serde(default)]
+    not: String,
+}
 
 impl Bot {
     pub async fn profilci(&self) {
@@ -22,7 +56,7 @@ impl Bot {
         }
         match self.analiz(&ornek, PROFIL_CIKAR, 1200).await {
             Ok(yeni) => {
-                kaydet("profil.txt", &yeni).await;
+                hafiza::yaz("profil.md", &yeni);
                 self.durum().profil = yeni;
                 println!("profilci: profil güncellendi");
             }
@@ -30,54 +64,149 @@ impl Bot {
         }
     }
 
-    pub async fn kanaatci(&self, dokum: String) {
+    // biten sohbetten (ya da 6 saatlik gözlemden) hafızaya yazılacakları çıkarır ve dosyalara işler
+    pub async fn gunlukcu(&self, dokum: String, kaynak: &str, kanal: &str) {
         if dokum.trim().is_empty() {
             return;
         }
-        let (talimat, favori) = {
+        let (talimat, favori, bot_adi) = {
             let d = self.durum();
-            let mevcut = serde_json::to_string_pretty(&d.kanaatler).unwrap_or_default();
-            let favori = d.favori_adi.clone();
-            let t = KANAAT_GUNCELLE
+            let t = GUNLUKCU
                 .replace("{ad}", &d.bot_adi)
-                .replace("{mevcut}", &mevcut)
-                .replace("{favori}", favori.as_deref().unwrap_or("kimse"));
-            (t, favori)
+                .replace("{kaynak}", kaynak)
+                .replace("{favori}", d.favori_adi.as_deref().unwrap_or("kimse"));
+            (t, d.favori_adi.clone(), d.bot_adi.clone())
         };
-
-        let cevap = match self.analiz(&dokum, &talimat, 1500).await {
+        let cevap = match self.analiz(&dokum, &talimat, 1200).await {
             Ok(c) => c,
-            Err(e) => return eprintln!("kanaatci: {e}"),
+            Err(e) => return eprintln!("gunlukcu: {e}"),
         };
-        let mut yeni: Kanaatler = match serde_json::from_str(json_ayikla(&cevap)) {
+        let kayit: Kayit = match serde_json::from_str(json_ayikla(&cevap)) {
             Ok(k) => k,
-            Err(e) => return eprintln!("kanaatci: json çözülemedi: {e}"),
+            Err(e) => return eprintln!("gunlukcu: json çözülemedi: {e}"),
         };
 
-        // model ne derse desin sınırlar bizde
-        for k in &mut yeni.kisiler {
-            k.puan = k.puan.clamp(-10, 10);
+        if !kayit.olay.is_empty() {
+            hafiza::olay_ekle(kanal, &kayit.olay);
         }
-        yeni.kisiler.truncate(30);
-        if let Some(f) = &favori {
-            yeni.kisiler.retain(|k| &k.isim != f);
-            yeni.kisiler.insert(
-                0,
-                Kanaat {
-                    isim: f.clone(),
-                    puan: 10,
-                    not: "canın ciğerin, ne yaparsa yapsın arkasındasın".into(),
-                },
-            );
+        for kk in kayit.kisiler {
+            if kk.isim.is_empty() || kk.isim.eq_ignore_ascii_case(&bot_adi) {
+                continue;
+            }
+            let mut k: Kisi = hafiza::kisi_oku(&kk.isim);
+            // model ne derse desin sınırlar bizde
+            k.puan = (k.puan + kk.puan_degisimi.clamp(-3, 3)).clamp(-10, 10);
+            if !kk.not.trim().is_empty() {
+                k.not = kk.not.trim().to_string();
+            }
+            for b in kk.bilgiler {
+                let b = b.trim().to_string();
+                if !b.is_empty() && !k.bilgiler.contains(&b) {
+                    k.bilgiler.push(b);
+                }
+            }
+            for e in kk.etiketler {
+                let e = e.trim().to_lowercase();
+                if !e.is_empty() && !k.etiket.contains(&e) {
+                    k.etiket.push(e);
+                }
+            }
+            k.etiket.truncate(6);
+            if !kayit.olay.is_empty() {
+                k.olaylar
+                    .push(format!("{}: {}", hafiza::tarih(), kayit.olay));
+            }
+            if favori.as_deref() == Some(k.isim.as_str()) {
+                k.puan = 10;
+                k.not = hafiza::FAVORI_NOTU.to_string();
+            }
+            hafiza::kisi_yaz(&k);
         }
+        for kn in kayit.konular {
+            if !kn.ad.trim().is_empty() && !kn.not.trim().is_empty() {
+                hafiza::konu_ekle(kn.ad.trim(), &kn.not);
+            }
+        }
+        if !kayit.kendim.trim().is_empty() {
+            hafiza::yaz("kendim.md", kayit.kendim.trim());
+            self.durum().kendim = kayit.kendim.trim().to_string();
+        }
+        self.durum().dizin = hafiza::dizin_yenile();
+        println!("gunlukcu: {kaynak} kaydedildi");
 
-        kaydet(
-            "kanaatler.json",
-            &serde_json::to_string_pretty(&yeni).unwrap_or_default(),
-        )
-        .await;
-        self.durum().kanaatler = yeni;
-        println!("kanaatci: kanaatler güncellendi");
+        self.ozetleyici().await;
+    }
+
+    // sınırı aşan dosyaları küçültür; çıkan ham parça arşive gider
+    pub async fn ozetleyici(&self) {
+        for (tur, yol) in hafiza::sinir_asanlar() {
+            let eski = std::fs::read_to_string(&yol).unwrap_or_default();
+            let parca = yol
+                .strip_prefix(DURUM_KLASORU)
+                .unwrap_or(&yol)
+                .to_string_lossy()
+                .to_string();
+
+            let sonuc = match tur {
+                "kisi" => {
+                    self.analiz(
+                        &eski,
+                        &OZETLEYICI_KISI.replace("{sinir}", &hafiza::KISI_HEDEF.to_string()),
+                        700,
+                    )
+                    .await
+                }
+                "konu" => {
+                    self.analiz(
+                        &eski,
+                        &OZETLEYICI_KONU.replace("{sinir}", &hafiza::KONU_HEDEF.to_string()),
+                        600,
+                    )
+                    .await
+                }
+                _ => {
+                    // olay dosyası: eski yarısı özetlenir, yeni yarısı olduğu gibi kalır
+                    let ozetler: Vec<&str> =
+                        eski.lines().filter(|l| !l.starts_with("- ")).collect();
+                    let satirlar: Vec<&str> =
+                        eski.lines().filter(|l| l.starts_with("- ")).collect();
+                    let kes = satirlar.len() * 6 / 10;
+                    let (eskiler, yeniler) = satirlar.split_at(kes);
+                    match self
+                        .analiz(&eskiler.join("\n"), OZETLEYICI_OLAYLAR, 400)
+                        .await
+                    {
+                        Ok(ozet) => {
+                            hafiza::arsivle(&parca, &eskiler.join("\n"));
+                            Ok(format!(
+                                "{}\n{}\n\n{}\n",
+                                ozetler.join("\n").trim(),
+                                ozet.trim(),
+                                yeniler.join("\n")
+                            ))
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+            };
+
+            match sonuc {
+                Ok(yeni) if !yeni.trim().is_empty() && yeni.len() < eski.len() => {
+                    if tur != "olay" {
+                        hafiza::arsivle(&parca, &eski);
+                    }
+                    hafiza::yaz(&parca, yeni.trim_end());
+                    println!(
+                        "ozetleyici: {parca} {} -> {} karakter",
+                        eski.len(),
+                        yeni.len()
+                    );
+                }
+                Ok(_) => eprintln!("ozetleyici: {parca} küçülmedi, bırakıldı"),
+                Err(e) => eprintln!("ozetleyici: {parca}: {e}"),
+            }
+        }
+        self.durum().dizin = hafiza::dizin_yenile();
     }
 
     pub async fn hoca(&self) {
@@ -93,9 +222,10 @@ impl Bot {
                 .collect::<Vec<_>>()
                 .join("\n");
             let metin = format!(
-                "GRUP PROFİLİ\n{}\n\nKANAATLER\n{}\n\nŞU ANKİ HUYUN\n{}\n\nSON KONUŞMALAR\n{}\n\nBOTUN KENDİ SON MESAJLARI\n{}",
+                "GRUP PROFİLİ\n{}\n\nKİŞİ DİZİNİ\n{}\n\nBOTUN SON HALİ\n{}\n\nŞU ANKİ HUYUN\n{}\n\nSON KONUŞMALAR\n{}\n\nBOTUN KENDİ SON MESAJLARI\n{}",
                 d.profil,
-                serde_json::to_string_pretty(&d.kanaatler).unwrap_or_default(),
+                d.dizin,
+                if d.kendim.is_empty() { "(bir şey yok)" } else { &d.kendim },
                 if d.huy.is_empty() { "(henüz yok, ilk kez yazıyorsun)" } else { &d.huy },
                 son_mesajlar(&d, 200),
                 if kendi.is_empty() { "(henüz konuşmadı)" } else { &kendi },
@@ -104,7 +234,7 @@ impl Bot {
         };
         match self.analiz(&metin, &talimat, 800).await {
             Ok(huy) => {
-                kaydet("huy.txt", &huy).await;
+                hafiza::yaz("huy.md", &huy);
                 self.durum().huy = huy;
                 println!("hoca: huy güncellendi");
             }
@@ -124,7 +254,7 @@ impl Bot {
         };
         match self.analiz(&dokum, &talimat, 400).await {
             Ok(notlar) => {
-                kaydet("duzeltmeler.txt", &notlar).await;
+                hafiza::yaz("duzeltmeler.md", &notlar);
                 self.durum().duzeltmeler = notlar;
                 println!("elestirmen: notlar güncellendi");
             }
@@ -179,7 +309,7 @@ impl Bot {
     pub async fn resimci(&self, yol: &PathBuf) -> Result<String, Hata> {
         let (sistem, bot_adi) = {
             let d = self.durum();
-            (sistem_metni(&d, RESIM_AT), d.bot_adi.clone())
+            (sistem_metni(&d, RESIM_AT, ""), d.bot_adi.clone())
         };
         let veri = tokio::fs::read(yol).await?;
         let tur = match yol

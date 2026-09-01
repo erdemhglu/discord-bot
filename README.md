@@ -31,6 +31,36 @@ sohbet eden taraf her cevapta bunları okur.
 
 Ne öğrendiğini görmek için `durum/` klasörüne bak.
 
+## hafıza mimarisi
+
+Bağlam penceresi büyümesin diye ikinci beyin mantığı: işaretçi taşınır, veri iş anında getirilir,
+sınır dolunca özetlenir, hiçbir şey silinmez (`src/hafiza.rs`).
+
+```
+durum/
+  INDEX.md          ne bildiğinin listesi; her cevaba gider (kişi + puan + etiket, konular, olay sayısı)
+  huy.md            hoca: nasıl biri olduğu
+  profil.md         profilci: grup profili
+  duzeltmeler.md    eleştirmen: kendine notlar
+  kendim.md         botun kendi hali
+  kisiler/<ad>.md   kişi başına: puan, etiket, not, bildiklerin, son olaylar
+  konular/<ad>.md   konu başına tarihli notlar
+  olaylar/YYYY-AA.md  biten her sohbetten tek satır
+  arsiv/            özetlenip çıkarılan ham parçalar
+```
+
+**Her cevapta ne gider:** çekirdek kişilik + huy + profil + dizin + o sohbet için getirilenler +
+kendine notlar + görev. Getirilenler sabit bütçeli (6000 karakter): sohbette konuşanların kişi
+dosyaları, anahtar kelimeye uyan en fazla 2 konu dosyası, ayın son 8 olayı, ve ham bağlam
+penceresinden (son 2000 mesaj) konuya değen ama sohbette olmayan en fazla 12 eski satır.
+
+**Kim yazar:** günlükçü ajanı her biten sohbetten ve 6 saatte bir gözlemden JSON kayıt çıkarır;
+kod bunu kişi/konu/olay dosyalarına işler. Puan sınırları kodda kesilir, favori sabittir.
+
+**Sınır dolunca:** kişi dosyası 1800, konu dosyası 1500, aylık olay dosyası 6000 karakteri aşınca
+özetleyici ajan küçültür (kişi ve konu için hedef 1000/800; olaylarda eski %60 3-5 satıra iner).
+Çıkan ham parça `arsiv/` altına tarihli eklenir.
+
 ## promptlar
 
 `promptlar/` klasöründe markdown olarak durur, `include_str!` ile derlemeye gömülür.

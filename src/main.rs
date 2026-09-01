@@ -1,4 +1,5 @@
 mod ajanlar;
+mod hafiza;
 mod promptlar;
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -68,28 +69,16 @@ struct Sohbet {
     hackli: u32, // 0 değilse hacklenmiş taklidi sürüyor, her cevapta bir azalır
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
-struct Kanaat {
-    isim: String,
-    puan: i32,
-    not: String,
-}
-
-#[derive(Serialize, Deserialize, Default)]
-struct Kanaatler {
-    kisiler: Vec<Kanaat>,
-    kendim: String,
-}
-
 #[derive(Default)]
 struct Durum {
     bot_adi: String,
     favori_adi: Option<String>,
-    // ajanların ürettikleri
-    profil: String,       // profilci
-    kanaatler: Kanaatler, // kanaatci
-    huy: String,          // hoca
-    duzeltmeler: String,  // elestirmen
+    // ajanların ürettikleri (durum/ klasöründe de duruyor)
+    profil: String,      // profilci
+    huy: String,         // hoca
+    duzeltmeler: String, // elestirmen
+    kendim: String,      // gunlukcu: botun kendi hali
+    dizin: String,       // hafıza dizini, her cevapta gider
     // gördükleri
     hafiza: VecDeque<String>, // sunucudaki son mesajlar, "isim: metin"
     kendi_mesajlarim: VecDeque<String>, // botun kendi son mesajları
@@ -107,10 +96,11 @@ impl Durum {
     // yeniden başlayınca sıfırdan öğrenmesin diye diskten okur
     fn yukle() -> Self {
         Durum {
-            profil: oku("profil.txt"),
-            huy: oku("huy.txt"),
-            duzeltmeler: oku("duzeltmeler.txt"),
-            kanaatler: serde_json::from_str(&oku("kanaatler.json")).unwrap_or_default(),
+            profil: hafiza::oku("profil.md"),
+            huy: hafiza::oku("huy.md"),
+            duzeltmeler: hafiza::oku("duzeltmeler.md"),
+            kendim: hafiza::oku("kendim.md"),
+            dizin: hafiza::dizin_yenile(),
             ..Durum::default()
         }
     }
@@ -130,16 +120,6 @@ impl Bot {
 }
 
 // ---------- yardımcılar ----------
-
-fn oku(dosya: &str) -> String {
-    std::fs::read_to_string(PathBuf::from(DURUM_KLASORU).join(dosya)).unwrap_or_default()
-}
-
-async fn kaydet(dosya: &str, icerik: &str) {
-    if let Err(e) = tokio::fs::write(PathBuf::from(DURUM_KLASORU).join(dosya), icerik).await {
-        eprintln!("{dosya} yazılamadı: {e}");
-    }
-}
 
 fn simdi_unix() -> i64 {
     SystemTime::now()
@@ -259,11 +239,27 @@ impl Bot {
         .await
     }
 
-    // kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma, şakalar
+    // kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma, şakalar.
+    // sohbette kim var, ne konuşuluyor bakıp hafızadan yalnız ilgili parçaları getirir.
     async fn uret(&self, gecmis: &[Mesaj], talimat: &str, max_tokens: u32) -> Result<String, Hata> {
+        let mut katilimcilar: Vec<String> = Vec::new();
+        let mut metinler: Vec<String> = Vec::new();
+        for m in gecmis.iter().filter(|m| m.role == "user") {
+            match m.content.split_once(": ") {
+                Some((isim, metin)) => {
+                    if !katilimcilar.contains(&isim.to_string()) {
+                        katilimcilar.push(isim.to_string());
+                    }
+                    metinler.push(metin.to_string());
+                }
+                None => metinler.push(m.content.clone()),
+            }
+        }
+        let anahtar = hafiza::anahtarlar(&metinler);
         let (sistem, bot_adi) = {
             let d = self.durum();
-            (sistem_metni(&d, talimat), d.bot_adi.clone())
+            let getirilen = hafiza::getir(&katilimcilar, &anahtar, &d.hafiza, SOHBET_BOYU);
+            (sistem_metni(&d, talimat, &getirilen), d.bot_adi.clone())
         };
         let cevap = self.sor(&sistem, gecmis, max_tokens).await?;
         Ok(temizle(cevap, &bot_adi))
@@ -309,7 +305,7 @@ impl Bot {
 }
 
 // her cevabın sistem mesajı: çekirdek kişilik + ajanların öğrettikleri + o anki görev
-fn sistem_metni(d: &Durum, talimat: &str) -> String {
+fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> String {
     let favori_satiri = match &d.favori_adi {
         Some(f) => FAVORI_SATIRI.replace("{favori}", f),
         None => String::new(),
@@ -328,18 +324,13 @@ fn sistem_metni(d: &Durum, talimat: &str) -> String {
     };
     bolum(&mut s, "HUYUN (hocanın son notu, buna göre davran)", &d.huy);
     bolum(&mut s, "BU GRUP HAKKINDA BİLDİKLERİN", &d.profil);
-
-    if !d.kanaatler.kisiler.is_empty() {
-        let liste = d
-            .kanaatler
-            .kisiler
-            .iter()
-            .map(|k| format!("- {} ({:+}): {}", k.isim, k.puan, k.not))
-            .collect::<Vec<_>>()
-            .join("\n");
-        bolum(&mut s, "İNSANLAR HAKKINDA DÜŞÜNDÜKLERİN", &liste);
-    }
-    bolum(&mut s, "SENİN SON HALİN", &d.kanaatler.kendim);
+    bolum(
+        &mut s,
+        "HAFIZA DİZİNİ (kimi ve neyi biliyorsun; ayrıntı gerekince getiriliyor)",
+        &d.dizin,
+    );
+    bolum(&mut s, "BU SOHBET İÇİN HAFIZADAN GETİRİLENLER", getirilen);
+    bolum(&mut s, "SENİN SON HALİN", &d.kendim);
     bolum(
         &mut s,
         "KENDİNE NOTLAR (eleştirmenin son sohbetten çıkardığı dersler)",
@@ -427,11 +418,12 @@ impl Bot {
             }
         };
 
-        // sohbet bitti: kanaatçi insanları, eleştirmen botu değerlendirir
+        // sohbet bitti: günlükçü hafızaya yazar, eleştirmen botu değerlendirir
         if let Some(s) = biten {
             let bot_adi = self.durum().bot_adi.clone();
             let d = dokum(&s.gecmis, &bot_adi);
-            self.kanaatci(d.clone()).await;
+            let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
+            self.gunlukcu(d.clone(), "biten sohbet", &kanal_adi).await;
             self.elestirmen(d).await;
         }
     }
@@ -542,7 +534,8 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
 
         bot.profilci().await;
         let son = son_mesajlar(&bot.durum(), 300);
-        bot.kanaatci(son).await;
+        bot.gunlukcu(son, "6 saatlik gözlem, bot konuşmamış olabilir", "gozlem")
+            .await;
         bot.hoca().await;
 
         let Some(kanal) = varsayilan_kanal(&bot, &ctx) else {
@@ -824,7 +817,9 @@ async fn main() -> Result<(), Hata> {
         Ok(v) if !v.trim().is_empty() => Some(ChannelId::new(v.trim().parse()?)),
         _ => None,
     };
-    std::fs::create_dir_all(DURUM_KLASORU)?;
+    for k in ["kisiler", "konular", "olaylar", "arsiv"] {
+        std::fs::create_dir_all(PathBuf::from(DURUM_KLASORU).join(k))?;
+    }
     std::fs::create_dir_all(RESIM_KLASORU)?;
 
     let bot = Arc::new(Bot {
