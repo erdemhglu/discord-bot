@@ -19,6 +19,8 @@
 | HAFIZA_BOYU | 2000 | ham hafıza satırı |
 | SOHBET_BOYU | 20 | modele giden sohbet geçmişi |
 | MESAJ_SINIRI | 1900 | Discord 2000 sınırına pay |
+| AKIS_DUZENLEME | 1200 ms | stream'de iki düzenleme arası asgari süre (Discord edit sınırı) |
+| `cevap_butcesi!()` (makro) | release `None` / debug `Some(2000)` | sohbet cevabı token bütçesi derleme durumuna göre; release'de max_tokens gitmez |
 | FAVORI | 259669117248864257 | her zaman sevilen kullanıcı id |
 | GEZGIN_ARALIGI | 4 saat | gündem gezintisi |
 | RESIM_KLASORU / DURUM_KLASORU | resimler / durum | klasörler (çalışma dizinine göre) |
@@ -48,6 +50,7 @@ gözlem 300 · hack giriş max_tokens 150
 ## Ortam değişkenleri (.env)
 DISCORD_TOKEN (zorunlu) · OPENROUTER_KEY veya MISTRAL_KEY (biri zorunlu; ikisi de varsa openrouter) ·
 SAGLAYICI=mistral (zorlama) · MODEL (model kimliği, sağlayıcının varsayılanını ezer) ·
+API_ADRES (openai uyumlu chat/completions adresi; seçilen sağlayıcının adresini ezer) ·
 FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı)
 
 ## src/gelisim.rs

@@ -90,3 +90,20 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
 - **ICE hayranlığı çekirdek kişilikte, sınırıyla.** Emin'in isteği; futbol takımı tutar gibi
   absürt bir gag. Milliyet/etnik köken/din/göçmenlik hedef alma, tehdit ve şiddet övgüsü promptta
   yasak; hoca bu maddeyi kaldıramaz (çekirdek `kisilik.md`'de).
+- **2026-09-02 · Sohbet cevapları stream.** Cevap tek seferde gelmez: ilk delta ile mesaj açılır,
+  `AKIS_DUZENLEME` (1,2 sn) aralıkla düzenlenir (Discord'da bot için gerçek stream yok, edit tek
+  yol; aralık edit rate limitine pay bırakır). Haber/hoş geldin/laf atma stream'siz kalır, tek yol
+  sohbet cevabı.
+- **Thinking kırpılmadan spoiler'da.** Model `reasoning` ya da `reasoning_content` döndürürse
+  (openrouter reasoning modelleri, qwen vb.) cevap boyunca `||...||` bloklarında gösterilir,
+  asla kesilmez; 1896 karakteri aşan düşünce yeni spoiler mesaja taşar. Üretmeyen modelde blok
+  yoktur. Kayda yalnız cevap girer; hoca/eleştirmen düşünceyi görmez.
+- **Kod tarafı kırpma kalktı (`kisalt` silindi).** Cevabı prompt kısa tutar; kod ancak Discord'un
+  fizik sınırında devreye girer: 1900'ü aşan cevap cümle/boşluk sınırından yeni mesaja bölünür
+  (`bol`), hiçbir şey atılmaz.
+- **2026-09-02 · Cevap bütçesi makroyla, derleme durumuna göre.** `cevap_butcesi!()`: release'de
+  `None` → istekte max_tokens gitmez, model sonuna kadar konuşur (reasoning modeller düşünceyi
+  zaten kendisi bitirir); debug'da `Some(2000)` → geliştirme turunda maliyet koruması. Sabit
+  bütçeli çağrılar (ajanlar, haber, hoş geldin...) `Some(n)` vermeye devam eder.
+- **`API_ADRES` `.env`'den.** Sağlayıcı adresini ezer; kendi router'ına (openai uyumlu) yönlendirir.
+  Anahtar/model seçimi `SAGLAYICI` mantığında kalır.
