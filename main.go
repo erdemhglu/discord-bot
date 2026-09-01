@@ -31,9 +31,6 @@ const (
 	dürtmeAraligi = 1 * time.Hour // ne sıklıkla kendiliğinden laf atmayı dener
 	dürtmeSansi   = 0.3           // her denemede %30 ihtimalle atar
 
-	kisilik = "Bu discord sunucusundaki insanlarla yıllardır tanışıyorsun, asker arkadaşı gibisin. " +
-		"Onların diliyle, onların şakalarıyla konuşursun, samimi ve laubalisin. " +
-		"Kısa yaz, tek paragrafı geçme, emoji kullanma. Türkçe konuş."
 )
 
 var (
@@ -45,6 +42,7 @@ var (
 	yasakli       = map[string]time.Time{} // kanal id -> tekrar girebileceği zaman
 	haberBekleyen = map[string]time.Time{} // kanal id -> yorum beklemenin bittiği zaman
 
+	botAdi   string   // discord'daki kullanıcı adı, kişilik metnine giriyor
 	hafiza   []string // sunucuda okuduğu son mesajlar, "isim: metin" halinde
 	profil   string   // hafızadan çıkardığı grup özeti
 	sonKanal string   // en son konuşulan kanal, dürtme buraya gider
@@ -57,9 +55,28 @@ type sohbet struct {
 
 // ---------- yapay zeka ----------
 
+// kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma
 func uret(gecmis []openai.ChatCompletionMessage, ekTalimat string) (string, error) {
+	sistem := fmt.Sprintf(kisilik, botAdi)
+	if profil != "" {
+		sistem += "\n\nBU GRUP HAKKINDA BİLDİKLERİN\n" + profil
+	}
+	if ekTalimat != "" {
+		sistem += "\n\nŞU ANKİ GÖREVİN\n" + ekTalimat
+	}
+	return sor(sistem, gecmis)
+}
+
+// kişiliksiz, düz analiz: profil çıkarma, haber seçme
+func analiz(metin, talimat string) (string, error) {
+	return sor(analist, []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleUser, Content: metin + "\n\n---\n\n" + talimat},
+	})
+}
+
+func sor(sistem string, gecmis []openai.ChatCompletionMessage) (string, error) {
 	mesajlar := append([]openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleSystem, Content: kisilik + "\n\nBu grup hakkında bildiklerin:\n" + profil + "\n\n" + ekTalimat},
+		{Role: openai.ChatMessageRoleSystem, Content: sistem},
 	}, gecmis...)
 
 	cevap, err := ai.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
@@ -108,9 +125,9 @@ func sohbetDevam(dc *discordgo.Session, kanalID, kullanici, metin string) {
 	talimat := ""
 	switch {
 	case s.sayac >= maxMesaj-1:
-		talimat = "Bu senin son mesajın. Kısaca vedalaş ve çık."
+		talimat = sonMesaj
 	case s.sayac >= vedaEsigi:
-		talimat = "Sohbeti en kısa yoldan toparla, gitmen gerektiğini belli et."
+		talimat = vedaYaklasiyor
 	}
 	gecmis := append([]openai.ChatCompletionMessage{}, s.gecmis...)
 	mu.Unlock()
@@ -195,12 +212,7 @@ func profilGuncelle() {
 		return
 	}
 
-	yeni, err := uret(
-		[]openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: ornek}},
-		"Yukarıdaki sohbet dökümünden bu grubu tanı. Kimler var, kim nasıl konuşur, "+
-			"neye gülerler, hangi konular döner, hangi teknolojilerle ilgilenirler, "+
-			"içlerinde dönen şakalar neler. Maddeler halinde, en fazla 25 satır yaz.",
-	)
+	yeni, err := analiz(ornek, profilCikar)
 	if err != nil {
 		log.Println("profil hatası:", err)
 		return
@@ -233,8 +245,7 @@ func dürt(dc *discordgo.Session) {
 
 		laf, err := uret(
 			[]openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: son}},
-			"Yukarıdakiler grubun son konuşmaları. Eski bir arkadaş gibi durup dururken bir laf at: "+
-				"daha önce konuştukları bir şeye gönderme yap, birine takıl, ya da aklına geleni sor. Tek cümle.",
+			durupDururken,
 		)
 		if err != nil {
 			log.Println("ai hatası:", err)
@@ -289,11 +300,10 @@ func hnHaber() (haber, error) {
 		return haber{}, fmt.Errorf("haber bulunamadı")
 	}
 
-	secim, err := uret(
-		[]openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: liste.String()}},
-		"Yukarıdaki hacker news listesinden bu grubun en çok ilgisini çekecek olanı seç. "+
-			"Onların ilgi alanlarını ve konuştukları teknolojileri hesaba kat. Sadece numarasını yaz.",
-	)
+	mu.Lock()
+	p := profil
+	mu.Unlock()
+	secim, err := analiz(liste.String(), fmt.Sprintf(haberSec, p))
 	if err != nil {
 		return haber{}, err
 	}
@@ -345,7 +355,7 @@ func haberPaylas(dc *discordgo.Session) {
 		}
 		girdi, err := uret(
 			[]openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: h.Title}},
-			"Bu haberi arkadaşlarına paylaşıyormuş gibi bir iki cümleyle tanıt ve fikirlerini sor.",
+			haberTanit,
 		)
 		if err != nil {
 			log.Println("ai hatası:", err)
@@ -382,7 +392,7 @@ func uyeKatildi(dc *discordgo.Session, e *discordgo.GuildMemberAdd) {
 	isim := e.User.Username
 	selam, err := uret(
 		[]openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: isim + " sunucuya yeni katıldı."}},
-		"Yeni gelene hoş geldin de, tanışmak için bir soru sor.",
+		hosGeldin,
 	)
 	if err != nil {
 		log.Println("ai hatası:", err)
@@ -451,7 +461,8 @@ func main() {
 	dc.AddHandler(uyeKatildi)
 	dc.AddHandler(sunucuGeldi)
 	dc.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		log.Println("giriş yapıldı:", r.User.Username)
+		botAdi = r.User.Username
+		log.Println("giriş yapıldı:", botAdi)
 	})
 
 	if err := dc.Open(); err != nil {
