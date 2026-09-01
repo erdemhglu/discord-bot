@@ -4,7 +4,7 @@
 | Sabit | Değer | Anlam |
 |---|---|---|
 | OPENROUTER_ADRES / OPENROUTER_MODEL | …/api/v1/chat/completions / openai/gpt-4o-mini | varsayılan sağlayıcı |
-| MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-small-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
+| MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-medium-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
 | MAX_MESAJ | 12 | bir sohbette botun yazacağı en fazla mesaj |
 | VEDA_ESIGI | 9 | bu sayaçtan sonra "toparla" talimatı |
 | SANS | 0.10 | mesaj başına araya girme olasılığı (seyahatte × YOLDA_SANS_CARPANI) |

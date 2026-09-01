@@ -5,7 +5,7 @@ ayrıntı `docs/` altındadır. Kural: buraya ancak "her an geçerli" bilgi gire
 
 ## Ne bu
 Bir discord sunucusunda yıllardır takılan bir üye gibi davranan bot. Rust (serenity 0.12 +
-tokio + reqwest), cevaplar OpenRouter (`openai/gpt-4o-mini`) ya da Mistral (`mistral-small-latest`)
+tokio + reqwest), cevaplar OpenRouter (`openai/gpt-4o-mini`) ya da Mistral (`mistral-medium-latest`)
 üzerinden; ikisi de OpenAI uyumlu chat/completions, seçim `.env`'den. Kişiliği kod değil,
 arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Promptlar
 `promptlar/*.md`, `include_str!` ile derlemeye gömülür.
@@ -62,4 +62,4 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 - Anahtar kelime eşleme düz alt-dize; kök bulma yok.
 - Bayram tarihleri 2026-2027 için elle yazılı (`src/seyahat.rs`), sonraki yıllar eklenmeli.
 - Takma ad değiştirme (isim seçme) botun sunucuda CHANGE_NICKNAME iznine bağlı; yoksa log'a düşer, isim yine kullanılır.
-- Mistral'de görsel yorumu modele bağlı (`mistral-small-latest` görsel destekler); desteklemezse metin yedeği.
+- Mistral'de görsel yorumu modele bağlı (`mistral-medium-latest` görsel destekler); desteklemezse metin yedeği.
