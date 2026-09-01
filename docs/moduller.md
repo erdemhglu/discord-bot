@@ -24,8 +24,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `temizle(String, bot_adi) -> String` — model çıktısı: baştaki `bot_adi:` kalıbı ve dış tırnak atılır, 1900 karakterde kesilir.
 - `ortalama_boy(&Durum) -> usize` — son 200 ham mesajın ortalama karakteri (boşsa 60). Sohbet cevabı sınırı = 2× bu, 40..220.
 - `kisalt(metin, sinir) -> String` — ilk iki cümlede ya da karakter sınırında (kelime sonunda) keser; son nokta/virgülü atar. Yalnız normal/veda sohbet cevaplarına uygulanır (hack, hoş geldin vb. hariç).
-- `ornek_mesajlar(&Durum) -> String` — son 300 ham mesajdan 4..100 karakterlik 12 tanesi; sistem mesajında "GRUBUN GERÇEK MESAJLARI" bölümü (boy ve ton örneği).
-- `cevap_ayikla(&str) -> String` — "DÜŞÜNCE: … / CEVAP: …" çıktısından cevabı alır; `DUSUN_SONRA_CEVAPLA` sabiti göreve eklenir.
+- `cevap_olcusu(metin, ortalama)` — son mesaja göre karakter/cümle/token bütçesi: gündelik 1/70, soru 2/100, açık anlatım isteği 3/140.
 - `json_ayikla(&str) -> &str` — ilk `{` ile son `}` arası (kod bloğu süsünü atar).
 
 ### OpenRouter (impl Bot)
@@ -46,7 +45,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `Bot::komut(ctx, msg, komut, arg) -> bool` — test/yönetim komutları (bkz README). `Bot::model_var_mi(id)` OpenRouter `/models` listesinde arar; liste çekilemezse engel olmaz.
 - `Bot::haber_at(ctx, kanal) -> bool` — haberci → link → tanıtım → gönder → sohbet + 2 saat yorum bekleme. `haber_dongusu` ve `!haber` çağırır.
 - `Bot::saka_yap(ctx, kanal, hack)` — görsel seç, hack ise `HACK_GIRIS`, değilse `resimci`; gönder; sohbet (`hackli=3`). `saka_dongusu` ve `!saka`/`!hack` çağırır.
-- `Bot::cevapla(ctx, kanal)` — döngü: (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç ve meşgul işaretle. (2) 0,4-1,2 sn okuma payından sonra bu sırada gelenler dahil güncel geçmişi, son Discord mesajını ve `gelen` sayacını al; `uret` (90 token); `kisalt` (2 cümle / 2×ortalama boy). (3) `broadcast_typing` + karakter×25 ms (0,35-2,5 sn); son mesaja Discord yanıtı olarak `gonder`, böylece kişi pinglenir. (4) meşgul kaldır, asistan mesajını ekle, sayaçları ilerlet. (5) sohbet bitmediyse üretim sırasında yeni mesaj gelmişse başa dön; yoksa çık. Biten sohbet `gunlukcu` ve `elestirmen`e gider.
+- `Bot::cevapla(ctx, kanal)` — döngü: (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç ve meşgul işaretle. (2) 0,15-0,35 sn mesaj biriktirme payından sonra güncel geçmişi ve hedef mesajı al; `broadcast_typing`; `uret` (70/100/140 token); `kisalt` (1/2/3 cümle). (3) üretim sırasında yeni mesaj geldiyse eski cevabı göndermeden güncel bağlamla yeniden başlar; yoksa hemen `gonder`. (4) meşgul kaldır, geçmiş ve sayaçları ilerlet. Biten sohbet `gunlukcu` ve `elestirmen`e gider.
 
 ### Hafıza (discord tarafı)
 - `gecmisi_oku(bot, ctx, guild)` — botun üyeliğini çeker, izinli (`VIEW_CHANNEL|READ_MESSAGE_HISTORY`) metin kanallarını pozisyon sırasıyla gezer, `GetMessages` 100'lük sayfalarla 14 gün geriye okur, bot/boş mesajları atlar, `content_safe` ile mention'ları ada çevirir, zamana göre sıralar, son 2000'i `hatirla`; favori id görürse `favori_adi` yazar.

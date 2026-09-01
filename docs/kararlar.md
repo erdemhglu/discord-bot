@@ -76,6 +76,17 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
 - **Altta kalmama ve istek yapma promptta.** "ne alaka / sa naber" refleksi yasak; sıralama, seçim,
   tahmin istenince kanaat puanlarıyla yapılır; "yapamam" yasak. Kimlik: Nişantaşı Üniversitesi, beyaz Tofaş.
 - **Gizli düşünce satırı.** Küçük modellerde alakasız cevap ("ne alaka") azalsın diye sohbet cevabından önce tek satır "DÜŞÜNCE:" (kim, ne istiyor, nasıl cevap yakışır), sonra "CEVAP:"; kod yalnız cevabı gönderir (`cevap_ayikla`). +70 token. Sıcaklık 0.8.
+- **2026-09-02 · Hız yeniden sadeleştirildi.** Gizli DÜŞÜNCE/CEVAP turu ve cevap hazırlandıktan
+  sonraki yapay yazma beklemesi kaldırıldı; ikisi canlıda gecikmeyi büyütüyordu. Model çalışırken
+  yazıyor göstergesi açık, cevap bütçeleri 70/100/140 token ve sıcaklık 0.7. Üretim sırasında
+  yeni mesaj gelirse eski cevap gönderilmeden güncel bağlamla yeniden üretilir.
+- **Yanıt referansı yeniden her cevapta.** Muhatap etiketleme isteği koşullu davranıştan üstündür;
+  normal sohbet cevabı her zaman snapshot'taki son kullanıcı mesajına bağlanır ve onu pingler.
+- **Uyku hali konuşma repliği değildir.** Uyku planı cevap verip vermemeyi kodda belirler; aktif
+  sohbette "uyuyamadın, o modasın" talimatı artık prompta girmez. Canlıda bot sebepsiz yere
+  "uykudan ne bekliyon" diyerek konuşmayı kendine çekiyordu.
+- **Ham sunucu mesajı few-shot değildir.** Aktif sohbet geçmişi zaten modele gider; başka
+  kanallardan seçilen 12 ham cümle argo ve kalıp taşıdığı için sistem promptundan kaldırıldı.
 - **ICE hayranlığı çekirdek kişilikte, sınırıyla.** Emin'in isteği; futbol takımı tutar gibi
   absürt bir gag. Milliyet/etnik köken/din/göçmenlik hedef alma, tehdit ve şiddet övgüsü promptta
   yasak; hoca bu maddeyi kaldıramaz (çekirdek `kisilik.md`'de).

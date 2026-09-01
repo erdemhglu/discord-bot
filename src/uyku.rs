@@ -116,20 +116,8 @@ pub fn uyanik_mi(d: &Durum) -> bool {
     !d.planlar.iter().any(|p| p.bas <= s && s < p.bit)
 }
 
-pub fn uykusuz_mu(d: &Durum) -> bool {
-    let s = simdi_unix();
-    d.planlar
-        .iter()
-        .any(|p| p.uykusuz_bas.is_some_and(|u| u <= s && s < p.bas))
-}
-
 // sistem mesajına giden "şu an" satırı
 pub fn durum_metni(d: &Durum) -> String {
-    let mut s = saat_metni();
-    if uykusuz_mu(d) {
-        s += ". Uyuyamadın, gecenin bu saatinde ayaktasın; o modasın, yarın işin var ama kafan durmuyor.";
-    } else if !uyanik_mi(d) {
-        s += ". Uyuyorsun.";
-    }
-    s
+    let _ = d;
+    saat_metni()
 }

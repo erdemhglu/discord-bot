@@ -63,7 +63,7 @@ Sırayla, boş olanlar atlanır:
 5. BU SOHBET İÇİN HAFIZADAN GETİRİLENLER — `hafiza::getir` (bütçe 6000 kr)
 6. GÜNDEM — `gundem.md` son 3 giriş (gezgin)
 7. SENİN SON HALİN — `kendim.md` (gunlukcu)
-8. ŞU AN — tarih/saat/gün + uyku hali + seyahat hali
+8. ŞU AN — tarih/saat/gün + seyahat hali (uyku yalnız kodda cevap kapısıdır)
 9. KENDİNE NOTLAR — `duzeltmeler.md` (elestirmen)
 10. ŞU ANKİ GÖREVİN — o çağrının talimatı (veda, hack, hoş geldin, yoldan mesaj...)
 

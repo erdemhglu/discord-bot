@@ -81,7 +81,6 @@ struct Sohbet {
     hackli: u32, // 0 değilse hacklenmiş taklidi sürüyor, her cevapta bir azalır
     son_mesaj: Option<MessageId>, // cevaplanacak mesaj (discord yanıtı olarak)
     gelen: u32,
-    etiketli: bool, // son gelen mesaj botu etiketledi mi (cevap yanıt olarak gider)  // gelen kullanıcı mesajı sayısı; cevap yazarken yenisi geldi mi anlamak için
 }
 
 #[derive(Default)]
@@ -220,32 +219,20 @@ fn kisalt(metin: &str, sinir: usize, en_cok_cumle: usize) -> String {
     sonuc.trim().trim_end_matches(['.', ',']).to_string()
 }
 
-// grubun gerçek mesajlarından boy ve ton örneği: kısa olanlardan 12 tane
-fn ornek_mesajlar(d: &Durum) -> String {
-    let uygun: Vec<&String> = d
-        .hafiza
-        .iter()
-        .rev()
-        .take(300)
-        .filter(|s| {
-            let n = s
-                .split_once(": ")
-                .map(|(_, m)| m.chars().count())
-                .unwrap_or(0);
-            (4..=100).contains(&n)
-        })
-        .collect();
-    if uygun.is_empty() {
-        return String::new();
+// Son mesaja göre cevap bütçesi: gündelik laf kısa, açık anlatım isteği biraz geniş.
+fn cevap_olcusu(metin: &str, ortalama: usize) -> (usize, usize, u32) {
+    let son = metin.to_lowercase();
+    let gecen = |liste: &[&str]| liste.iter().any(|k| son.contains(k));
+    let ciddi =
+        gecen(&["ciddi", "anlat", "açıkla", "detaylı", "ne düşün"]) || son.chars().count() > 150;
+    let soru = son.contains('?') || gecen(&["nasıl", "olsa", "olsan", "mı ", "mi ", "mu ", "mü "]);
+    if ciddi {
+        ((ortalama * 4).clamp(160, 420), 3, 140)
+    } else if soru || son.chars().count() > 60 {
+        ((ortalama * 3).clamp(100, 280), 2, 100)
+    } else {
+        ((ortalama * 2).clamp(40, 180), 1, 70)
     }
-    let adim = (uygun.len() / 12).max(1);
-    uygun
-        .iter()
-        .step_by(adim)
-        .take(12)
-        .map(|s| s.as_str())
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 // kanalın geçmişine satır ekler ve dosyaya yazar; sohbet bitse, bot yeniden başlasa da kalır
@@ -310,26 +297,6 @@ fn kirp_hata(metin: &str) -> String {
         .take(300)
         .collect()
 }
-
-// "DÜŞÜNCE: ... / CEVAP: ..." biçiminden yalnız cevabı alır; biçim yoksa metnin kendisi
-fn cevap_ayikla(metin: &str) -> String {
-    let m = metin.trim();
-    for etiket in ["CEVAP:", "Cevap:", "cevap:"] {
-        if let Some(i) = m.rfind(etiket) {
-            return m[i + etiket.len()..].trim().trim_matches('"').to_string();
-        }
-    }
-    // düşünce satırı var ama cevap etiketi yoksa düşünceyi at
-    let temiz: Vec<&str> = m
-        .lines()
-        .filter(|l| !l.trim_start().to_uppercase().starts_with("DÜŞÜNCE"))
-        .collect();
-    temiz.join("\n").trim().to_string()
-}
-
-const DUSUN_SONRA_CEVAPLA: &str = "\n\nÖNCE tek satır düşün, şu biçimde: \"DÜŞÜNCE: kim yazdı, ne istiyor (şaka mı, laf sokma mı, \
-istek mi, ciddi soru mu), buna nasıl bir cevap yakışır (kısa/uzun, sert/tatlı, ciddi/dalga).\" \
-SONRA \"CEVAP: \" satırında yalnız gönderilecek mesajı yaz. Düşünce satırı kimseye gitmez, cevap satırı gider.";
 
 // ```json ... ``` gibi süslerin içinden json'u çıkarır
 fn json_ayikla(metin: &str) -> &str {
@@ -412,7 +379,7 @@ impl Bot {
             "model": self.durum().model.clone(),
             "messages": mesajlar,
             "max_tokens": max_tokens,
-            "temperature": 0.8,
+            "temperature": 0.7,
         }))
         .await
     }
@@ -547,14 +514,6 @@ fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> (String, String) {
     let mut degisken = String::new();
     bolum(
         &mut degisken,
-        &format!(
-            "GRUBUN GERÇEK MESAJLARI (boy ve ton örneği; ortalama {} karakter, sıradan lafta bunu geçme)",
-            ortalama_boy(d)
-        ),
-        &ornek_mesajlar(d),
-    );
-    bolum(
-        &mut degisken,
         "BU SOHBET İÇİN HAFIZADAN GETİRİLENLER",
         getirilen,
     );
@@ -606,6 +565,12 @@ fn girebilir_mi(d: &Durum, kanal: ChannelId) -> bool {
     d.yasakli.get(&kanal).is_none_or(|t| Instant::now() >= *t)
 }
 
+fn yeni_mesaj_var(d: &Durum, kanal: ChannelId, uretilen_gelen: u32) -> bool {
+    d.sohbetler
+        .get(&kanal)
+        .is_some_and(|s| s.gelen > uretilen_gelen)
+}
+
 impl Bot {
     // açık sohbette sıradaki cevabı üretir; aynı kanalda aynı anda tek cevap üretilir,
     // o sırada gelen mesajlar geçmişe eklenir ve bir sonraki cevapta görülür
@@ -635,7 +600,7 @@ impl Bot {
             };
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
-            sleep(Duration::from_millis(400 + (rand::random::<u64>() % 800))).await;
+            sleep(Duration::from_millis(150 + (rand::random::<u64>() % 200))).await;
             let (gecmis, yanit, gelen, sinir, en_cok_cumle, token, son_metin) = {
                 let d = self.durum();
                 let Some(s) = d.sohbetler.get(&kanal) else {
@@ -643,9 +608,8 @@ impl Bot {
                     self.durum().mesgul.remove(&kanal);
                     return;
                 };
-                // sınır gelen mesaja göre: kısa laf → kısa cevap; soru ya da uzun mesaj → yer aç
                 let ort = ortalama_boy(&d);
-                let son = s
+                let son_metin = s
                     .gecmis
                     .iter()
                     .rev()
@@ -657,39 +621,8 @@ impl Bot {
                             .unwrap_or(&m.content)
                     })
                     .unwrap_or("")
-                    .to_lowercase();
-                // üç kademe: sıradan laf kısa; soru/orta boy mesaj orta; ciddi konu uzun
-                let gecen = |liste: &[&str]| liste.iter().any(|k| son.contains(k));
-                let ciddi = gecen(&[
-                    "ciddi",
-                    "anlat",
-                    "açıkla",
-                    "ne düşün",
-                    "felsefe",
-                    "sence",
-                    "neden",
-                ]) || son.chars().count() > 150;
-                let soru = son.contains('?')
-                    || gecen(&["nasıl", "olsa", "olsan", "mı ", "mi ", "mu ", "mü "]);
-                let (sinir, en_cok_cumle, token) = if ciddi {
-                    ((ort * 6).clamp(220, 600), 5, 220)
-                } else if soru || son.chars().count() > 60 {
-                    ((ort * 4).clamp(140, 360), 3, 140)
-                } else {
-                    ((ort * 2).clamp(40, 220), 2, 90)
-                };
-                let son_metin = s
-                    .gecmis
-                    .iter()
-                    .rev()
-                    .find(|m| m.role == "user")
-                    .map(|m| {
-                        m.content
-                            .split_once(": ")
-                            .map(|(_, t)| t.to_string())
-                            .unwrap_or(m.content.clone())
-                    })
-                    .unwrap_or_default();
+                    .to_string();
+                let (sinir, en_cok_cumle, token) = cevap_olcusu(&son_metin, ort);
                 (
                     s.gecmis.clone(),
                     s.son_mesaj,
@@ -709,9 +642,8 @@ impl Bot {
                 );
                 token = token.max(220);
             }
-            // küçük modeller için: önce bir satır düşün (kimseye gitmez), sonra cevap
-            talimat_tam.push_str(DUSUN_SONRA_CEVAPLA);
-            let token = token + 70;
+            // Model çağrısı sürerken yazıyor göstergesi görünsün; cevap hazır olunca bekletme.
+            let _ = kanal.broadcast_typing(&ctx.http).await;
             let cevap = match self.uret(&gecmis, &talimat_tam, token).await {
                 Ok(c) => c,
                 Err(e) => {
@@ -720,7 +652,6 @@ impl Bot {
                     return;
                 }
             };
-            let cevap = cevap_ayikla(&cevap);
             let cevap = if talimat.is_empty() || talimat == VEDA_YAKLASIYOR || talimat == SON_MESAJ
             {
                 kisalt(&cevap, sinir, en_cok_cumle)
@@ -732,14 +663,16 @@ impl Bot {
                 self.durum().mesgul.remove(&kanal);
                 return;
             }
+            if yeni_mesaj_var(&self.durum(), kanal, gelen) {
+                self.durum().mesgul.remove(&kanal);
+                continue;
+            }
             // aynı lafı iki kez etmesin: son 5 mesajıyla aynıysa bir kez daha dener, yine aynıysa susar
             let cevap = if self.tekrar_mi(kanal, &cevap) {
                 let t2 = format!("{talimat_tam}\n\nAz önce aynen şunu yazdın: \"{cevap}\". Aynısını ya da benzerini yazma; başka bir açıdan gir ya da konuyu değiştir.");
                 match self.uret(&gecmis, &t2, token).await {
-                    Ok(c)
-                        if !self.tekrar_mi(kanal, &cevap_ayikla(&c)) && c.chars().count() >= 3 =>
-                    {
-                        kisalt(&cevap_ayikla(&c), sinir, en_cok_cumle)
+                    Ok(c) if !self.tekrar_mi(kanal, &c) && c.chars().count() >= 3 => {
+                        kisalt(&c, sinir, en_cok_cumle)
                     }
                     _ => {
                         self.durum().mesgul.remove(&kanal);
@@ -749,34 +682,11 @@ impl Bot {
             } else {
                 cevap
             };
-            // "yazıyor..." gösterip boyuna göre kısa bir yazma payı bırakır.
-            let _ = kanal.broadcast_typing(&ctx.http).await;
-            sleep(Duration::from_millis(
-                (cevap.chars().count() as u64 * 25).clamp(350, 2500),
-            ))
-            .await;
-            // insan gibi: kalabalıkta, araya mesaj girdiyse ya da etiketlendiyse yanıtla; yoksa düz yaz
-            let yanitla = {
-                let d = self.durum();
-                let s = d.sohbetler.get(&kanal);
-                let etiketli = s.is_some_and(|s| s.etiketli);
-                let araya_girdi = s.is_some_and(|s| s.gelen > gelen);
-                let bot_onek = format!("{}: ", d.bot_adi);
-                let konusan: HashSet<&str> = d
-                    .kanal_gecmisi
-                    .get(&kanal)
-                    .map(|g| {
-                        g.iter()
-                            .rev()
-                            .take(5)
-                            .filter(|l| !l.starts_with(&bot_onek))
-                            .filter_map(|l| l.split_once(": ").map(|(i, _)| i))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                etiketli || araya_girdi || konusan.len() >= 2
-            };
-            let yanit = if yanitla { yanit } else { None };
+            // Üretim sırasında yeni mesaj geldiyse eski hedefe cevap yollama.
+            if yeni_mesaj_var(&self.durum(), kanal, gelen) {
+                self.durum().mesgul.remove(&kanal);
+                continue;
+            }
             self.gonder(ctx, kanal, &cevap, None, None, yanit).await;
 
             let biten = {
@@ -810,11 +720,7 @@ impl Bot {
                 return;
             }
             // cevap yazarken yeni mesaj geldiyse bir tur daha; yoksa çık
-            let bekleyen = self
-                .durum()
-                .sohbetler
-                .get(&kanal)
-                .is_some_and(|s| s.gelen > gelen);
+            let bekleyen = yeni_mesaj_var(&self.durum(), kanal, gelen);
             if !bekleyen {
                 break;
             }
@@ -1658,7 +1564,6 @@ impl EventHandler for Handler {
             if let Some(s) = d.sohbetler.get_mut(&kanal) {
                 s.gecmis.push(kullanici(format!("{isim}: {metin}")));
                 s.son_mesaj = Some(msg.id);
-                s.etiketli = etiketlendi;
                 s.gelen += 1;
                 if s.gecmis.len() > SOHBET_BOYU {
                     s.gecmis.drain(..s.gecmis.len() - SOHBET_BOYU);
@@ -1792,13 +1697,25 @@ mod test {
     }
 
     #[test]
-    fn cevap_ayiklanir() {
-        assert_eq!(
-            cevap_ayikla("DÜŞÜNCE: laf sokuyor, sert dön\nCEVAP: sen kendine bak olm"),
-            "sen kendine bak olm"
+    fn cevap_olcusu_mesaja_uyar() {
+        assert_eq!(cevap_olcusu("felsefe konuşak mı la", 30), (100, 2, 100));
+        assert_eq!(cevap_olcusu("bunu detaylı anlat", 30), (160, 3, 140));
+        assert_eq!(cevap_olcusu("olm ne diyon", 30), (60, 1, 70));
+    }
+
+    #[test]
+    fn yeni_mesaj_eski_cevabi_gecersiz_kilar() {
+        let kanal = ChannelId::new(7);
+        let mut d = Durum::default();
+        d.sohbetler.insert(
+            kanal,
+            Sohbet {
+                gelen: 3,
+                ..Sohbet::default()
+            },
         );
-        assert_eq!(cevap_ayikla("düz mesaj"), "düz mesaj");
-        assert_eq!(cevap_ayikla("DÜŞÜNCE: bir şey\nsonra düz"), "sonra düz");
+        assert!(yeni_mesaj_var(&d, kanal, 2));
+        assert!(!yeni_mesaj_var(&d, kanal, 3));
     }
 
     #[test]

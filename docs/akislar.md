@@ -15,9 +15,9 @@
 ## cevapla (bir sohbet turu)
 ```
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
-bekle 0,4-1,2 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── uret(90/140/220 +70 token, DÜŞÜNCE/CEVAP biçimi) ── cevap_ayikla ── kisalt(2/3/5 cümle) ── tekrar_mi? bir kez yeniden üret, yine tekrarsa sus
-yazıyor… ── bekle 25 ms × karakter (0,35-2,5 sn) ── gonder (discord yanıtı yalnız: etiketlendiyse, cevap yazarken araya mesaj girdiyse ya da son 5 satırda 2+ kişi konuşuyorsa; yoksa düz mesaj)
-… bitti değilse: cevap yazarken yeni mesaj geldiyse (`gelen` arttıysa) başa dön, yoksa çık
+bekle 0,15-0,35 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── yazıyor… ── uret(70/100/140 token) ── kisalt(1/2/3 cümle) ── tekrar_mi? bir kez yeniden üret, yine tekrarsa sus
+üretim sırasında yeni mesaj geldiyse eski cevabı göndermeden başa dön; gelmediyse hemen son kullanıcı mesajına Discord yanıtı olarak gonder ve kişiyi etiketle
+… bitti değilse: yeni mesaj yoksa çık
 kilit ── meşgul=0 ── asistan satırı ekle ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
 bitti ise: gunlukcu → ozetleyici → elestirmen
 ```
@@ -53,7 +53,7 @@ rss 20 → seçim (`GEZGIN_SEC`, huy+profil) → ≤3 sayfa (`sayfa_oku`: firecr
 
 ## Uyku (dakikada bir)
 `!uyan`: aktif planın bitişine kadar `uyanik_zorla` (planı silmek işe yaramaz, dakika sonra yeniden kurulup uyutur). `!uyu [saat]`: geçici plan, zorlama sıfırlanır.
-`guncelle`: dün+bugün için plan yoksa kur (gergin ise %20, değilse %7 uykusuz gece). Uyanık→uyudu / uyudu→uyandı geçişi loglanır. Uyanınca bekleyen etiket varsa son etiketin kanalına `UYANDIM` ile tek mesaj + sohbet. Uyurken: cevap yok, döngüler geçer, hafıza kaydı devam eder. Uykusuz gecede 01-06 arası "uyuyamadın" modu "ŞU AN" satırında.
+`guncelle`: dün+bugün için plan yoksa kur (gergin ise %20, değilse %7 uykusuz gece). Uyanık→uyudu / uyudu→uyandı geçişi loglanır. Uyanınca bekleyen etiket varsa son etiketin kanalına `UYANDIM` ile tek mesaj + sohbet. Uyurken: cevap yok, döngüler geçer, hafıza kaydı devam eder. Uyku hali konuşma promptuna karakter bahanesi olarak girmez.
 
 ## Seyahat (takvimden)
 `seyahat::simdi()` bugünü tabloya bakarak bulur. Etkisi: "ŞU AN" satırı, araya girme ×0.3, haber/şaka yok, dürtme yerine günde ≤1 yoldan mesaj, bir gün önce `GIDIYORUM`. Durum tutulmaz; yalnız `son_yol_mesaji` ve `duyurulan_seyahat` işaretleri.

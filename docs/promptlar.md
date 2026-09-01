@@ -34,7 +34,8 @@ doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken 
 
 ## "Görev" nasıl gider
 `uret(gecmis, talimat, n)` → `sistem_metni(d, talimat, getirilen)` → sistem mesajının son bölümü
-`ŞU ANKİ GÖREVİN\n<talimat>`. Boş talimat bölümü atlar.
+`ŞU ANKİ GÖREVİN\n<talimat>`. Boş talimat bölümü atlar. Aktif sohbet geçmişi ayrıca gider;
+sunucu-geneli ham mesajlar few-shot örneği olarak sistem promptuna eklenmez.
 
 ## JSON bekleyen promptlar
 GUNLUKCU tek. Kod `json_ayikla` ile `{…}` arasını alır, `serde(default)` ile eksik alanları

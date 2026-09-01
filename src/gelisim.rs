@@ -169,6 +169,6 @@ mod test {
             isim_temizle("Bundan sonra Zeytin de").as_deref(),
             Some("Bundan")
         );
-        assert_eq!(isim_temizle("!").is_none(), true);
+        assert!(isim_temizle("!").is_none());
     }
 }
