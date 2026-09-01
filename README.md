@@ -18,6 +18,8 @@ Rust ile yazıldı, cevapları openrouter üzerinden alıyor.
 - bayram, uzun hafta sonu, yaz, festival zamanlarında seyahatte gibi davranır: az yazar, yoldan mesaj atar, gitmeden haber verir
 - arada `resimler/` klasöründen bir görsel atar; bazen hacklenmiş taklidiyle (3 mesaj sürer,
   sonra kendine gelir; link atmaz, kimseden bir şey istemez)
+- gelişim evreleri: yeni → ısınma → yerleşik → eski toprak (gün ve sohbet sayısına göre); evre üslubu ve cesareti değiştirir
+- yerleşik evresine girince kendine isim seçer, takma adını değiştirir, gruba söyler
 - `FAVORI` id'li kişi istisnadır, ne olursa olsun sever
 
 ## kişiliği kim yönetiyor
@@ -76,7 +78,7 @@ dosyalarında.
 ## kurulum
 
 ```
-cp .env.example .env   # token ve key'leri doldur
+cp .env.example .env   # DISCORD_TOKEN + OPENROUTER_KEY ya da MISTRAL_KEY (MODEL ile model seçilir)
 cargo run --release
 ```
 

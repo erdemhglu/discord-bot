@@ -53,5 +53,12 @@ rss 20 → seçim (`GEZGIN_SEC`, huy+profil) → ≤3 sayfa (`sayfa_oku`: firecr
 ## Seyahat (takvimden)
 `seyahat::simdi()` bugünü tabloya bakarak bulur. Etkisi: "ŞU AN" satırı, araya girme ×0.3, haber/şaka yok, dürtme yerine günde ≤1 yoldan mesaj, bir gün önce `GIDIYORUM`. Durum tutulmaz; yalnız `son_yol_mesaji` ve `duyurulan_seyahat` işaretleri.
 
+## Gelişim
+Her biten sohbet `gelisim.sohbet++`, her mesaj `gelisim.mesaj++`. `gelisim_kontrol`: gün ve sohbet
+eşiklerine göre evre yalnız ileri atlar (yeni → isinma → yerlesik → eski-toprak). Evre: sistem
+mesajında "GELİŞİM EVREN" bölümü, araya girme şansı × evre.sans, dürtme × evre.durtme. Yerleşik
+evresine girince bir kez isim seçer: model tek kelime verir, takma ad her sunucuda değişir,
+`bot_adi` olur, gruba duyurulur. Sayaçlar `durum/gelisim.md`'de; yeniden başlatma sıfırlamaz.
+
 ## Biten sohbet → hafıza
 `gunlukcu`: JSON → `olaylar/AA.md` satırı, kişi dosyaları (puan, not, bilgiler, etiket, olay), konu dosyaları, `kendim.md`, `INDEX.md` → `ozetleyici` sınır aşanları küçültür (arşivle) → `elestirmen` → `duzeltmeler.md`.

@@ -111,5 +111,13 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `gunde(gun) -> Option<Seyahat>` — bu yıl ve geçen yıl (yılbaşı sarkması) için tabloyu tarar; yer = `(y + ay*31 + gun) % yerler.len()` ile sabit.
 - `bugun()`, `simdi()`, `yarin()` (yarın başlayan, bugün olmayan). `durum_metni()` — "Şu an X'desin (...); n gündür, m gün sonra dönüyorsun" / "Yarın X'ye gidiyorsun" / boş.
 
+## src/gelisim.rs
+- `Evre { ad, min_gun, min_sohbet, sans, durtme, aciklama }`, `EVRELER` (4 evre), `ISIM_EVRESI = 2`.
+- `Gelisim { dogum, sohbet, mesaj, evre, isim }` — `yukle()` `durum/gelisim.md`'den (yoksa doğum = şimdi), `kaydet(&Gelisim)` `anahtar: değer` satırları.
+- `gun(&Gelisim)` doğumdan bu yana gün. `hak_edilen(&Gelisim)` gün ve sohbet eşiklerini geçen en yüksek evre. `evre(&Gelisim)` mevcut evre. `evre_metni` "GELİŞİM EVREN" bölümü.
+- `isim_temizle(&str) -> Option<String>` — ilk kelime, alfanümerik, 2..20 karakter.
+- `Bot::gelisim_kontrol(ctx)` (main.rs) — her biten sohbet ve 6 saatlik turda: hak edilen evre > mevcut ise atlar, kaydeder; evre ≥ ISIM_EVRESI ve isim yoksa `isim_sec`.
+- `Bot::isim_sec(ctx)` (main.rs) — `uret(ISIM_SEC, 12)` → `isim_temizle` → her sunucuda `edit_nickname` → `gelisim.isim`, `bot_adi` → varsayılan kanala `uret(ISIM_DUYURU{isim})` + sohbet. Etiket algısı hem seçilen adı hem kullanıcı adını tanır.
+
 ## src/promptlar.rs
 Yalnız `pub const X: &str = include_str!("../promptlar/x.md");` satırları. Bkz docs/promptlar.md.

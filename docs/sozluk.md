@@ -71,3 +71,7 @@
 | talimat | instruction (task prompt) |
 | kaynak | source |
 | Hata | Error type alias |
+| gelisim / evre / hak_edilen | development / stage / earned stage |
+| dogum | birth (first run timestamp) |
+| isim_sec / isim_temizle | choose name / sanitize name |
+| saglayici / api_adres | provider / API endpoint |

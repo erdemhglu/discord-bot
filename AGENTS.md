@@ -5,7 +5,8 @@ ayrıntı `docs/` altındadır. Kural: buraya ancak "her an geçerli" bilgi gire
 
 ## Ne bu
 Bir discord sunucusunda yıllardır takılan bir üye gibi davranan bot. Rust (serenity 0.12 +
-tokio + reqwest), cevaplar OpenRouter üzerinden (`openai/gpt-4o-mini`). Kişiliği kod değil,
+tokio + reqwest), cevaplar OpenRouter (`openai/gpt-4o-mini`) ya da Mistral (`mistral-small-latest`)
+üzerinden; ikisi de OpenAI uyumlu chat/completions, seçim `.env`'den. Kişiliği kod değil,
 arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Promptlar
 `promptlar/*.md`, `include_str!` ile derlemeye gömülür.
 
@@ -15,7 +16,7 @@ cargo build            # derle
 cargo test             # 12 birim test (hafiza, gundem, seyahat)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
-cargo run --release    # .env gerekir (DISCORD_TOKEN, OPENROUTER_KEY; FIRECRAWL_KEY ve HABER_KANALI isteğe bağlı)
+cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, FIRECRAWL_KEY, HABER_KANALI isteğe bağlı
 ```
 
 ## Yön levhası
@@ -30,6 +31,7 @@ cargo run --release    # .env gerekir (DISCORD_TOKEN, OPENROUTER_KEY; FIRECRAWL_
 | Neden böyle yapıldı (kararlar + gerekçe) | docs/kararlar.md |
 | Yeni ajan/prompt/döngü/durum dosyası ekleme, tuzaklar, kontrol listesi | docs/gelistirme.md |
 | Türkçe tanımlayıcıların İngilizce karşılığı | docs/sozluk.md |
+| Gelişim evreleri ve isim seçme | docs/moduller.md (gelisim), docs/akislar.md |
 
 ## Değişmez kurallar (kodda da böyle)
 1. **Kilit await üstünde tutulmaz.** `Bot::durum()` `std::sync::MutexGuard` döner; her zaman
@@ -59,3 +61,5 @@ cargo run --release    # .env gerekir (DISCORD_TOKEN, OPENROUTER_KEY; FIRECRAWL_
 - Kişi dosyaları görünen ada göre; aynı görünen adlı iki kişi çakışır.
 - Anahtar kelime eşleme düz alt-dize; kök bulma yok.
 - Bayram tarihleri 2026-2027 için elle yazılı (`src/seyahat.rs`), sonraki yıllar eklenmeli.
+- Takma ad değiştirme (isim seçme) botun sunucuda CHANGE_NICKNAME iznine bağlı; yoksa log'a düşer, isim yine kullanılır.
+- Mistral'de görsel yorumu modele bağlı (`mistral-small-latest` görsel destekler); desteklemezse metin yedeği.

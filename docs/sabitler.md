@@ -3,7 +3,8 @@
 ## src/main.rs
 | Sabit | Değer | Anlam |
 |---|---|---|
-| MODEL | openai/gpt-4o-mini | OpenRouter model kimliği; görsel desteği resimci için gerekir |
+| OPENROUTER_ADRES / OPENROUTER_MODEL | …/api/v1/chat/completions / openai/gpt-4o-mini | varsayılan sağlayıcı |
+| MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-small-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
 | MAX_MESAJ | 12 | bir sohbette botun yazacağı en fazla mesaj |
 | VEDA_ESIGI | 9 | bu sayaçtan sonra "toparla" talimatı |
 | SANS | 0.10 | mesaj başına araya girme olasılığı (seyahatte × YOLDA_SANS_CARPANI) |
@@ -43,5 +44,10 @@ RSS 12 · gezgin rss 20, sayfa ≤3 · yoldan mesaj günde 1, %25 · hoca son 20
 gözlem 300 · hack giriş max_tokens 150
 
 ## Ortam değişkenleri (.env)
-DISCORD_TOKEN (zorunlu) · OPENROUTER_KEY (zorunlu) · FIRECRAWL_KEY (yoksa düz indirme) ·
-HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı)
+DISCORD_TOKEN (zorunlu) · OPENROUTER_KEY veya MISTRAL_KEY (biri zorunlu; ikisi de varsa openrouter) ·
+SAGLAYICI=mistral (zorlama) · MODEL (model kimliği, sağlayıcının varsayılanını ezer) ·
+FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı)
+
+## src/gelisim.rs
+ISIM_EVRESI 2 (yerlesik) · EVRELER: yeni (0 gün, 0 sohbet, sans×0.5, dürtme×0.3) · isinma (3g, 8s, ×0.8, ×0.7) ·
+yerlesik (10g, 25s, ×1, ×1) · eski-toprak (30g, 80s, ×1, ×1.2)

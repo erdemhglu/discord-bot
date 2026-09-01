@@ -1,4 +1,5 @@
 mod ajanlar;
+mod gelisim;
 mod gundem;
 mod hafiza;
 mod promptlar;
@@ -20,7 +21,11 @@ use tokio::time::sleep;
 
 // ---------- ayarlar ----------
 
-const MODEL: &str = "openai/gpt-4o-mini";
+// sağlayıcılar: ikisi de openai uyumlu chat/completions; .env'de hangisinin anahtarı varsa o
+const OPENROUTER_ADRES: &str = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL: &str = "openai/gpt-4o-mini";
+const MISTRAL_ADRES: &str = "https://api.mistral.ai/v1/chat/completions";
+const MISTRAL_MODEL: &str = "mistral-small-latest";
 const MAX_MESAJ: u32 = 12; // bir sohbette en fazla kaç mesaj yazar
 const VEDA_ESIGI: u32 = 9; // bu sayıdan sonra konuyu kapatmaya çalışır
 const SANS: f64 = 0.10; // normal mesajlaşmaya %10 ihtimalle dalar
@@ -99,7 +104,9 @@ struct Durum {
     planlar: Vec<uyku::Plan>,
     uyuyor: bool,
     bekleyen_etiketler: Vec<(ChannelId, String)>, // uyurken etiketlenmişse uyanınca döner
-    son_yol_mesaji: i64,                          // seyahatte en son hangi gün yoldan yazdı
+    gelisim: gelisim::Gelisim,                    // evre, sayaçlar, seçtiği isim
+    kullanici_adi: String, // discord kullanıcı adı; bot_adi seçilen isim olabilir
+    son_yol_mesaji: i64,   // seyahatte en son hangi gün yoldan yazdı
     duyurulan_seyahat: i64, // "yarın gidiyorum" dediği seyahatin başlangıç günü
 }
 
@@ -113,6 +120,7 @@ impl Durum {
             kendim: hafiza::oku("kendim.md"),
             dizin: hafiza::dizin_yenile(),
             gundem: gundem::son_gundem(&hafiza::oku("gundem.md")),
+            gelisim: gelisim::yukle(),
             ..Durum::default()
         }
     }
@@ -121,7 +129,9 @@ impl Durum {
 struct Bot {
     durum: Mutex<Durum>,
     http: reqwest::Client,
+    api_adres: String, // chat/completions adresi (openrouter ya da mistral)
     anahtar: String,
+    model: String,
     haber_kanali: Option<ChannelId>,
     firecrawl: Option<String>, // yoksa sayfalar düz indirilir
 }
@@ -221,7 +231,7 @@ impl Bot {
     async fn sor_ham(&self, govde: serde_json::Value) -> Result<String, Hata> {
         let yanit: Yanit = self
             .http
-            .post("https://openrouter.ai/api/v1/chat/completions")
+            .post(&self.api_adres)
             .bearer_auth(&self.anahtar)
             .json(&govde)
             .send()
@@ -245,7 +255,7 @@ impl Bot {
         }];
         mesajlar.extend_from_slice(gecmis);
         self.sor_ham(serde_json::json!({
-            "model": MODEL,
+            "model": self.model,
             "messages": mesajlar,
             "max_tokens": max_tokens,
         }))
@@ -335,6 +345,7 @@ fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> String {
             s.push_str(icerik.trim());
         }
     };
+    bolum(&mut s, "GELİŞİM EVREN", &gelisim::evre_metni(&d.gelisim));
     bolum(&mut s, "HUYUN (hocanın son notu, buna göre davran)", &d.huy);
     bolum(&mut s, "BU GRUP HAKKINDA BİLDİKLERİN", &d.profil);
     bolum(
@@ -448,6 +459,73 @@ impl Bot {
             let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
             self.gunlukcu(d.clone(), "biten sohbet", &kanal_adi).await;
             self.elestirmen(d).await;
+            self.durum().gelisim.sohbet += 1;
+            self.gelisim_kontrol(ctx).await;
+        }
+    }
+}
+
+// ---------- gelişim ----------
+
+impl Bot {
+    // hak edilen evreye atlar, kaydeder; yerleşik olunca isim seçer
+    async fn gelisim_kontrol(&self, ctx: &Context) {
+        let isim_gerek = {
+            let mut d = self.durum();
+            let hak = gelisim::hak_edilen(&d.gelisim);
+            if hak > d.gelisim.evre {
+                d.gelisim.evre = hak;
+                println!("gelisim: {} evresine geçti", gelisim::evre(&d.gelisim).ad);
+            }
+            gelisim::kaydet(&d.gelisim);
+            d.gelisim.isim.is_none() && d.gelisim.evre >= gelisim::ISIM_EVRESI
+        };
+        if isim_gerek {
+            self.isim_sec(ctx).await;
+        }
+    }
+
+    // kendine isim seçer, takma adını her sunucuda değiştirir, gruba söyler
+    async fn isim_sec(&self, ctx: &Context) {
+        let cevap = match self
+            .uret(&[kullanici("isim seçme vakti")], ISIM_SEC, 12)
+            .await
+        {
+            Ok(c) => c,
+            Err(e) => return eprintln!("isim: {e}"),
+        };
+        let Some(isim) = gelisim::isim_temizle(&cevap) else {
+            return eprintln!("isim: seçim çözülemedi: {cevap}");
+        };
+        for gid in ctx.cache.guilds() {
+            if let Err(e) = gid.edit_nickname(&ctx.http, Some(&isim)).await {
+                eprintln!("isim: takma ad değiştirilemedi ({gid}): {e}");
+            }
+        }
+        {
+            let mut d = self.durum();
+            d.gelisim.isim = Some(isim.clone());
+            d.bot_adi = isim.clone();
+            gelisim::kaydet(&d.gelisim);
+        }
+        println!("gelisim: yeni isim {isim}");
+
+        let Some(kanal) = varsayilan_kanal(self, ctx) else {
+            return;
+        };
+        match self
+            .uret(
+                &[kullanici("ismini seçtin")],
+                &ISIM_DUYURU.replace("{isim}", &isim),
+                150,
+            )
+            .await
+        {
+            Ok(duyuru) => {
+                self.gonder(ctx, kanal, &duyuru, None, None).await;
+                sohbet_baslat(&mut self.durum(), kanal, Some(duyuru));
+            }
+            Err(e) => eprintln!("isim: {e}"),
         }
     }
 }
@@ -564,6 +642,7 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
             continue;
         }
 
+        bot.gelisim_kontrol(&ctx).await;
         bot.profilci().await;
         let son = son_mesajlar(&bot.durum(), 300);
         bot.gunlukcu(son, "6 saatlik gözlem, bot konuşmamış olabilir", "gozlem")
@@ -642,7 +721,7 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
             bot.durum().duyurulan_seyahat = s.bas;
             GIDIYORUM
         } else {
-            if rand::random::<f64>() > DURTME_SANSI {
+            if rand::random::<f64>() > DURTME_SANSI * gelisim::evre(&bot.durum().gelisim).durtme {
                 continue;
             }
             DURUP_DURURKEN
@@ -776,7 +855,15 @@ struct Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, hazir: Ready) {
-        self.bot.durum().bot_adi = hazir.user.name.clone();
+        {
+            let mut d = self.bot.durum();
+            d.kullanici_adi = hazir.user.name.clone();
+            d.bot_adi = d
+                .gelisim
+                .isim
+                .clone()
+                .unwrap_or_else(|| hazir.user.name.clone());
+        }
         println!("giriş yapıldı: {}", hazir.user.name);
 
         // ready yeniden bağlanınca tekrar gelir, döngüler bir kere başlasın
@@ -873,8 +960,10 @@ impl EventHandler for Handler {
                     .referenced_message
                     .as_ref()
                     .is_some_and(|r| r.author.id == bot_id)
-                || (!d.bot_adi.is_empty()
-                    && metin.to_lowercase().contains(&d.bot_adi.to_lowercase()));
+                || [&d.bot_adi, &d.kullanici_adi]
+                    .iter()
+                    .any(|a| !a.is_empty() && metin.to_lowercase().contains(&a.to_lowercase()));
+            d.gelisim.mesaj += 1;
             hatirla(&mut d, &isim, &metin);
             d.son_kanal = Some(kanal);
             if msg.author.id.get() == FAVORI {
@@ -904,11 +993,10 @@ impl EventHandler for Handler {
 
             // etiketlenince her zaman cevap verir; yoksa şansa bağlı araya girer
             let mut acik = d.sohbetler.contains_key(&kanal);
-            let sans = if seyahat::simdi().is_some() {
-                SANS * seyahat::YOLDA_SANS_CARPANI
-            } else {
-                SANS
-            };
+            let mut sans = SANS * gelisim::evre(&d.gelisim).sans;
+            if seyahat::simdi().is_some() {
+                sans *= seyahat::YOLDA_SANS_CARPANI;
+            }
             if !acik && (etiketlendi || (girebilir_mi(&d, kanal) && rand::random::<f64>() < sans)) {
                 sohbet_baslat(&mut d, kanal, None);
                 acik = true;
@@ -958,7 +1046,19 @@ async fn kapanis_bekle() {
 async fn main() -> Result<(), Hata> {
     dotenvy::dotenv().ok();
     let token = ayar("DISCORD_TOKEN")?;
-    let anahtar = ayar("OPENROUTER_KEY")?;
+    // sağlayıcı seçimi: SAGLAYICI=mistral zorlar; yoksa hangi anahtar varsa o, ikisi de varsa openrouter
+    let saglayici = std::env::var("SAGLAYICI")
+        .unwrap_or_default()
+        .to_lowercase();
+    let (api_adres, anahtar, varsayilan_model) = if saglayici == "mistral"
+        || (ayar("OPENROUTER_KEY").is_err() && ayar("MISTRAL_KEY").is_ok())
+    {
+        (MISTRAL_ADRES, ayar("MISTRAL_KEY")?, MISTRAL_MODEL)
+    } else {
+        (OPENROUTER_ADRES, ayar("OPENROUTER_KEY")?, OPENROUTER_MODEL)
+    };
+    let model = ayar("MODEL").unwrap_or_else(|_| varsayilan_model.to_string());
+    println!("sağlayıcı: {api_adres} · model: {model}");
     let haber_kanali = match std::env::var("HABER_KANALI") {
         Ok(v) if !v.trim().is_empty() => Some(ChannelId::new(v.trim().parse()?)),
         _ => None,
@@ -975,7 +1075,9 @@ async fn main() -> Result<(), Hata> {
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .build()?,
+        api_adres: api_adres.to_string(),
         anahtar,
+        model,
         haber_kanali,
         firecrawl: std::env::var("FIRECRAWL_KEY")
             .ok()

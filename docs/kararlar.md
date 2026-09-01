@@ -38,3 +38,9 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   kişisel ekran görüntüleri public repoya sızmasın.
 - **`durum/` git dışı.** Kişisel veri (arkadaşlar hakkında notlar) içerir.
 - **Repo public** (Emin kararı).
+- **Gelişim evreleri gün + sohbet eşiğiyle, yalnız ileri.** Yeni gelen bot ilk günden eski toprak
+  gibi konuşmasın; evre hem üslubu (prompt bölümü) hem cesareti (şans çarpanları) değiştirir.
+- **İsmi kendi seçer, bir kez, yerleşik evresinde.** Discord takma adı değişir (izin gerekir),
+  eski kullanıcı adı etiket algısında kalır ki insanlar eski adıyla seslenince de anlasın.
+- **Mistral desteği ayrı SDK'sız.** API OpenAI uyumlu; yalnız adres/anahtar/model değişir.
+  Seçim `.env`'den; ikisi de varsa openrouter, `SAGLAYICI=mistral` zorlar.

@@ -26,3 +26,5 @@ pub const GEZGIN_NOT: &str = include_str!("../promptlar/gezgin-not.md");
 pub const UYANDIM: &str = include_str!("../promptlar/uyandim.md");
 pub const YOLDA: &str = include_str!("../promptlar/yolda.md");
 pub const GIDIYORUM: &str = include_str!("../promptlar/gidiyorum.md");
+pub const ISIM_SEC: &str = include_str!("../promptlar/isim-sec.md");
+pub const ISIM_DUYURU: &str = include_str!("../promptlar/isim-duyuru.md");
