@@ -25,7 +25,7 @@ use tokio::time::sleep;
 const OPENROUTER_ADRES: &str = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL: &str = "openai/gpt-4o-mini";
 const MISTRAL_ADRES: &str = "https://api.mistral.ai/v1/chat/completions";
-const MISTRAL_MODEL: &str = "mistral-small-latest";
+const MISTRAL_MODEL: &str = "mistral-medium-latest";
 const MAX_MESAJ: u32 = 12; // bir sohbette en fazla kaç mesaj yazar
 const VEDA_ESIGI: u32 = 9; // bu sayıdan sonra konuyu kapatmaya çalışır
 const SANS: f64 = 0.10; // normal mesajlaşmaya %10 ihtimalle dalar
