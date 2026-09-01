@@ -49,6 +49,14 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   2 cümle ve grubun ortalama boyunun 2 katı; `max_tokens` 90; (2) insan hızı: 2-6 sn okuma,
   "yazıyor…" + karakter başına 45 ms; (3) promptta yasak kalıp listesi, gerçek örnekler ve
   grubun kendi son mesajlarından 12'si her cevapta "boy ve ton örneği" olarak.
+- **Few-shot örnek cümle yok.** İlk gece bot promptttaki örnek cevabı ("napıyım yavaş mı yazayım")
+  kelimesi kelimesine kopyaladı. Örnek çiftler kaldırıldı; ton örneği yalnız grubun kendi gerçek
+  mesajlarından (`ornek_mesajlar`) geliyor. "Argoyu zorlama" maddesi eklendi.
+- **Cevap discord yanıtı olarak gider.** "Kime cevap veriyorsa etiketlesin" isteği; isim yazmak
+  yerine `reference_message` + `replied_user`, kalabalık kanalda kimin muhatap olduğu belli.
+  Kısa okuma payından sonra geçmiş yeniden alınır; mesaj yağmurunda eski satıra cevap verilmez.
+- **Model çalışırken değişir, `!model`.** Yalnız FAVORI; OpenRouter listesinde doğrulanır;
+  `durum/model.md` env'i ezer. Test komutları (`!haber` vb.) herkes için, sunucu onların.
 - **ICE hayranlığı çekirdek kişilikte, sınırıyla.** Emin'in isteği; futbol takımı tutar gibi
   absürt bir gag. Milliyet/etnik köken/din/göçmenlik hedef alma, tehdit ve şiddet övgüsü promptta
   yasak; hoca bu maddeyi kaldıramaz (çekirdek `kisilik.md`'de).

@@ -353,7 +353,7 @@ impl Bot {
         };
         let b64 = base64::engine::general_purpose::STANDARD.encode(veri);
         let govde = serde_json::json!({
-            "model": self.model,
+            "model": self.durum().model.clone(),
             "max_tokens": 120,
             "messages": [
                 {"role": "system", "content": sistem},

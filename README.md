@@ -87,7 +87,15 @@ discord developer portal'da **Message Content** ve **Server Members** intent'ler
 
 ## komutlar
 
-- `!sifirla` — o kanaldaki 3 saatlik yasağı ve açık sohbeti sıfırlar (test için). `!sifirla hepsi` tüm kanallar.
+`!` ya da `/` ile başlar (`/model` de olur).
+
+- `!sifirla` — o kanaldaki 3 saatlik yasağı ve açık sohbeti sıfırlar. `!sifirla hepsi` tüm kanallar.
+- `!haber` — şimdi haber seç ve at (HN + gündem).
+- `!gez` — gündem gezintisini şimdi yap (gundem.md güncellenir).
+- `!saka` / `!hack` — görsel şakası / hacklenmiş taklidi şimdi.
+- `!ajanlar` — profilci ve hocayı şimdi çalıştır.
+- `!durum` — evre, sayaçlar, model, uyku, seyahat.
+- `!model` — şu anki model. `!model <id>` değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
 
 ## ayarlar
 

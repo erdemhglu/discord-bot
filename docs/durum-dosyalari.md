@@ -14,6 +14,7 @@
 | `konular/<slug>.md` | gunlukcu, ozetleyici | `getir` (anahtar eşleşmesi), dizin | >1500 → özet, hedef 800 |
 | `olaylar/YYYY-AA.md` | gunlukcu, ozetleyici | `getir` (son 8), dizin | >6000 → eski %60 satır 3-5 satıra; taşınanlar `arsiv/olaylar/YYYY-AA.md` |
 | `arsiv/…` | arsivle | insan | yalnız eklenir, `## tarih öncesi` başlıklı |
+| `model.md` | `!model` | açılış (`main`, env MODEL'i ezer) | tek satır model kimliği |
 | `gelisim.md` | gelisim_kontrol, isim_sec | açılış (`gelisim::yukle`) | `dogum: unix` `sohbet: n` `mesaj: n` `evre: i` `isim: ad` satırları |
 
 ## Biçimler

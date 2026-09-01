@@ -1,7 +1,7 @@
 # Akışlar (olay → sırayla ne olur)
 
 ## Bir mesaj geldi
-0. Metin `!sifirla` ile başlıyorsa: o kanalın yasağı, açık sohbeti, haber beklemesi ve meşgul bayrağı silinir (`hepsi` geçiyorsa tüm kanallar); mesaja 👍 tepkisi, başka cevap yok.
+0. Metin `!` ya da `/` ile başlıyorsa `Bot::komut`: sifirla · haber · gez · saka · hack · ajanlar · durum · model. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır.
 1. `Handler::message`: bot/webhook/DM → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.
@@ -13,9 +13,10 @@
 
 ## cevapla (bir sohbet turu)
 ```
-kilit ── meşgul? çık ── sohbet var? ── talimat seç ── geçmişi klonla ── meşgul=1 ── kilit bırak
-bekle 2-6 sn ── uret(90 token) ── (hata: meşgul=0, çık) ── kisalt(2 cümle, ≤2×ortalama boy)
-yazıyor… ── bekle 45 ms × karakter (1-9 sn) ── gonder
+kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
+bekle 0,4-1,2 sn ── güncel geçmiş + son mesajı al ── uret(90 token) ── (hata: meşgul=0, çık) ── kisalt(2 cümle, ≤2×ortalama boy)
+yazıyor… ── bekle 25 ms × karakter (0,35-2,5 sn) ── gonder (son kullanıcı mesajına discord yanıtı, kişi pinglenir)
+… bitti değilse: cevap yazarken yeni mesaj geldiyse (`gelen` arttıysa) başa dön, yoksa çık
 kilit ── meşgul=0 ── asistan satırı ekle ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
 bitti ise: gunlukcu → ozetleyici → elestirmen
 ```

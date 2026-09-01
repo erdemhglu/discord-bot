@@ -76,6 +76,8 @@ struct Sohbet {
     gecmis: Vec<Mesaj>,
     sayac: u32,
     hackli: u32, // 0 değilse hacklenmiş taklidi sürüyor, her cevapta bir azalır
+    son_mesaj: Option<MessageId>, // cevaplanacak mesaj (discord yanıtı olarak)
+    gelen: u32,  // gelen kullanıcı mesajı sayısı; cevap yazarken yenisi geldi mi anlamak için
 }
 
 #[derive(Default)]
@@ -106,6 +108,7 @@ struct Durum {
     bekleyen_etiketler: Vec<(ChannelId, String)>, // uyurken etiketlenmişse uyanınca döner
     gelisim: gelisim::Gelisim,                    // evre, sayaçlar, seçtiği isim
     kullanici_adi: String, // discord kullanıcı adı; bot_adi seçilen isim olabilir
+    model: String,         // kullanılan model; !model ile değişir, durum/model.md'de kalır
     son_yol_mesaji: i64,   // seyahatte en son hangi gün yoldan yazdı
     duyurulan_seyahat: i64, // "yarın gidiyorum" dediği seyahatin başlangıç günü
 }
@@ -131,7 +134,6 @@ struct Bot {
     http: reqwest::Client,
     api_adres: String, // chat/completions adresi (openrouter ya da mistral)
     anahtar: String,
-    model: String,
     haber_kanali: Option<ChannelId>,
     firecrawl: Option<String>, // yoksa sayfalar düz indirilir
 }
@@ -329,7 +331,7 @@ impl Bot {
         }];
         mesajlar.extend_from_slice(gecmis);
         self.sor_ham(serde_json::json!({
-            "model": self.model,
+            "model": self.durum().model.clone(),
             "messages": mesajlar,
             "max_tokens": max_tokens,
         }))
@@ -377,12 +379,19 @@ impl Bot {
         metin: &str,
         ping: Option<UserId>,
         dosya: Option<&PathBuf>,
+        yanit: Option<MessageId>, // verilirse discord yanıtı olur, kişi etiketlenir
     ) {
         let mut izin = CreateAllowedMentions::new();
         if let Some(u) = ping {
             izin = izin.users([u]);
         }
+        if yanit.is_some() {
+            izin = izin.replied_user(true);
+        }
         let mut mesaj = CreateMessage::new().content(metin).allowed_mentions(izin);
+        if let Some(id) = yanit {
+            mesaj = mesaj.reference_message((kanal, id));
+        }
         if let Some(yol) = dosya {
             match CreateAttachment::path(yol).await {
                 Ok(ek) => mesaj = mesaj.add_file(ek),
@@ -481,89 +490,111 @@ impl Bot {
     // açık sohbette sıradaki cevabı üretir; aynı kanalda aynı anda tek cevap üretilir,
     // o sırada gelen mesajlar geçmişe eklenir ve bir sonraki cevapta görülür
     async fn cevapla(&self, ctx: &Context, kanal: ChannelId) {
-        let (gecmis, talimat) = {
-            let mut d = self.durum();
-            if d.mesgul.contains(&kanal) {
-                return;
-            }
-            let Some(s) = d.sohbetler.get(&kanal) else {
-                return;
+        loop {
+            let talimat = {
+                let mut d = self.durum();
+                if d.mesgul.contains(&kanal) {
+                    return;
+                }
+                let Some(s) = d.sohbetler.get(&kanal) else {
+                    return;
+                };
+                let talimat = if s.hackli > 1 {
+                    HACK_DEVAM
+                } else if s.hackli == 1 {
+                    HACK_CIKIS
+                } else if s.sayac >= MAX_MESAJ - 1 {
+                    SON_MESAJ
+                } else if s.sayac >= VEDA_ESIGI {
+                    VEDA_YAKLASIYOR
+                } else {
+                    ""
+                };
+                d.mesgul.insert(kanal);
+                talimat
             };
-            let talimat = if s.hackli > 1 {
-                HACK_DEVAM
-            } else if s.hackli == 1 {
-                HACK_CIKIS
-            } else if s.sayac >= MAX_MESAJ - 1 {
-                SON_MESAJ
-            } else if s.sayac >= VEDA_ESIGI {
-                VEDA_YAKLASIYOR
-            } else {
-                ""
-            };
-            let gecmis = s.gecmis.clone();
-            d.mesgul.insert(kanal);
-            (gecmis, talimat)
-        };
 
-        // insan gibi: önce okur (2-6 sn), sonra yazar
-        sleep(Duration::from_millis(2000 + (rand::random::<u64>() % 4000))).await;
-        let sinir = {
-            let d = self.durum();
-            (ortalama_boy(&d) * 2).clamp(40, 220)
-        };
-        let cevap = match self.uret(&gecmis, talimat, 90).await {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("ai hatası: {e}");
+            // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
+            sleep(Duration::from_millis(400 + (rand::random::<u64>() % 800))).await;
+            let (gecmis, yanit, gelen, sinir) = {
+                let d = self.durum();
+                let Some(s) = d.sohbetler.get(&kanal) else {
+                    drop(d);
+                    self.durum().mesgul.remove(&kanal);
+                    return;
+                };
+                (
+                    s.gecmis.clone(),
+                    s.son_mesaj,
+                    s.gelen,
+                    (ortalama_boy(&d) * 2).clamp(40, 220),
+                )
+            };
+            let cevap = match self.uret(&gecmis, talimat, 90).await {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("ai hatası: {e}");
+                    self.durum().mesgul.remove(&kanal);
+                    return;
+                }
+            };
+            let cevap = if talimat.is_empty() || talimat == VEDA_YAKLASIYOR || talimat == SON_MESAJ
+            {
+                kisalt(&cevap, sinir)
+            } else {
+                cevap
+            };
+            if cevap.is_empty() {
                 self.durum().mesgul.remove(&kanal);
                 return;
             }
-        };
-        let cevap = if talimat.is_empty() || talimat == VEDA_YAKLASIYOR || talimat == SON_MESAJ {
-            kisalt(&cevap, sinir)
-        } else {
-            cevap
-        };
-        if cevap.is_empty() {
-            self.durum().mesgul.remove(&kanal);
-            return;
-        }
-        // "yazıyor..." gösterip boyuna göre bekler (karakter başına 45 ms, 1-9 sn)
-        let _ = kanal.broadcast_typing(&ctx.http).await;
-        sleep(Duration::from_millis(
-            (cevap.chars().count() as u64 * 45).clamp(1000, 9000),
-        ))
-        .await;
-        self.gonder(ctx, kanal, &cevap, None, None).await;
+            // "yazıyor..." gösterip boyuna göre kısa bir yazma payı bırakır.
+            let _ = kanal.broadcast_typing(&ctx.http).await;
+            sleep(Duration::from_millis(
+                (cevap.chars().count() as u64 * 25).clamp(350, 2500),
+            ))
+            .await;
+            self.gonder(ctx, kanal, &cevap, None, None, yanit).await;
 
-        let biten = {
-            let mut d = self.durum();
-            d.mesgul.remove(&kanal);
-            let bitti = match d.sohbetler.get_mut(&kanal) {
-                Some(s) => {
-                    s.gecmis.push(asistan(cevap));
-                    s.sayac += 1;
-                    s.hackli = s.hackli.saturating_sub(1);
-                    s.sayac >= MAX_MESAJ
+            let biten = {
+                let mut d = self.durum();
+                d.mesgul.remove(&kanal);
+                let bitti = match d.sohbetler.get_mut(&kanal) {
+                    Some(s) => {
+                        s.gecmis.push(asistan(cevap));
+                        s.sayac += 1;
+                        s.hackli = s.hackli.saturating_sub(1);
+                        s.sayac >= MAX_MESAJ
+                    }
+                    None => false,
+                };
+                if bitti {
+                    sohbet_bitir(&mut d, kanal)
+                } else {
+                    None
                 }
-                None => false,
             };
-            if bitti {
-                sohbet_bitir(&mut d, kanal)
-            } else {
-                None
-            }
-        };
 
-        // sohbet bitti: günlükçü hafızaya yazar, eleştirmen botu değerlendirir
-        if let Some(s) = biten {
-            let bot_adi = self.durum().bot_adi.clone();
-            let d = dokum(&s.gecmis, &bot_adi);
-            let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
-            self.gunlukcu(d.clone(), "biten sohbet", &kanal_adi).await;
-            self.elestirmen(d).await;
-            self.durum().gelisim.sohbet += 1;
-            self.gelisim_kontrol(ctx).await;
+            // sohbet bitti: günlükçü hafızaya yazar, eleştirmen botu değerlendirir
+            if let Some(s) = biten {
+                let bot_adi = self.durum().bot_adi.clone();
+                let d = dokum(&s.gecmis, &bot_adi);
+                let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
+                self.gunlukcu(d.clone(), "biten sohbet", &kanal_adi).await;
+                self.elestirmen(d).await;
+                self.durum().gelisim.sohbet += 1;
+                self.gelisim_kontrol(ctx).await;
+                return;
+            }
+            // cevap yazarken yeni mesaj geldiyse bir tur daha; yoksa çık
+            let bekleyen = self
+                .durum()
+                .sohbetler
+                .get(&kanal)
+                .is_some_and(|s| s.gelen > gelen);
+            if !bekleyen {
+                break;
+            }
         }
     }
 }
@@ -625,7 +656,7 @@ impl Bot {
             .await
         {
             Ok(duyuru) => {
-                self.gonder(ctx, kanal, &duyuru, None, None).await;
+                self.gonder(ctx, kanal, &duyuru, None, None, None).await;
                 sohbet_baslat(&mut self.durum(), kanal, Some(duyuru));
             }
             Err(e) => eprintln!("isim: {e}"),
@@ -759,11 +790,18 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
             continue;
         }
 
-        let h = match bot.haberci().await {
+        bot.haber_at(&ctx, kanal).await;
+    }
+}
+
+impl Bot {
+    // seçilmiş bir haberi kanala atar ve yorum bekleme sohbeti açar
+    async fn haber_at(&self, ctx: &Context, kanal: ChannelId) -> bool {
+        let h = match self.haberci().await {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("haberci: {e}");
-                continue;
+                return false;
             }
         };
         let link = if h.url.starts_with("https://") || h.url.starts_with("http://") {
@@ -771,24 +809,54 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
         } else {
             format!("https://news.ycombinator.com/item?id={}", h.id)
         };
-        let girdi = match bot
+        let girdi = match self
             .uret(&[kullanici(h.title.clone())], HABER_TANIT, 200)
             .await
         {
             Ok(g) => g,
             Err(e) => {
                 eprintln!("ai hatası: {e}");
-                continue;
+                return false;
             }
         };
-        bot.gonder(&ctx, kanal, &format!("{girdi}\n{link}"), None, None)
+        self.gonder(ctx, kanal, &format!("{girdi}\n{link}"), None, None, None)
             .await;
 
-        let mut d = bot.durum();
+        let mut d = self.durum();
         sohbet_baslat(&mut d, kanal, Some(girdi));
         d.haber_bekleyen
             .insert(kanal, Instant::now() + YORUM_SURESI);
         d.atilan_haberler.insert(h.id);
+        true
+    }
+
+    // görsel şakası; hack ise hacklenmiş taklidiyle başlar
+    async fn saka_yap(&self, ctx: &Context, kanal: ChannelId, hack: bool) {
+        let Some(resim) = rastgele_resim() else {
+            let _ = kanal.say(&ctx.http, "resimler klasörü boş").await;
+            return;
+        };
+        let metin = if hack {
+            self.uret(&[kullanici("şaka başlıyor")], HACK_GIRIS, 150)
+                .await
+        } else {
+            self.resimci(&resim).await
+        };
+        let metin = match metin {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("ai hatası: {e}");
+                return;
+            }
+        };
+        self.gonder(ctx, kanal, &metin, None, Some(&resim), None)
+            .await;
+
+        let mut d = self.durum();
+        let s = sohbet_baslat(&mut d, kanal, Some(metin));
+        if hack {
+            s.hackli = HACK_MESAJI;
+        }
     }
 }
 
@@ -840,7 +908,7 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
                 continue;
             }
         };
-        bot.gonder(&ctx, kanal, &laf, None, None).await;
+        bot.gonder(&ctx, kanal, &laf, None, None, None).await;
         sohbet_baslat(&mut bot.durum(), kanal, Some(laf));
     }
 }
@@ -858,31 +926,8 @@ async fn saka_dongusu(bot: Arc<Bot>, ctx: Context) {
         let Some((kanal, _)) = bos_kanal(&bot) else {
             continue;
         };
-        let Some(resim) = rastgele_resim() else {
-            continue;
-        };
-
-        let hack = rand::random::<f64>() < HACK_PAYI;
-        let metin = if hack {
-            bot.uret(&[kullanici("şaka başlıyor")], HACK_GIRIS, 150)
-                .await
-        } else {
-            bot.resimci(&resim).await
-        };
-        let metin = match metin {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("ai hatası: {e}");
-                continue;
-            }
-        };
-        bot.gonder(&ctx, kanal, &metin, None, Some(&resim)).await;
-
-        let mut d = bot.durum();
-        let s = sohbet_baslat(&mut d, kanal, Some(metin));
-        if hack {
-            s.hackli = HACK_MESAJI;
-        }
+        bot.saka_yap(&ctx, kanal, rand::random::<f64>() < HACK_PAYI)
+            .await;
     }
 }
 
@@ -940,7 +985,7 @@ async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
             .await
         {
             Ok(c) => {
-                bot.gonder(&ctx, kanal, &c, None, None).await;
+                bot.gonder(&ctx, kanal, &c, None, None, None).await;
                 sohbet_baslat(&mut bot.durum(), kanal, Some(c));
             }
             Err(e) => eprintln!("ai hatası: {e}"),
@@ -949,6 +994,114 @@ async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
 }
 
 // ---------- discord olayları ----------
+
+impl Bot {
+    // test ve yönetim komutları; tanınan komutsa true döner
+    async fn komut(&self, ctx: &Context, msg: &Message, komut: &str, arg: &str) -> bool {
+        let kanal = msg.channel_id;
+        let soyle = |m: String| async move {
+            let _ = kanal.say(&ctx.http, m).await;
+        };
+        match komut {
+            "sifirla" => {
+                {
+                    let mut d = self.durum();
+                    if arg.contains("hepsi") {
+                        d.yasakli.clear();
+                        d.sohbetler.clear();
+                        d.haber_bekleyen.clear();
+                        d.mesgul.clear();
+                    } else {
+                        d.yasakli.remove(&kanal);
+                        d.sohbetler.remove(&kanal);
+                        d.haber_bekleyen.remove(&kanal);
+                        d.mesgul.remove(&kanal);
+                    }
+                }
+                let _ = msg.react(&ctx.http, '👍').await;
+            }
+            "haber" => {
+                self.durum().sohbetler.remove(&kanal);
+                if !self.haber_at(ctx, kanal).await {
+                    soyle("haber bulamadım".into()).await;
+                }
+            }
+            "gez" => {
+                self.gezgin().await;
+                let _ = msg.react(&ctx.http, '👍').await;
+            }
+            "saka" | "hack" => {
+                self.durum().sohbetler.remove(&kanal);
+                self.saka_yap(ctx, kanal, komut == "hack").await;
+            }
+            "ajanlar" => {
+                self.profilci().await;
+                self.hoca().await;
+                self.durum().dizin = hafiza::dizin_yenile();
+                let _ = msg.react(&ctx.http, '👍').await;
+            }
+            "durum" => {
+                let metin =
+                    {
+                        let d = self.durum();
+                        let g = &d.gelisim;
+                        format!(
+                        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · seyahat: {}",
+                        gelisim::evre(g).ad,
+                        gelisim::gun(g) + 1,
+                        g.sohbet,
+                        g.mesaj,
+                        d.model,
+                        if uyku::uyanik_mi(&d) { "uyanık" } else { "uyuyor" },
+                        seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
+                    )
+                    };
+                soyle(metin).await;
+            }
+            "model" => {
+                if arg.is_empty() {
+                    let m = self.durum().model.clone();
+                    soyle(format!("şu an {m}")).await;
+                } else if msg.author.id.get() != FAVORI {
+                    soyle("onu sen değiştiremezsin".into()).await;
+                } else if self.api_adres.contains("openrouter") && !self.model_var_mi(arg).await {
+                    soyle("yok öyle model".into()).await;
+                } else {
+                    self.durum().model = arg.to_string();
+                    hafiza::yaz("model.md", arg);
+                    soyle(format!("tamam, {arg}")).await;
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    // openrouter model listesinde var mı
+    async fn model_var_mi(&self, id: &str) -> bool {
+        #[derive(Deserialize)]
+        struct Liste {
+            data: Vec<Kayit>,
+        }
+        #[derive(Deserialize)]
+        struct Kayit {
+            id: String,
+        }
+        match self
+            .http
+            .get("https://openrouter.ai/api/v1/models")
+            .send()
+            .await
+        {
+            Ok(r) => r
+                .json::<Liste>()
+                .await
+                .map(|l| l.data.iter().any(|k| k.id == id))
+                .unwrap_or(false),
+            Err(_) => true, // liste çekilemediyse engel olma
+        }
+    }
+}
 
 struct Handler {
     bot: Arc<Bot>,
@@ -1037,6 +1190,7 @@ impl EventHandler for Handler {
                 &format!("<@{}> {selam}", uye.user.id),
                 Some(uye.user.id),
                 None,
+                None,
             )
             .await;
         sohbet_baslat(&mut self.bot.durum(), kanal, Some(selam));
@@ -1055,24 +1209,15 @@ impl EventHandler for Handler {
         let isim = ad(&msg.author);
         let bot_id = ctx.cache.current_user().id;
 
-        // !sifirla: bu kanaldaki 3 saatlik yasağı ve açık sohbeti sıfırlar; "!sifirla hepsi" tüm kanalları
-        if metin.trim().starts_with("!sifirla") {
-            {
-                let mut d = self.bot.durum();
-                if metin.contains("hepsi") {
-                    d.yasakli.clear();
-                    d.sohbetler.clear();
-                    d.haber_bekleyen.clear();
-                    d.mesgul.clear();
-                } else {
-                    d.yasakli.remove(&kanal);
-                    d.sohbetler.remove(&kanal);
-                    d.haber_bekleyen.remove(&kanal);
-                    d.mesgul.remove(&kanal);
-                }
+        // komutlar: ! ya da / ile başlar; bilinmeyen komut normal mesaj sayılır
+        let kelime = metin.trim();
+        if kelime.starts_with('!') || kelime.starts_with('/') {
+            let mut parcalar = kelime[1..].split_whitespace();
+            let komut = parcalar.next().unwrap_or("").to_lowercase();
+            let arg = parcalar.collect::<Vec<_>>().join(" ");
+            if self.bot.komut(&ctx, &msg, &komut, &arg).await {
+                return;
             }
-            let _ = msg.react(&ctx.http, '👍').await;
-            return;
         }
 
         let cevap_ver = {
@@ -1126,6 +1271,8 @@ impl EventHandler for Handler {
             }
             if let Some(s) = d.sohbetler.get_mut(&kanal) {
                 s.gecmis.push(kullanici(format!("{isim}: {metin}")));
+                s.son_mesaj = Some(msg.id);
+                s.gelen += 1;
                 if s.gecmis.len() > SOHBET_BOYU {
                     s.gecmis.drain(..s.gecmis.len() - SOHBET_BOYU);
                 }
@@ -1193,6 +1340,13 @@ async fn main() -> Result<(), Hata> {
 
     let mut durum = Durum::yukle();
     uyku::guncelle(&mut durum);
+    let secili = hafiza::oku("model.md");
+    durum.model = if secili.trim().is_empty() {
+        model
+    } else {
+        secili.trim().to_string()
+    };
+    println!("model: {}", durum.model);
     let bot = Arc::new(Bot {
         durum: Mutex::new(durum),
         http: reqwest::Client::builder()
@@ -1200,7 +1354,6 @@ async fn main() -> Result<(), Hata> {
             .build()?,
         api_adres: api_adres.to_string(),
         anahtar,
-        model,
         haber_kanali,
         firecrawl: std::env::var("FIRECRAWL_KEY")
             .ok()
