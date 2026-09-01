@@ -90,12 +90,15 @@ struct Durum {
 impl Durum {
     // yeniden başlayınca sıfırdan öğrenmesin diye diskten okur
     fn yukle() -> Self {
-        let mut d = Durum::default();
-        d.profil = std::fs::read_to_string("profil.txt").unwrap_or_default();
-        if let Ok(metin) = std::fs::read_to_string("kanaatler.json") {
-            d.kanaatler = serde_json::from_str(&metin).unwrap_or_default();
+        let kanaatler = std::fs::read_to_string("kanaatler.json")
+            .ok()
+            .and_then(|metin| serde_json::from_str(&metin).ok())
+            .unwrap_or_default();
+        Durum {
+            profil: std::fs::read_to_string("profil.txt").unwrap_or_default(),
+            kanaatler,
+            ..Durum::default()
         }
-        d
     }
 }
 
