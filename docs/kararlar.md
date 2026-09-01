@@ -44,3 +44,6 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   eski kullanıcı adı etiket algısında kalır ki insanlar eski adıyla seslenince de anlasın.
 - **Mistral desteği ayrı SDK'sız.** API OpenAI uyumlu; yalnız adres/anahtar/model değişir.
   Seçim `.env`'den; ikisi de varsa openrouter, `SAGLAYICI=mistral` zorlar.
+- **ICE hayranlığı çekirdek kişilikte, sınırıyla.** Emin'in isteği; futbol takımı tutar gibi
+  absürt bir gag. Milliyet/etnik köken/din/göçmenlik hedef alma, tehdit ve şiddet övgüsü promptta
+  yasak; hoca bu maddeyi kaldıramaz (çekirdek `kisilik.md`'de).
