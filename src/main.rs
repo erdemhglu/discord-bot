@@ -952,9 +952,19 @@ async fn gezgin_dongusu(bot: Arc<Bot>) {
 async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(Duration::from_secs(60)).await;
-        let bekleyen = {
+        {
             let mut d = bot.durum();
             uyku::guncelle(&mut d);
+        }
+        bot.uyku_gecisi(&ctx).await;
+    }
+}
+
+impl Bot {
+    // uyudu/uyandı geçişini işler; uyanınca uyurken gelen etiketlere döner
+    async fn uyku_gecisi(&self, ctx: &Context) {
+        let bekleyen = {
+            let mut d = self.durum();
             let uyanik = uyku::uyanik_mi(&d);
             if uyanik == d.uyuyor {
                 println!("uyku: {}", if uyanik { "uyandı" } else { "uyudu" });
@@ -968,7 +978,7 @@ async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
             }
         };
         let Some((kanal, _)) = bekleyen.last() else {
-            continue;
+            return;
         };
         let kanal = *kanal;
         let liste = bekleyen
@@ -976,7 +986,7 @@ async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
             .map(|(_, m)| format!("- {m}"))
             .collect::<Vec<_>>()
             .join("\n");
-        match bot
+        match self
             .uret(
                 &[kullanici(format!("uyurken sana yazılanlar:\n{liste}"))],
                 UYANDIM,
@@ -985,8 +995,8 @@ async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
             .await
         {
             Ok(c) => {
-                bot.gonder(&ctx, kanal, &c, None, None, None).await;
-                sohbet_baslat(&mut bot.durum(), kanal, Some(c));
+                self.gonder(ctx, kanal, &c, None, None, None).await;
+                sohbet_baslat(&mut self.durum(), kanal, Some(c));
             }
             Err(e) => eprintln!("ai hatası: {e}"),
         }
@@ -1039,6 +1049,34 @@ impl Bot {
                 self.hoca().await;
                 self.durum().dizin = hafiza::dizin_yenile();
                 let _ = msg.react(&ctx.http, '👍').await;
+            }
+            "uyan" => {
+                {
+                    let mut d = self.durum();
+                    let simdi = simdi_unix();
+                    for p in d.planlar.iter_mut() {
+                        if p.bas <= simdi && simdi < p.bit {
+                            p.bit = simdi; // bu uykuyu şimdi bitir
+                        }
+                    }
+                }
+                let _ = msg.react(&ctx.http, '👍').await;
+                self.uyku_gecisi(ctx).await;
+            }
+            "uyu" => {
+                {
+                    let mut d = self.durum();
+                    let simdi = simdi_unix();
+                    let sure: i64 = arg.parse().unwrap_or(8); // saat
+                    d.planlar.push(uyku::Plan {
+                        gun: -1,
+                        uykusuz_bas: None,
+                        bas: simdi,
+                        bit: simdi + sure * 3600,
+                    });
+                }
+                let _ = msg.react(&ctx.http, '😴').await;
+                self.uyku_gecisi(ctx).await;
             }
             "durum" => {
                 let metin =

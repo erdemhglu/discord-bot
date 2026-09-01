@@ -94,6 +94,7 @@ discord developer portal'da **Message Content** ve **Server Members** intent'ler
 - `!gez` — gündem gezintisini şimdi yap (gundem.md güncellenir).
 - `!saka` / `!hack` — görsel şakası / hacklenmiş taklidi şimdi.
 - `!ajanlar` — profilci ve hocayı şimdi çalıştır.
+- `!uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `!uyu [saat]` — test için uyutur (varsayılan 8 saat).
 - `!durum` — evre, sayaçlar, model, uyku, seyahat.
 - `!model` — şu anki model. `!model <id>` değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
 

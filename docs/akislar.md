@@ -1,7 +1,7 @@
 # Akışlar (olay → sırayla ne olur)
 
 ## Bir mesaj geldi
-0. Metin `!` ya da `/` ile başlıyorsa `Bot::komut`: sifirla · haber · gez · saka · hack · ajanlar · durum · model. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır.
+0. Metin `!` ya da `/` ile başlıyorsa `Bot::komut`: sifirla · haber · gez · saka · hack · ajanlar · uyan · uyu · durum · model. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır.
 1. `Handler::message`: bot/webhook/DM → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.

@@ -53,6 +53,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `durtme_dongusu(bot, ctx)` — saatte bir: uyanık değilse geç; seyahatteyse günde bir kez %25 ile `YOLDA`; yarın seyahat başlıyorsa bir kez `GIDIYORUM`; değilse %30 ile `DURUP_DURURKEN`; `bos_kanal` → `uret(son 40 satır)` → gönder → sohbet başlat.
 - `saka_dongusu(bot, ctx)` — 3 saatte bir: uyanık değilse/seyahatteyse geç; %10; `bos_kanal`; `rastgele_resim` yoksa geç; %30 hack: `uret(HACK_GIRIS)`, değilse `resimci(resim)`; görselle gönder; sohbet başlat, hack ise `hackli = 3`.
 - `gezgin_dongusu(bot)` — ilk 10 dk sonra, sonra 4 saatte bir, uyanıksa `gezgin`.
+- `Bot::uyku_gecisi(ctx)` — uyudu/uyandı geçişini loglar, uyanınca bekleyen etiketlere `UYANDIM` ile döner; döngü ve `!uyan`/`!uyu` çağırır.
 - `uyku_dongusu(bot, ctx)` — dakikada bir: `uyku::guncelle`, uyandı/uyudu geçişini loglar; uyanınca `bekleyen_etiketler` varsa son etiketin kanalına `uret(UYANDIM)` ile döner, sohbet başlatır.
 
 ### Discord olayları (Handler)
