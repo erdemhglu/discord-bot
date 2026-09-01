@@ -186,14 +186,14 @@ fn ortalama_boy(d: &Durum) -> usize {
 }
 
 // cevabı cümle sınırında keser: önce ilk iki cümle, sonra karakter sınırı
-fn kisalt(metin: &str, sinir: usize) -> String {
+fn kisalt(metin: &str, sinir: usize, en_cok_cumle: usize) -> String {
     let mut sonuc = String::new();
     let mut cumle = 0;
     for c in metin.chars() {
         sonuc.push(c);
         if matches!(c, '.' | '!' | '?' | '\n') {
             cumle += 1;
-            if cumle >= 2 {
+            if cumle >= en_cok_cumle {
                 break;
             }
         }
@@ -532,19 +532,46 @@ impl Bot {
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
             sleep(Duration::from_millis(400 + (rand::random::<u64>() % 800))).await;
-            let (gecmis, yanit, gelen, sinir) = {
+            let (gecmis, yanit, gelen, sinir, en_cok_cumle) = {
                 let d = self.durum();
                 let Some(s) = d.sohbetler.get(&kanal) else {
                     drop(d);
                     self.durum().mesgul.remove(&kanal);
                     return;
                 };
-                (
-                    s.gecmis.clone(),
-                    s.son_mesaj,
-                    s.gelen,
-                    (ortalama_boy(&d) * 2).clamp(40, 220),
-                )
+                // sınır gelen mesaja göre: kısa laf → kısa cevap; soru ya da uzun mesaj → yer aç
+                let ort = ortalama_boy(&d);
+                let son = s
+                    .gecmis
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == "user")
+                    .map(|m| {
+                        m.content
+                            .split_once(": ")
+                            .map(|(_, t)| t)
+                            .unwrap_or(&m.content)
+                    })
+                    .unwrap_or("")
+                    .to_lowercase();
+                let soru = son.contains('?')
+                    || [
+                        "ciddi",
+                        "anlat",
+                        "ne düşün",
+                        "nasıl",
+                        "neden",
+                        "olsa",
+                        "olsan",
+                    ]
+                    .iter()
+                    .any(|k| son.contains(k));
+                let (sinir, en_cok_cumle) = if soru || son.chars().count() > 60 {
+                    ((ort * 4).clamp(140, 360), 3)
+                } else {
+                    ((ort * 2).clamp(40, 220), 2)
+                };
+                (s.gecmis.clone(), s.son_mesaj, s.gelen, sinir, en_cok_cumle)
             };
             let cevap = match self.uret(&gecmis, talimat, 90).await {
                 Ok(c) => c,
@@ -556,11 +583,12 @@ impl Bot {
             };
             let cevap = if talimat.is_empty() || talimat == VEDA_YAKLASIYOR || talimat == SON_MESAJ
             {
-                kisalt(&cevap, sinir)
+                kisalt(&cevap, sinir, en_cok_cumle)
             } else {
                 cevap
             };
-            if cevap.is_empty() {
+            // boş ya da önceki mesajın kırıntısı ("'cım" gibi) gitmesin
+            if cevap.chars().count() < 3 || cevap.starts_with('\'') {
                 self.durum().mesgul.remove(&kanal);
                 return;
             }
@@ -1445,12 +1473,14 @@ mod test {
 
     #[test]
     fn kisalt_iki_cumle() {
+        let m = "tamam la. sen bilirsin. ama bak sonra ağlama. cidden.";
+        assert_eq!(kisalt(m, 200, 2), "tamam la. sen bilirsin");
         assert_eq!(
-            kisalt("tamam la. sen bilirsin. ama bak sonra ağlama. cidden.", 200),
-            "tamam la. sen bilirsin"
+            kisalt(m, 200, 3),
+            "tamam la. sen bilirsin. ama bak sonra ağlama"
         );
         assert_eq!(
-            kisalt("napıyım yavaş mı yazayım", 200),
+            kisalt("napıyım yavaş mı yazayım", 200, 2),
             "napıyım yavaş mı yazayım"
         );
     }
@@ -1458,7 +1488,7 @@ mod test {
     #[test]
     fn kisalt_karakter() {
         let uzun = "bu cümle hiç bitmeyecek gibi devam ediyor ve virgüllerle uzuyor da uzuyor abi";
-        let k = kisalt(uzun, 40);
+        let k = kisalt(uzun, 40, 2);
         assert!(k.chars().count() <= 40);
         assert!(!k.ends_with(' '));
         assert_eq!(k, "bu cümle hiç bitmeyecek gibi devam");
