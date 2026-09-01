@@ -282,6 +282,7 @@ dependencies = [
 name = "discord-bot"
 version = "0.2.0"
 dependencies = [
+ "base64",
  "dotenvy",
  "rand 0.8.8",
  "reqwest",

@@ -1,4 +1,5 @@
 .env
 target/
-profil.txt
-kanaatler.json
+durum/
+resimler/*
+!resimler/.gitkeep

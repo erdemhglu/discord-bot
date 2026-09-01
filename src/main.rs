@@ -1,10 +1,13 @@
+mod ajanlar;
 mod promptlar;
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use ajanlar::rastgele_resim;
 use promptlar::*;
 use serde::{Deserialize, Serialize};
 use serenity::all::*;
@@ -19,14 +22,20 @@ const VEDA_ESIGI: u32 = 9; // bu sayıdan sonra konuyu kapatmaya çalışır
 const SANS: f64 = 0.10; // normal mesajlaşmaya %10 ihtimalle dalar
 const BEKLEME: Duration = Duration::from_secs(3 * 60 * 60); // sohbetten kaçınca 3 saat o kanala girmez
 const YORUM_SURESI: Duration = Duration::from_secs(2 * 60 * 60); // haber attıktan sonra 2 saat yorum bekler
-const HABER_ARALIGI: Duration = Duration::from_secs(6 * 60 * 60); // ne sıklıkla hacker news'e bakar
+const HABER_ARALIGI: Duration = Duration::from_secs(6 * 60 * 60); // ne sıklıkla hacker news'e bakar (ajanlar da bu turda çalışır)
 const DURTME_ARALIGI: Duration = Duration::from_secs(60 * 60); // ne sıklıkla kendiliğinden laf atmayı dener
 const DURTME_SANSI: f64 = 0.3; // her denemede %30 ihtimalle atar
+const SAKA_ARALIGI: Duration = Duration::from_secs(3 * 60 * 60); // ne sıklıkla resim/hack şakası dener
+const SAKA_SANSI: f64 = 0.1; // her denemede %10 (ortalama 30 saatte bir)
+const HACK_PAYI: f64 = 0.3; // şakaların %30'u hacklenmiş taklidi, gerisi düz resim
+const HACK_MESAJI: u32 = 3; // hack taklidi kaç cevap sürer (sonuncusu kendine geliş)
 const GECMIS_GUN: i64 = 14; // açılışta kaç günlük mesaj okur
 const HAFIZA_BOYU: usize = 2000; // akılda tuttuğu son mesaj sayısı
 const SOHBET_BOYU: usize = 20; // bir sohbette modele giden son mesaj sayısı
 const MESAJ_SINIRI: usize = 1900; // discord 2000 kabul ediyor, pay bırakıyoruz
 const FAVORI: u64 = 259669117248864257; // bu kişiyi ne olursa olsun sever
+const RESIM_KLASORU: &str = "resimler"; // şakalarda atılacak görseller
+const DURUM_KLASORU: &str = "durum"; // ajanların öğrendikleri buraya yazılır
 
 type Hata = Box<dyn std::error::Error + Send + Sync>;
 
@@ -56,6 +65,7 @@ fn asistan(metin: impl Into<String>) -> Mesaj {
 struct Sohbet {
     gecmis: Vec<Mesaj>,
     sayac: u32,
+    hackli: u32, // 0 değilse hacklenmiş taklidi sürüyor, her cevapta bir azalır
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -74,11 +84,17 @@ struct Kanaatler {
 #[derive(Default)]
 struct Durum {
     bot_adi: String,
-    profil: String,
-    kanaatler: Kanaatler,
     favori_adi: Option<String>,
-    hafiza: VecDeque<String>, // sunucuda okuduğu son mesajlar, "isim: metin" halinde
+    // ajanların ürettikleri
+    profil: String,       // profilci
+    kanaatler: Kanaatler, // kanaatci
+    huy: String,          // hoca
+    duzeltmeler: String,  // elestirmen
+    // gördükleri
+    hafiza: VecDeque<String>, // sunucudaki son mesajlar, "isim: metin"
+    kendi_mesajlarim: VecDeque<String>, // botun kendi son mesajları
     son_kanal: Option<ChannelId>,
+    // sohbet takibi
     sohbetler: HashMap<ChannelId, Sohbet>,
     mesgul: HashSet<ChannelId>, // şu an cevap üretilen kanallar
     yasakli: HashMap<ChannelId, Instant>,
@@ -90,13 +106,11 @@ struct Durum {
 impl Durum {
     // yeniden başlayınca sıfırdan öğrenmesin diye diskten okur
     fn yukle() -> Self {
-        let kanaatler = std::fs::read_to_string("kanaatler.json")
-            .ok()
-            .and_then(|metin| serde_json::from_str(&metin).ok())
-            .unwrap_or_default();
         Durum {
-            profil: std::fs::read_to_string("profil.txt").unwrap_or_default(),
-            kanaatler,
+            profil: oku("profil.txt"),
+            huy: oku("huy.txt"),
+            duzeltmeler: oku("duzeltmeler.txt"),
+            kanaatler: serde_json::from_str(&oku("kanaatler.json")).unwrap_or_default(),
             ..Durum::default()
         }
     }
@@ -116,6 +130,16 @@ impl Bot {
 }
 
 // ---------- yardımcılar ----------
+
+fn oku(dosya: &str) -> String {
+    std::fs::read_to_string(PathBuf::from(DURUM_KLASORU).join(dosya)).unwrap_or_default()
+}
+
+async fn kaydet(dosya: &str, icerik: &str) {
+    if let Err(e) = tokio::fs::write(PathBuf::from(DURUM_KLASORU).join(dosya), icerik).await {
+        eprintln!("{dosya} yazılamadı: {e}");
+    }
+}
 
 fn simdi_unix() -> i64 {
     SystemTime::now()
@@ -184,18 +208,6 @@ fn json_ayikla(metin: &str) -> &str {
     }
 }
 
-// mention'lar kapalı gider: model @everyone yazsa bile kimse pinglenmez
-async fn gonder(ctx: &Context, kanal: ChannelId, metin: &str, ping: Option<UserId>) {
-    let mut izin = CreateAllowedMentions::new();
-    if let Some(u) = ping {
-        izin = izin.users([u]);
-    }
-    let mesaj = CreateMessage::new().content(metin).allowed_mentions(izin);
-    if let Err(e) = kanal.send_message(&ctx.http, mesaj).await {
-        eprintln!("gönderilemedi ({kanal}): {e}");
-    }
-}
-
 // ---------- yapay zeka ----------
 
 #[derive(Deserialize)]
@@ -212,18 +224,8 @@ struct Icerik {
 }
 
 impl Bot {
-    async fn sor(&self, sistem: &str, gecmis: &[Mesaj], max_tokens: u32) -> Result<String, Hata> {
-        let mut mesajlar = vec![Mesaj {
-            role: "system",
-            content: sistem.to_string(),
-        }];
-        mesajlar.extend_from_slice(gecmis);
-
-        let govde = serde_json::json!({
-            "model": MODEL,
-            "messages": mesajlar,
-            "max_tokens": max_tokens,
-        });
+    // openrouter'a ham istek; her şey buradan geçer
+    async fn sor_ham(&self, govde: serde_json::Value) -> Result<String, Hata> {
         let yanit: Yanit = self
             .http
             .post("https://openrouter.ai/api/v1/chat/completions")
@@ -234,7 +236,6 @@ impl Bot {
             .error_for_status()?
             .json()
             .await?;
-
         let metin = yanit
             .choices
             .into_iter()
@@ -244,7 +245,21 @@ impl Bot {
         Ok(metin.trim().to_string())
     }
 
-    // kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma
+    async fn sor(&self, sistem: &str, gecmis: &[Mesaj], max_tokens: u32) -> Result<String, Hata> {
+        let mut mesajlar = vec![Mesaj {
+            role: "system",
+            content: sistem.to_string(),
+        }];
+        mesajlar.extend_from_slice(gecmis);
+        self.sor_ham(serde_json::json!({
+            "model": MODEL,
+            "messages": mesajlar,
+            "max_tokens": max_tokens,
+        }))
+        .await
+    }
+
+    // kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma, şakalar
     async fn uret(&self, gecmis: &[Mesaj], talimat: &str, max_tokens: u32) -> Result<String, Hata> {
         let (sistem, bot_adi) = {
             let d = self.durum();
@@ -254,13 +269,46 @@ impl Bot {
         Ok(temizle(cevap, &bot_adi))
     }
 
-    // kişiliksiz, düz analiz: profil çıkarma, haber seçme, kanaat güncelleme
+    // kişiliksiz, düz analiz: ajanlar bunu kullanır
     async fn analiz(&self, metin: &str, talimat: &str, max_tokens: u32) -> Result<String, Hata> {
         let girdi = kullanici(format!("{metin}\n\n---\n\n{talimat}"));
         self.sor(ANALIST, &[girdi], max_tokens).await
     }
+
+    // mention'lar kapalı gider: model @everyone yazsa bile kimse pinglenmez.
+    // gönderilen her şey kendi_mesajlarim'a düşer, hoca ve eleştirmen oradan okur.
+    async fn gonder(
+        &self,
+        ctx: &Context,
+        kanal: ChannelId,
+        metin: &str,
+        ping: Option<UserId>,
+        dosya: Option<&PathBuf>,
+    ) {
+        let mut izin = CreateAllowedMentions::new();
+        if let Some(u) = ping {
+            izin = izin.users([u]);
+        }
+        let mut mesaj = CreateMessage::new().content(metin).allowed_mentions(izin);
+        if let Some(yol) = dosya {
+            match CreateAttachment::path(yol).await {
+                Ok(ek) => mesaj = mesaj.add_file(ek),
+                Err(e) => eprintln!("görsel okunamadı ({}): {e}", yol.display()),
+            }
+        }
+        if let Err(e) = kanal.send_message(&ctx.http, mesaj).await {
+            eprintln!("gönderilemedi ({kanal}): {e}");
+            return;
+        }
+        let mut d = self.durum();
+        d.kendi_mesajlarim.push_back(metin.to_string());
+        if d.kendi_mesajlarim.len() > 50 {
+            d.kendi_mesajlarim.pop_front();
+        }
+    }
 }
 
+// her cevabın sistem mesajı: çekirdek kişilik + ajanların öğrettikleri + o anki görev
 fn sistem_metni(d: &Durum, talimat: &str) -> String {
     let favori_satiri = match &d.favori_adi {
         Some(f) => FAVORI_SATIRI.replace("{favori}", f),
@@ -270,36 +318,46 @@ fn sistem_metni(d: &Durum, talimat: &str) -> String {
         .replace("{ad}", &d.bot_adi)
         .replace("{favori_satiri}", &favori_satiri);
 
-    if !d.profil.is_empty() {
-        s += "\n\nBU GRUP HAKKINDA BİLDİKLERİN\n";
-        s += &d.profil;
-    }
-    if !d.kanaatler.kisiler.is_empty() {
-        s += "\n\nİNSANLAR HAKKINDA DÜŞÜNDÜKLERİN\n";
-        for k in &d.kanaatler.kisiler {
-            s += &format!("- {} ({:+}): {}\n", k.isim, k.puan, k.not);
+    let bolum = |s: &mut String, baslik: &str, icerik: &str| {
+        if !icerik.trim().is_empty() {
+            s.push_str("\n\n");
+            s.push_str(baslik);
+            s.push('\n');
+            s.push_str(icerik.trim());
         }
+    };
+    bolum(&mut s, "HUYUN (hocanın son notu, buna göre davran)", &d.huy);
+    bolum(&mut s, "BU GRUP HAKKINDA BİLDİKLERİN", &d.profil);
+
+    if !d.kanaatler.kisiler.is_empty() {
+        let liste = d
+            .kanaatler
+            .kisiler
+            .iter()
+            .map(|k| format!("- {} ({:+}): {}", k.isim, k.puan, k.not))
+            .collect::<Vec<_>>()
+            .join("\n");
+        bolum(&mut s, "İNSANLAR HAKKINDA DÜŞÜNDÜKLERİN", &liste);
     }
-    if !d.kanaatler.kendim.is_empty() {
-        s += "\nSENİN SON HALİN\n";
-        s += &d.kanaatler.kendim;
-    }
-    if !talimat.is_empty() {
-        s += "\n\nŞU ANKİ GÖREVİN\n";
-        s += talimat;
-    }
+    bolum(&mut s, "SENİN SON HALİN", &d.kanaatler.kendim);
+    bolum(
+        &mut s,
+        "KENDİNE NOTLAR (eleştirmenin son sohbetten çıkardığı dersler)",
+        &d.duzeltmeler,
+    );
+    bolum(&mut s, "ŞU ANKİ GÖREVİN", talimat);
     s
 }
 
 // ---------- sohbet mekanizması ----------
 
-fn sohbet_baslat(d: &mut Durum, kanal: ChannelId, acilis: Option<String>) {
+fn sohbet_baslat(d: &mut Durum, kanal: ChannelId, acilis: Option<String>) -> &mut Sohbet {
     let mut s = Sohbet::default();
     if let Some(a) = acilis {
         s.gecmis.push(asistan(a));
         s.sayac = 1;
     }
-    d.sohbetler.insert(kanal, s);
+    d.sohbetler.entry(kanal).or_insert(s)
 }
 
 fn sohbet_bitir(d: &mut Durum, kanal: ChannelId) -> Option<Sohbet> {
@@ -324,7 +382,11 @@ impl Bot {
             let Some(s) = d.sohbetler.get(&kanal) else {
                 return;
             };
-            let talimat = if s.sayac >= MAX_MESAJ - 1 {
+            let talimat = if s.hackli > 1 {
+                HACK_DEVAM
+            } else if s.hackli == 1 {
+                HACK_CIKIS
+            } else if s.sayac >= MAX_MESAJ - 1 {
                 SON_MESAJ
             } else if s.sayac >= VEDA_ESIGI {
                 VEDA_YAKLASIYOR
@@ -344,7 +406,7 @@ impl Bot {
                 return;
             }
         };
-        gonder(ctx, kanal, &cevap, None).await;
+        self.gonder(ctx, kanal, &cevap, None, None).await;
 
         let biten = {
             let mut d = self.durum();
@@ -353,6 +415,7 @@ impl Bot {
                 Some(s) => {
                     s.gecmis.push(asistan(cevap));
                     s.sayac += 1;
+                    s.hackli = s.hackli.saturating_sub(1);
                     s.sayac >= MAX_MESAJ
                 }
                 None => false,
@@ -364,15 +427,17 @@ impl Bot {
             }
         };
 
-        // sohbet bitti, bu insanlar hakkında ne düşündüğünü güncelle
+        // sohbet bitti: kanaatçi insanları, eleştirmen botu değerlendirir
         if let Some(s) = biten {
             let bot_adi = self.durum().bot_adi.clone();
-            self.kanaat_guncelle(dokum(&s.gecmis, &bot_adi)).await;
+            let d = dokum(&s.gecmis, &bot_adi);
+            self.kanaatci(d.clone()).await;
+            self.elestirmen(d).await;
         }
     }
 }
 
-// ---------- hafıza, profil, kanaat ----------
+// ---------- hafıza ----------
 
 // sunucuya bağlanınca kanalların son iki haftasını okur
 async fn gecmisi_oku(bot: &Bot, ctx: &Context, guild: &Guild) {
@@ -444,139 +509,6 @@ async fn gecmisi_oku(bot: &Bot, ctx: &Context, guild: &Guild) {
     println!("{}: {} mesaj okundu", guild.name, toplam.len());
 }
 
-impl Bot {
-    async fn profil_guncelle(&self) {
-        let ornek = son_mesajlar(&self.durum(), 600);
-        if ornek.is_empty() {
-            return;
-        }
-        match self.analiz(&ornek, PROFIL_CIKAR, 1200).await {
-            Ok(yeni) => {
-                self.durum().profil = yeni.clone();
-                if let Err(e) = tokio::fs::write("profil.txt", yeni).await {
-                    eprintln!("profil yazılamadı: {e}");
-                }
-                println!("profil güncellendi");
-            }
-            Err(e) => eprintln!("profil hatası: {e}"),
-        }
-    }
-
-    async fn kanaat_guncelle(&self, dokum: String) {
-        if dokum.trim().is_empty() {
-            return;
-        }
-        let (talimat, favori) = {
-            let d = self.durum();
-            let mevcut = serde_json::to_string_pretty(&d.kanaatler).unwrap_or_default();
-            let favori = d.favori_adi.clone();
-            let t = KANAAT_GUNCELLE
-                .replace("{ad}", &d.bot_adi)
-                .replace("{mevcut}", &mevcut)
-                .replace("{favori}", favori.as_deref().unwrap_or("kimse"));
-            (t, favori)
-        };
-
-        let cevap = match self.analiz(&dokum, &talimat, 1500).await {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("kanaat hatası: {e}");
-                return;
-            }
-        };
-        let mut yeni: Kanaatler = match serde_json::from_str(json_ayikla(&cevap)) {
-            Ok(k) => k,
-            Err(e) => {
-                eprintln!("kanaat çözülemedi: {e}");
-                return;
-            }
-        };
-
-        // model ne derse desin sınırlar bizde
-        for k in &mut yeni.kisiler {
-            k.puan = k.puan.clamp(-10, 10);
-        }
-        yeni.kisiler.truncate(30);
-        if let Some(f) = &favori {
-            yeni.kisiler.retain(|k| &k.isim != f);
-            yeni.kisiler.insert(
-                0,
-                Kanaat {
-                    isim: f.clone(),
-                    puan: 10,
-                    not: "canın ciğerin, ne yaparsa yapsın arkasındasın".into(),
-                },
-            );
-        }
-
-        let metin = serde_json::to_string_pretty(&yeni).unwrap_or_default();
-        self.durum().kanaatler = yeni;
-        if let Err(e) = tokio::fs::write("kanaatler.json", metin).await {
-            eprintln!("kanaat yazılamadı: {e}");
-        }
-        println!("kanaatler güncellendi");
-    }
-}
-
-// ---------- hacker news ----------
-
-#[derive(Deserialize, Default)]
-struct Haber {
-    #[serde(default)]
-    id: u64,
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    url: String,
-    #[serde(default)]
-    score: i64,
-}
-
-impl Bot {
-    async fn hn_haber(&self) -> Result<Haber, Hata> {
-        let idler: Vec<u64> = self
-            .http
-            .get("https://hacker-news.firebaseio.com/v0/topstories.json")
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        let atilan = self.durum().atilan_haberler.clone();
-
-        let mut haberler: Vec<Haber> = Vec::new();
-        let mut liste = String::new();
-        for id in idler.into_iter().filter(|id| !atilan.contains(id)).take(15) {
-            let adres = format!("https://hacker-news.firebaseio.com/v0/item/{id}.json");
-            let h: Haber = match self.http.get(&adres).send().await {
-                Ok(r) => r.json().await.unwrap_or_default(),
-                Err(_) => continue,
-            };
-            if h.title.is_empty() {
-                continue;
-            }
-            liste += &format!("{}. {} ({} puan)\n", haberler.len(), h.title, h.score);
-            haberler.push(h);
-        }
-        if haberler.is_empty() {
-            return Err("haber bulunamadı".into());
-        }
-
-        let profil = self.durum().profil.clone();
-        let secim = self
-            .analiz(&liste, &HABER_SEC.replace("{profil}", &profil), 10)
-            .await?;
-        let n: usize = secim
-            .chars()
-            .filter(|c| c.is_ascii_digit())
-            .collect::<String>()
-            .parse()
-            .unwrap_or(0);
-        let n = if n < haberler.len() { n } else { 0 };
-        Ok(haberler.swap_remove(n))
-    }
-}
-
 // haber ve hoş geldin için kanal: ayarlanmışsa o, yoksa sunucunun sistem kanalı, o da yoksa en üstteki metin kanalı
 fn varsayilan_kanal(bot: &Bot, ctx: &Context) -> Option<ChannelId> {
     if let Some(k) = bot.haber_kanali {
@@ -601,14 +533,17 @@ fn varsayilan_kanal(bot: &Bot, ctx: &Context) -> Option<ChannelId> {
     None
 }
 
+// ---------- arka plan döngüleri ----------
+
+// altı saatte bir: ajanlar çalışır, sonra hacker news'ten haber atılır
 async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(HABER_ARALIGI).await;
 
-        // altı saatte bir grubu yeniden tanı
-        bot.profil_guncelle().await;
+        bot.profilci().await;
         let son = son_mesajlar(&bot.durum(), 300);
-        bot.kanaat_guncelle(son).await;
+        bot.kanaatci(son).await;
+        bot.hoca().await;
 
         let Some(kanal) = varsayilan_kanal(&bot, &ctx) else {
             continue;
@@ -617,10 +552,10 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
             continue;
         }
 
-        let h = match bot.hn_haber().await {
+        let h = match bot.haberci().await {
             Ok(h) => h,
             Err(e) => {
-                eprintln!("hn hatası: {e}");
+                eprintln!("haberci: {e}");
                 continue;
             }
         };
@@ -639,7 +574,8 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
                 continue;
             }
         };
-        gonder(&ctx, kanal, &format!("{girdi}\n{link}"), None).await;
+        bot.gonder(&ctx, kanal, &format!("{girdi}\n{link}"), None, None)
+            .await;
 
         let mut d = bot.durum();
         sohbet_baslat(&mut d, kanal, Some(girdi));
@@ -649,6 +585,16 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
     }
 }
 
+// son konuşulan kanal boşsa ve bot oraya girebiliyorsa kanalı verir
+fn bos_kanal(bot: &Bot) -> Option<(ChannelId, String)> {
+    let d = bot.durum();
+    let k = d.son_kanal?;
+    if d.sohbetler.contains_key(&k) || !girebilir_mi(&d, k) || d.profil.is_empty() {
+        return None;
+    }
+    Some((k, son_mesajlar(&d, 40)))
+}
+
 // arada bir, tanıdık biri gibi durup dururken laf atar
 async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
@@ -656,14 +602,8 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
         if rand::random::<f64>() > DURTME_SANSI {
             continue;
         }
-
-        let (kanal, son) = {
-            let d = bot.durum();
-            let Some(k) = d.son_kanal else { continue };
-            if d.sohbetler.contains_key(&k) || !girebilir_mi(&d, k) || d.profil.is_empty() {
-                continue;
-            }
-            (k, son_mesajlar(&d, 40))
+        let Some((kanal, son)) = bos_kanal(&bot) else {
+            continue;
         };
 
         let laf = match bot.uret(&[kullanici(son)], DURUP_DURURKEN, 120).await {
@@ -673,11 +613,45 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
                 continue;
             }
         };
-        gonder(&ctx, kanal, &laf, None).await;
+        bot.gonder(&ctx, kanal, &laf, None, None).await;
+        sohbet_baslat(&mut bot.durum(), kanal, Some(laf));
+    }
+}
+
+// arada bir resimler/ klasöründen bir görsel atar; bazen de hacklenmiş taklidiyle
+async fn saka_dongusu(bot: Arc<Bot>, ctx: Context) {
+    loop {
+        sleep(SAKA_ARALIGI).await;
+        if rand::random::<f64>() > SAKA_SANSI {
+            continue;
+        }
+        let Some((kanal, _)) = bos_kanal(&bot) else {
+            continue;
+        };
+        let Some(resim) = rastgele_resim() else {
+            continue;
+        };
+
+        let hack = rand::random::<f64>() < HACK_PAYI;
+        let metin = if hack {
+            bot.uret(&[kullanici("şaka başlıyor")], HACK_GIRIS, 150)
+                .await
+        } else {
+            bot.resimci(&resim).await
+        };
+        let metin = match metin {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("ai hatası: {e}");
+                continue;
+            }
+        };
+        bot.gonder(&ctx, kanal, &metin, None, Some(&resim)).await;
 
         let mut d = bot.durum();
-        if !d.sohbetler.contains_key(&kanal) {
-            sohbet_baslat(&mut d, kanal, Some(laf));
+        let s = sohbet_baslat(&mut d, kanal, Some(metin));
+        if hack {
+            s.hackli = HACK_MESAJI;
         }
     }
 }
@@ -698,7 +672,8 @@ impl EventHandler for Handler {
         // ready yeniden bağlanınca tekrar gelir, döngüler bir kere başlasın
         if !self.baslatildi.swap(true, Ordering::SeqCst) {
             tokio::spawn(haber_dongusu(self.bot.clone(), ctx.clone()));
-            tokio::spawn(durtme_dongusu(self.bot.clone(), ctx));
+            tokio::spawn(durtme_dongusu(self.bot.clone(), ctx.clone()));
+            tokio::spawn(saka_dongusu(self.bot.clone(), ctx));
         }
     }
 
@@ -709,7 +684,10 @@ impl EventHandler for Handler {
         let bot = self.bot.clone();
         tokio::spawn(async move {
             gecmisi_oku(&bot, &ctx, &guild).await;
-            bot.profil_guncelle().await;
+            bot.profilci().await;
+            if bot.durum().huy.is_empty() {
+                bot.hoca().await;
+            }
         });
     }
 
@@ -750,18 +728,16 @@ impl EventHandler for Handler {
                 return;
             }
         };
-        gonder(
-            &ctx,
-            kanal,
-            &format!("<@{}> {selam}", uye.user.id),
-            Some(uye.user.id),
-        )
-        .await;
-
-        let mut d = self.bot.durum();
-        if !d.sohbetler.contains_key(&kanal) {
-            sohbet_baslat(&mut d, kanal, Some(selam));
-        }
+        self.bot
+            .gonder(
+                &ctx,
+                kanal,
+                &format!("<@{}> {selam}", uye.user.id),
+                Some(uye.user.id),
+                None,
+            )
+            .await;
+        sohbet_baslat(&mut self.bot.durum(), kanal, Some(selam));
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
@@ -848,6 +824,8 @@ async fn main() -> Result<(), Hata> {
         Ok(v) if !v.trim().is_empty() => Some(ChannelId::new(v.trim().parse()?)),
         _ => None,
     };
+    std::fs::create_dir_all(DURUM_KLASORU)?;
+    std::fs::create_dir_all(RESIM_KLASORU)?;
 
     let bot = Arc::new(Bot {
         durum: Mutex::new(Durum::yukle()),
