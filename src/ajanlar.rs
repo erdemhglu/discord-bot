@@ -8,6 +8,7 @@
 //   ozetleyici  sınırı aşan dosyayı küçültür      -> dosya küçülür, taşan arsiv/'e gider
 //   haberci     hacker news'ten ne atmalı         -> seçilen haber
 //   resimci     ekteki görsele ne demeli          -> tek satır yorum
+//   gezgin      (gundem.rs) internette gezer, görüşünü yazar -> gundem.md
 
 use super::*;
 use crate::hafiza::{self, Kisi};
@@ -222,9 +223,10 @@ impl Bot {
                 .collect::<Vec<_>>()
                 .join("\n");
             let metin = format!(
-                "GRUP PROFİLİ\n{}\n\nKİŞİ DİZİNİ\n{}\n\nBOTUN SON HALİ\n{}\n\nŞU ANKİ HUYUN\n{}\n\nSON KONUŞMALAR\n{}\n\nBOTUN KENDİ SON MESAJLARI\n{}",
+                "GRUP PROFİLİ\n{}\n\nKİŞİ DİZİNİ\n{}\n\nGÜNDEM NOTLARI (internette okuyup düşündükleri)\n{}\n\nBOTUN SON HALİ\n{}\n\nŞU ANKİ HUYUN\n{}\n\nSON KONUŞMALAR\n{}\n\nBOTUN KENDİ SON MESAJLARI\n{}",
                 d.profil,
                 d.dizin,
+                if d.gundem.is_empty() { "(henüz gezmedi)" } else { &d.gundem },
                 if d.kendim.is_empty() { "(bir şey yok)" } else { &d.kendim },
                 if d.huy.is_empty() { "(henüz yok, ilk kez yazıyorsun)" } else { &d.huy },
                 son_mesajlar(&d, 200),
@@ -262,7 +264,11 @@ impl Bot {
         }
     }
 
+    // iki kaynaktan haber toplar (hacker news + Türkiye gündemi), profile göre birini seçer
     pub async fn haberci(&self) -> Result<Haber, Hata> {
+        let atilan = self.durum().atilan_haberler.clone();
+        let mut haberler: Vec<Haber> = Vec::new();
+
         let idler: Vec<u64> = self
             .http
             .get("https://hacker-news.firebaseio.com/v0/topstories.json")
@@ -270,27 +276,48 @@ impl Bot {
             .await?
             .error_for_status()?
             .json()
-            .await?;
-        let atilan = self.durum().atilan_haberler.clone();
-
-        let mut haberler: Vec<Haber> = Vec::new();
-        let mut liste = String::new();
-        for id in idler.into_iter().filter(|id| !atilan.contains(id)).take(15) {
+            .await
+            .unwrap_or_default();
+        for id in idler.into_iter().filter(|id| !atilan.contains(id)).take(12) {
             let adres = format!("https://hacker-news.firebaseio.com/v0/item/{id}.json");
-            let h: Haber = match self.http.get(&adres).send().await {
+            let mut h: Haber = match self.http.get(&adres).send().await {
                 Ok(r) => r.json().await.unwrap_or_default(),
                 Err(_) => continue,
             };
             if h.title.is_empty() {
                 continue;
             }
-            liste += &format!("{}. {} ({} puan)\n", haberler.len(), h.title, h.score);
+            h.kaynak = "hn";
             haberler.push(h);
+        }
+
+        match gundem::rss(&self.http).await {
+            Ok(rss) => {
+                for r in rss.into_iter().take(12) {
+                    let id = gundem::kimlik(&r.link);
+                    if !atilan.contains(&id) {
+                        haberler.push(Haber {
+                            id,
+                            title: r.baslik,
+                            url: r.link,
+                            score: 0,
+                            kaynak: "gündem",
+                        });
+                    }
+                }
+            }
+            Err(e) => eprintln!("haberci: rss: {e}"),
         }
         if haberler.is_empty() {
             return Err("haber bulunamadı".into());
         }
 
+        let liste = haberler
+            .iter()
+            .enumerate()
+            .map(|(i, h)| format!("{i}. [{}] {}", h.kaynak, h.title))
+            .collect::<Vec<_>>()
+            .join("\n");
         let profil = self.durum().profil.clone();
         let secim = self
             .analiz(&liste, &HABER_SEC.replace("{profil}", &profil), 10)
@@ -362,7 +389,10 @@ pub struct Haber {
     #[serde(default)]
     pub url: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub score: i64,
+    #[serde(skip)]
+    pub kaynak: &'static str,
 }
 
 // resimler/ klasöründen rastgele bir görsel

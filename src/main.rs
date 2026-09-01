@@ -1,6 +1,9 @@
 mod ajanlar;
+mod gundem;
 mod hafiza;
 mod promptlar;
+mod seyahat;
+mod uyku;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -35,6 +38,7 @@ const HAFIZA_BOYU: usize = 2000; // akılda tuttuğu son mesaj sayısı
 const SOHBET_BOYU: usize = 20; // bir sohbette modele giden son mesaj sayısı
 const MESAJ_SINIRI: usize = 1900; // discord 2000 kabul ediyor, pay bırakıyoruz
 const FAVORI: u64 = 259669117248864257; // bu kişiyi ne olursa olsun sever
+const GEZGIN_ARALIGI: Duration = Duration::from_secs(4 * 60 * 60); // ne sıklıkla internette gezer
 const RESIM_KLASORU: &str = "resimler"; // şakalarda atılacak görseller
 const DURUM_KLASORU: &str = "durum"; // ajanların öğrendikleri buraya yazılır
 
@@ -90,6 +94,13 @@ struct Durum {
     haber_bekleyen: HashMap<ChannelId, Instant>,
     atilan_haberler: HashSet<u64>,
     taranan: HashSet<GuildId>,
+    // gündem ve uyku
+    gundem: String, // gezgin: son okudukları ve düşündükleri
+    planlar: Vec<uyku::Plan>,
+    uyuyor: bool,
+    bekleyen_etiketler: Vec<(ChannelId, String)>, // uyurken etiketlenmişse uyanınca döner
+    son_yol_mesaji: i64,                          // seyahatte en son hangi gün yoldan yazdı
+    duyurulan_seyahat: i64, // "yarın gidiyorum" dediği seyahatin başlangıç günü
 }
 
 impl Durum {
@@ -101,6 +112,7 @@ impl Durum {
             duzeltmeler: hafiza::oku("duzeltmeler.md"),
             kendim: hafiza::oku("kendim.md"),
             dizin: hafiza::dizin_yenile(),
+            gundem: gundem::son_gundem(&hafiza::oku("gundem.md")),
             ..Durum::default()
         }
     }
@@ -111,6 +123,7 @@ struct Bot {
     http: reqwest::Client,
     anahtar: String,
     haber_kanali: Option<ChannelId>,
+    firecrawl: Option<String>, // yoksa sayfalar düz indirilir
 }
 
 impl Bot {
@@ -330,7 +343,17 @@ fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> String {
         &d.dizin,
     );
     bolum(&mut s, "BU SOHBET İÇİN HAFIZADAN GETİRİLENLER", getirilen);
+    bolum(
+        &mut s,
+        "GÜNDEM (internette gezerken okudukların ve düşündüklerin)",
+        &d.gundem,
+    );
     bolum(&mut s, "SENİN SON HALİN", &d.kendim);
+    bolum(
+        &mut s,
+        "ŞU AN",
+        &format!("{} {}", uyku::durum_metni(d), seyahat::durum_metni()),
+    );
     bolum(
         &mut s,
         "KENDİNE NOTLAR (eleştirmenin son sohbetten çıkardığı dersler)",
@@ -531,6 +554,15 @@ fn varsayilan_kanal(bot: &Bot, ctx: &Context) -> Option<ChannelId> {
 async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(HABER_ARALIGI).await;
+        if !uyku::uyanik_mi(&bot.durum()) {
+            continue;
+        }
+        if seyahat::simdi().is_some() {
+            // yolda haber atmaz ama ajanlar gene çalışsın, öğrenmeye devam
+            bot.profilci().await;
+            bot.hoca().await;
+            continue;
+        }
 
         bot.profilci().await;
         let son = son_mesajlar(&bot.durum(), 300);
@@ -592,14 +624,34 @@ fn bos_kanal(bot: &Bot) -> Option<(ChannelId, String)> {
 async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(DURTME_ARALIGI).await;
-        if rand::random::<f64>() > DURTME_SANSI {
+        if !uyku::uyanik_mi(&bot.durum()) {
             continue;
         }
+        // seyahat: gitmeden bir gün önce haber ver, yoldayken günde bir mesaj, başka laf atma
+        let talimat = if let Some(s) = seyahat::simdi() {
+            if bot.durum().son_yol_mesaji == seyahat::bugun() || rand::random::<f64>() > 0.25 {
+                continue;
+            }
+            bot.durum().son_yol_mesaji = seyahat::bugun();
+            let _ = s;
+            YOLDA
+        } else if let Some(s) = seyahat::yarin() {
+            if bot.durum().duyurulan_seyahat == s.bas {
+                continue;
+            }
+            bot.durum().duyurulan_seyahat = s.bas;
+            GIDIYORUM
+        } else {
+            if rand::random::<f64>() > DURTME_SANSI {
+                continue;
+            }
+            DURUP_DURURKEN
+        };
         let Some((kanal, son)) = bos_kanal(&bot) else {
             continue;
         };
 
-        let laf = match bot.uret(&[kullanici(son)], DURUP_DURURKEN, 120).await {
+        let laf = match bot.uret(&[kullanici(son)], talimat, 120).await {
             Ok(l) => l,
             Err(e) => {
                 eprintln!("ai hatası: {e}");
@@ -615,6 +667,9 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
 async fn saka_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(SAKA_ARALIGI).await;
+        if !uyku::uyanik_mi(&bot.durum()) || seyahat::simdi().is_some() {
+            continue;
+        }
         if rand::random::<f64>() > SAKA_SANSI {
             continue;
         }
@@ -649,6 +704,68 @@ async fn saka_dongusu(bot: Arc<Bot>, ctx: Context) {
     }
 }
 
+// arada internette gezer; ilk gezinti açılıştan 10 dk sonra, sonra 4 saatte bir
+async fn gezgin_dongusu(bot: Arc<Bot>) {
+    let mut ilk = true;
+    loop {
+        sleep(if ilk {
+            Duration::from_secs(600)
+        } else {
+            GEZGIN_ARALIGI
+        })
+        .await;
+        ilk = false;
+        if uyku::uyanik_mi(&bot.durum()) {
+            bot.gezgin().await;
+        }
+    }
+}
+
+// dakikada bir uyku planına bakar; uyanınca uyurken gelen etiketlere döner
+async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
+    loop {
+        sleep(Duration::from_secs(60)).await;
+        let bekleyen = {
+            let mut d = bot.durum();
+            uyku::guncelle(&mut d);
+            let uyanik = uyku::uyanik_mi(&d);
+            if uyanik == d.uyuyor {
+                println!("uyku: {}", if uyanik { "uyandı" } else { "uyudu" });
+            }
+            let uyandi = uyanik && d.uyuyor;
+            d.uyuyor = !uyanik;
+            if uyandi {
+                std::mem::take(&mut d.bekleyen_etiketler)
+            } else {
+                Vec::new()
+            }
+        };
+        let Some((kanal, _)) = bekleyen.last() else {
+            continue;
+        };
+        let kanal = *kanal;
+        let liste = bekleyen
+            .iter()
+            .map(|(_, m)| format!("- {m}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        match bot
+            .uret(
+                &[kullanici(format!("uyurken sana yazılanlar:\n{liste}"))],
+                UYANDIM,
+                200,
+            )
+            .await
+        {
+            Ok(c) => {
+                bot.gonder(&ctx, kanal, &c, None, None).await;
+                sohbet_baslat(&mut bot.durum(), kanal, Some(c));
+            }
+            Err(e) => eprintln!("ai hatası: {e}"),
+        }
+    }
+}
+
 // ---------- discord olayları ----------
 
 struct Handler {
@@ -666,7 +783,9 @@ impl EventHandler for Handler {
         if !self.baslatildi.swap(true, Ordering::SeqCst) {
             tokio::spawn(haber_dongusu(self.bot.clone(), ctx.clone()));
             tokio::spawn(durtme_dongusu(self.bot.clone(), ctx.clone()));
-            tokio::spawn(saka_dongusu(self.bot.clone(), ctx));
+            tokio::spawn(saka_dongusu(self.bot.clone(), ctx.clone()));
+            tokio::spawn(gezgin_dongusu(self.bot.clone()));
+            tokio::spawn(uyku_dongusu(self.bot.clone(), ctx));
         }
     }
 
@@ -744,9 +863,18 @@ impl EventHandler for Handler {
         }
         let kanal = msg.channel_id;
         let isim = ad(&msg.author);
+        let bot_id = ctx.cache.current_user().id;
 
         let cevap_ver = {
             let mut d = self.bot.durum();
+            // etiketlendi mi, adı geçti mi, mesajına yanıt mı verildi
+            let etiketlendi = msg.mentions.iter().any(|u| u.id == bot_id)
+                || msg
+                    .referenced_message
+                    .as_ref()
+                    .is_some_and(|r| r.author.id == bot_id)
+                || (!d.bot_adi.is_empty()
+                    && metin.to_lowercase().contains(&d.bot_adi.to_lowercase()));
             hatirla(&mut d, &isim, &metin);
             d.son_kanal = Some(kanal);
             if msg.author.id.get() == FAVORI {
@@ -762,8 +890,26 @@ impl EventHandler for Handler {
                 d.haber_bekleyen.remove(&kanal);
             }
 
+            // uyuyorsa yazmaz; etiketlenmişse uyanınca döner
+            if !uyku::uyanik_mi(&d) {
+                if etiketlendi {
+                    d.bekleyen_etiketler
+                        .push((kanal, format!("{isim}: {metin}")));
+                    if d.bekleyen_etiketler.len() > 20 {
+                        d.bekleyen_etiketler.remove(0);
+                    }
+                }
+                return;
+            }
+
+            // etiketlenince her zaman cevap verir; yoksa şansa bağlı araya girer
             let mut acik = d.sohbetler.contains_key(&kanal);
-            if !acik && girebilir_mi(&d, kanal) && rand::random::<f64>() < SANS {
+            let sans = if seyahat::simdi().is_some() {
+                SANS * seyahat::YOLDA_SANS_CARPANI
+            } else {
+                SANS
+            };
+            if !acik && (etiketlendi || (girebilir_mi(&d, kanal) && rand::random::<f64>() < sans)) {
                 sohbet_baslat(&mut d, kanal, None);
                 acik = true;
             }
@@ -822,13 +968,19 @@ async fn main() -> Result<(), Hata> {
     }
     std::fs::create_dir_all(RESIM_KLASORU)?;
 
+    let mut durum = Durum::yukle();
+    uyku::guncelle(&mut durum);
     let bot = Arc::new(Bot {
-        durum: Mutex::new(Durum::yukle()),
+        durum: Mutex::new(durum),
         http: reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .build()?,
         anahtar,
         haber_kanali,
+        firecrawl: std::env::var("FIRECRAWL_KEY")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
     });
 
     let intents = GatewayIntents::GUILDS

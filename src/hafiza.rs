@@ -306,7 +306,7 @@ fn puanla(metin: &str, anahtar: &[String]) -> usize {
     anahtar.iter().filter(|a| m.contains(a.as_str())).count()
 }
 
-fn kirp(metin: &str, sinir: usize) -> String {
+pub fn kirp(metin: &str, sinir: usize) -> String {
     if metin.chars().count() <= sinir {
         metin.trim().to_string()
     } else {
