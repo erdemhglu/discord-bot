@@ -362,11 +362,32 @@ impl Bot {
     }
 
     async fn sor(&self, sistem: &str, gecmis: &[Mesaj], max_tokens: u32) -> Result<String, Hata> {
-        let mut mesajlar = vec![Mesaj {
-            role: "system",
-            content: sistem.to_string(),
-        }];
-        mesajlar.extend_from_slice(gecmis);
+        self.sor_bolumlu(sistem, "", gecmis, max_tokens).await
+    }
+
+    // sistem mesajı iki blok: sabit blok cache_control ile işaretli (anthropic/gemini önbelleğe alır,
+    // openai zaten öneki kendi önbellekler); değişken blok her seferinde yeniden okunur
+    async fn sor_bolumlu(
+        &self,
+        sabit: &str,
+        degisken: &str,
+        gecmis: &[Mesaj],
+        max_tokens: u32,
+    ) -> Result<String, Hata> {
+        let sistem = if degisken.is_empty() {
+            serde_json::json!({ "role": "system", "content": sabit })
+        } else {
+            serde_json::json!({ "role": "system", "content": [
+                { "type": "text", "text": sabit, "cache_control": { "type": "ephemeral" } },
+                { "type": "text", "text": degisken }
+            ]})
+        };
+        let mut mesajlar = vec![sistem];
+        mesajlar.extend(
+            gecmis
+                .iter()
+                .map(|m| serde_json::json!({ "role": m.role, "content": m.content })),
+        );
         self.sor_ham(serde_json::json!({
             "model": self.durum().model.clone(),
             "messages": mesajlar,
@@ -392,12 +413,15 @@ impl Bot {
             }
         }
         let anahtar = hafiza::anahtarlar(&metinler);
-        let (sistem, bot_adi) = {
+        let (sabit, degisken, bot_adi) = {
             let d = self.durum();
             let getirilen = hafiza::getir(&katilimcilar, &anahtar, &d.hafiza, SOHBET_BOYU);
-            (sistem_metni(&d, talimat, &getirilen), d.bot_adi.clone())
+            let (sabit, degisken) = sistem_metni(&d, talimat, &getirilen);
+            (sabit, degisken, d.bot_adi.clone())
         };
-        let cevap = self.sor(&sistem, gecmis, max_tokens).await?;
+        let cevap = self
+            .sor_bolumlu(&sabit, &degisken, gecmis, max_tokens)
+            .await?;
         Ok(temizle(cevap, &bot_adi))
     }
 
@@ -450,58 +474,76 @@ impl Bot {
 }
 
 // her cevabın sistem mesajı: çekirdek kişilik + ajanların öğrettikleri + o anki görev
-fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> String {
+// her cevabın sistem mesajı iki parça: SABİT (kişilik, huy, profil, dizin...; ajan çalışınca
+// değişir, prompt cache buradan kazanır) ve DEĞİŞKEN (örnek mesajlar, getirilenler, saat, görev)
+fn sistem_metni(d: &Durum, talimat: &str, getirilen: &str) -> (String, String) {
     let favori_satiri = match &d.favori_adi {
         Some(f) => FAVORI_SATIRI.replace("{favori}", f),
         None => String::new(),
     };
-    let mut s = KISILIK
-        .replace("{ad}", &d.bot_adi)
-        .replace("{favori_satiri}", &favori_satiri);
-
     let bolum = |s: &mut String, baslik: &str, icerik: &str| {
         if !icerik.trim().is_empty() {
-            s.push_str("\n\n");
+            if !s.is_empty() {
+                s.push_str("\n\n");
+            }
             s.push_str(baslik);
             s.push('\n');
             s.push_str(icerik.trim());
         }
     };
-    bolum(&mut s, "GELİŞİM EVREN", &gelisim::evre_metni(&d.gelisim));
-    bolum(&mut s, "HUYUN (hocanın son notu, buna göre davran)", &d.huy);
-    bolum(&mut s, "BU GRUP HAKKINDA BİLDİKLERİN", &d.profil);
+
+    let mut sabit = KISILIK
+        .replace("{ad}", &d.bot_adi)
+        .replace("{favori_satiri}", &favori_satiri);
     bolum(
-        &mut s,
+        &mut sabit,
+        "GELİŞİM EVREN",
+        &gelisim::evre_metni(&d.gelisim),
+    );
+    bolum(
+        &mut sabit,
+        "HUYUN (hocanın son notu, buna göre davran)",
+        &d.huy,
+    );
+    bolum(&mut sabit, "BU GRUP HAKKINDA BİLDİKLERİN", &d.profil);
+    bolum(
+        &mut sabit,
+        "HAFIZA DİZİNİ (kimi ve neyi biliyorsun; ayrıntı gerekince getiriliyor)",
+        &d.dizin,
+    );
+    bolum(
+        &mut sabit,
+        "GÜNDEM (internette gezerken okudukların ve düşündüklerin)",
+        &d.gundem,
+    );
+    bolum(&mut sabit, "SENİN SON HALİN", &d.kendim);
+    bolum(
+        &mut sabit,
+        "KENDİNE NOTLAR (eleştirmenin son sohbetten çıkardığı dersler)",
+        &d.duzeltmeler,
+    );
+
+    let mut degisken = String::new();
+    bolum(
+        &mut degisken,
         &format!(
-            "GRUBUN GERÇEK MESAJLARI (boy ve ton örneği; ortalama {} karakter, sen bunu geçme)",
+            "GRUBUN GERÇEK MESAJLARI (boy ve ton örneği; ortalama {} karakter, sıradan lafta bunu geçme)",
             ortalama_boy(d)
         ),
         &ornek_mesajlar(d),
     );
     bolum(
-        &mut s,
-        "HAFIZA DİZİNİ (kimi ve neyi biliyorsun; ayrıntı gerekince getiriliyor)",
-        &d.dizin,
+        &mut degisken,
+        "BU SOHBET İÇİN HAFIZADAN GETİRİLENLER",
+        getirilen,
     );
-    bolum(&mut s, "BU SOHBET İÇİN HAFIZADAN GETİRİLENLER", getirilen);
     bolum(
-        &mut s,
-        "GÜNDEM (internette gezerken okudukların ve düşündüklerin)",
-        &d.gundem,
-    );
-    bolum(&mut s, "SENİN SON HALİN", &d.kendim);
-    bolum(
-        &mut s,
+        &mut degisken,
         "ŞU AN",
         &format!("{} {}", uyku::durum_metni(d), seyahat::durum_metni()),
     );
-    bolum(
-        &mut s,
-        "KENDİNE NOTLAR (eleştirmenin son sohbetten çıkardığı dersler)",
-        &d.duzeltmeler,
-    );
-    bolum(&mut s, "ŞU ANKİ GÖREVİN", talimat);
-    s
+    bolum(&mut degisken, "ŞU ANKİ GÖREVİN", talimat);
+    (sabit, degisken)
 }
 
 // ---------- sohbet mekanizması ----------
@@ -573,7 +615,7 @@ impl Bot {
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
             sleep(Duration::from_millis(400 + (rand::random::<u64>() % 800))).await;
-            let (gecmis, yanit, gelen, sinir, en_cok_cumle, token) = {
+            let (gecmis, yanit, gelen, sinir, en_cok_cumle, token, son_metin) = {
                 let d = self.durum();
                 let Some(s) = d.sohbetler.get(&kanal) else {
                     drop(d);
@@ -615,6 +657,18 @@ impl Bot {
                 } else {
                     ((ort * 2).clamp(40, 220), 2, 90)
                 };
+                let son_metin = s
+                    .gecmis
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == "user")
+                    .map(|m| {
+                        m.content
+                            .split_once(": ")
+                            .map(|(_, t)| t.to_string())
+                            .unwrap_or(m.content.clone())
+                    })
+                    .unwrap_or_default();
                 (
                     s.gecmis.clone(),
                     s.son_mesaj,
@@ -622,9 +676,19 @@ impl Bot {
                     sinir,
                     en_cok_cumle,
                     token,
+                    son_metin,
                 )
             };
-            let cevap = match self.uret(&gecmis, talimat, token).await {
+            // istendiyse internete bak (haber, araştır, link) ve bulduklarını göreve ekle
+            let mut talimat_tam = talimat.to_string();
+            let mut token = token;
+            if let Some(bulgu) = self.arastir(&son_metin).await {
+                talimat_tam = format!(
+                    "{talimat}\n\nİNTERNETTEN ŞİMDİ ÇEKTİKLERİN (istendiği için baktın; kendi ağzınla anlat, liste yapma, \"kaynak\" deme):\n{bulgu}"
+                );
+                token = token.max(220);
+            }
+            let cevap = match self.uret(&gecmis, &talimat_tam, token).await {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("ai hatası: {e}");
@@ -643,6 +707,21 @@ impl Bot {
                 self.durum().mesgul.remove(&kanal);
                 return;
             }
+            // aynı lafı iki kez etmesin: son 5 mesajıyla aynıysa bir kez daha dener, yine aynıysa susar
+            let cevap = if self.tekrar_mi(kanal, &cevap) {
+                let t2 = format!("{talimat_tam}\n\nAz önce aynen şunu yazdın: \"{cevap}\". Aynısını ya da benzerini yazma; başka bir açıdan gir ya da konuyu değiştir.");
+                match self.uret(&gecmis, &t2, token).await {
+                    Ok(c) if !self.tekrar_mi(kanal, &c) && c.chars().count() >= 3 => {
+                        kisalt(&c, sinir, en_cok_cumle)
+                    }
+                    _ => {
+                        self.durum().mesgul.remove(&kanal);
+                        return;
+                    }
+                }
+            } else {
+                cevap
+            };
             // "yazıyor..." gösterip boyuna göre kısa bir yazma payı bırakır.
             let _ = kanal.broadcast_typing(&ctx.http).await;
             sleep(Duration::from_millis(
@@ -713,6 +792,100 @@ impl Bot {
                 break;
             }
         }
+    }
+}
+
+// ---------- araştırma ----------
+
+impl Bot {
+    // botun son 5 mesajından biriyle aynı mı
+    fn tekrar_mi(&self, kanal: ChannelId, cevap: &str) -> bool {
+        let d = self.durum();
+        let onek = format!("{}: ", d.bot_adi);
+        let hedef = cevap.trim().to_lowercase();
+        d.kanal_gecmisi
+            .get(&kanal)
+            .map(|g| {
+                g.iter()
+                    .rev()
+                    .filter_map(|l| l.strip_prefix(&onek))
+                    .take(5)
+                    .any(|l| l.trim().to_lowercase() == hedef)
+            })
+            .unwrap_or(false)
+    }
+
+    // mesaj internete bakmayı gerektiriyorsa bakar: link → sayfa; "araştır/bak" → firecrawl arama
+    // (anahtar varsa); "haber/gündem/ne oldu" → rss başlıkları
+    async fn arastir(&self, metin: &str) -> Option<String> {
+        let m = metin.to_lowercase();
+        if let Some(url) = metin
+            .split_whitespace()
+            .find(|w| w.starts_with("http://") || w.starts_with("https://"))
+        {
+            let url = url.trim_end_matches(['>', ')', ',', '.']);
+            return match self.sayfa_oku(url).await {
+                Ok(s) if !s.trim().is_empty() => {
+                    Some(format!("Atılan link ({url}):\n{}", hafiza::kirp(&s, 1500)))
+                }
+                _ => Some(format!("Link açılamadı: {url}")),
+            };
+        }
+        let gecen = |liste: &[&str]| liste.iter().any(|k| m.contains(k));
+        let haber = gecen(&[
+            "haber",
+            "gündem",
+            "ne oldu",
+            "son dakika",
+            "neler oluyor",
+            "güncel",
+        ]);
+        let tetik = [
+            "araştır",
+            "bak bakalım",
+            "baksana",
+            "bi bak",
+            "googlela",
+            "ara bakalım",
+            "arasana",
+            "internete bak",
+            "internetten bak",
+        ];
+        let ara = gecen(&tetik);
+        if ara && self.firecrawl.is_some() {
+            let mut sorgu = m.clone();
+            for k in tetik
+                .iter()
+                .chain(["bakar mısın", " lan", " la ", " aq"].iter())
+            {
+                sorgu = sorgu.replace(k, " ");
+            }
+            let sorgu: String = sorgu
+                .split_whitespace()
+                .filter(|w| !w.starts_with('@'))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let sorgu = if sorgu.trim().is_empty() {
+                metin.to_string()
+            } else {
+                sorgu
+            };
+            if let Ok(sonuc) = self.firecrawl_ara(&sorgu).await {
+                return Some(format!("\"{sorgu}\" araması:\n{sonuc}"));
+            }
+        }
+        if haber || ara {
+            if let Ok(rss) = gundem::rss(&self.http).await {
+                let liste = rss
+                    .iter()
+                    .take(12)
+                    .map(|h| format!("- {} — {}", h.baslik, hafiza::kirp(&h.ozet, 100)))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return Some(format!("Sözcü'den şu anki başlıklar:\n{liste}"));
+            }
+        }
+        None
     }
 }
 

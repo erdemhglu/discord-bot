@@ -33,7 +33,9 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `uret(gecmis, talimat, max_tokens)` — **kişilikle konuşan tek yol.** Geçmişteki `user` mesajlarından katılımcı adlarını (`"isim: "` öneki) ve metinleri çıkarır → `hafiza::anahtarlar` → kilit altında `hafiza::getir` + `sistem_metni` → `sor` → `temizle`. Çağıranlar: cevapla, dürtme, şaka, haber tanıtma, hoş geldin, uyandım, gezgin notu, resimci yedeği.
 - `analiz(metin, talimat, max_tokens)` — **kişiliksiz tek yol.** Sistem = `ANALIST`; kullanıcı mesajı = `metin + "---" + talimat`. Çağıranlar: profilci, gunlukcu, hoca, elestirmen, ozetleyici, haberci seçim, gezgin seçim.
 - `gonder(ctx, kanal, metin, ping, dosya, yanit: Option<MessageId>)` — `yanit` verilirse discord yanıtı (`reference_message`) olur ve yanıtlanan kişi pinglenir (`replied_user`).  mention'lar kapalı (`CreateAllowedMentions::new()`, yalnız `ping` açılır), isteğe bağlı ek dosya; başarılıysa `kendi_mesajlarim`'a (50) ekler. Kilit gönderimden SONRA alınır.
-- `sistem_metni(&Durum, talimat, getirilen) -> String` — bölümleri sırayla ekler (mimari.md listesi). Serbest fonksiyon, kilit çağıranda.
+- `Bot::sor_bolumlu(sabit, degisken, gecmis, max_tokens)` — sistem mesajını iki metin bloğu olarak gönderir, ilki `cache_control: ephemeral`. `sor` bunu boş değişkenle çağırır.
+- `Bot::tekrar_mi(kanal, cevap)` — kanal geçmişindeki son 5 bot satırıyla aynı mı. `Bot::arastir(metin) -> Option<String>` — link/haber/araştır tetiklerine göre sayfa, RSS ya da Firecrawl arama sonucu.
+- `sistem_metni(&Durum, talimat, getirilen) -> (String, String)` — (sabit, değişken);  bölümleri sırayla ekler (mimari.md listesi). Serbest fonksiyon, kilit çağıranda.
 
 ### Sohbet motoru
 - `Bot::sorun_at(ctx, kanal)` — `uret(SORUN, 160)` ile uydurma kod derdi, gönder, sohbet aç. Dürtme döngüsü (%25) ve `!sorun`.
@@ -104,6 +106,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `kimlik(link) -> u64` — DefaultHasher; atılan haber takibi için.
 - `girisler(metin) -> Vec<String>` — `gundem.md`'yi `## ` başlıklı girişlere böler. `son_gundem(metin)` son 3 giriş.
 - `Bot::sayfa_oku(url)` — firecrawl anahtarı varsa `POST api.firecrawl.dev/v1/scrape {url, formats:[markdown], onlyMainContent}` → `data.markdown`; yoksa `GET` + `temiz_html`. 3500 karakter.
+- `Bot::firecrawl_ara(sorgu) -> Result<String>` — `POST /v1/search` limit 5; başlık, açıklama, adres satırları.
 - `Bot::gezgin()` — rss ilk 20 → `analiz(GEZGIN_SEC{ad,huy,profil}, 20)` → ≤3 numara → her biri `sayfa_oku` (hata: özet) → `uret(GEZGIN_NOT, 350)` (kişilikle, kendi günlüğü) → `gundem.md`'ye `## tarih saat` girişi; 12'yi aşan en eski giriş arşive; `Durum.gundem` = son 3.
 
 ## src/uyku.rs

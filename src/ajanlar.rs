@@ -336,7 +336,8 @@ impl Bot {
     pub async fn resimci(&self, yol: &PathBuf) -> Result<String, Hata> {
         let (sistem, bot_adi) = {
             let d = self.durum();
-            (sistem_metni(&d, RESIM_AT, ""), d.bot_adi.clone())
+            let (sabit, degisken) = sistem_metni(&d, RESIM_AT, "");
+            (format!("{sabit}\n\n{degisken}"), d.bot_adi.clone())
         };
         let veri = tokio::fs::read(yol).await?;
         let tur = match yol

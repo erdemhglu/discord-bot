@@ -157,6 +157,53 @@ impl Bot {
         Ok(metin.chars().take(SAYFA_SINIRI).collect())
     }
 
+    // firecrawl web araması: başlık, açıklama, adres (anahtar yoksa hata)
+    pub async fn firecrawl_ara(&self, sorgu: &str) -> Result<String, Hata> {
+        let anahtar = self.firecrawl.as_ref().ok_or("firecrawl anahtarı yok")?;
+        #[derive(Deserialize)]
+        struct Yanit {
+            data: Option<Vec<Sonuc>>,
+        }
+        #[derive(Deserialize, Default)]
+        struct Sonuc {
+            #[serde(default)]
+            title: String,
+            #[serde(default)]
+            description: String,
+            #[serde(default)]
+            url: String,
+        }
+        let y: Yanit = self
+            .http
+            .post("https://api.firecrawl.dev/v1/search")
+            .bearer_auth(anahtar)
+            .json(&serde_json::json!({ "query": sorgu, "limit": 5 }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let liste = y
+            .data
+            .unwrap_or_default()
+            .iter()
+            .filter(|s| !s.title.is_empty())
+            .map(|s| {
+                format!(
+                    "- {} — {} ({})",
+                    s.title,
+                    hafiza::kirp(&s.description, 160),
+                    s.url
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        if liste.is_empty() {
+            return Err("arama boş döndü".into());
+        }
+        Ok(liste)
+    }
+
     // arada internette gezer: rss'ten ilgisini çekenleri seçer, okur, kendi görüşünü günlüğüne yazar
     pub async fn gezgin(&self) {
         let haberler = match rss(&self.http).await {

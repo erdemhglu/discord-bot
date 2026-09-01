@@ -67,6 +67,14 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   tekrar uyutuyordu.
 - **Araya girme şansı 0.10 → 0.35, yeni evre ×0.7.** "Bottan bahsetmiyorsak iplemiyor".
 - **Sikko sorun.** Laf atma turlarının %25'i yazılım kanalına uydurma kod derdi; muhabbet açar.
+- **Sistem mesajı sabit + değişken, sabit blok `cache_control`.** Token faturası: kişilik, huy,
+  profil, dizin, gündem, notlar sabit blokta (ajan çalışınca değişir); örnek mesajlar, getirilenler,
+  saat ve görev değişken blokta. Anthropic/Gemini sabit bloğu önbelleğe alır, OpenAI öneki kendisi.
+- **Tekrar koruması.** Botun son 5 mesajıyla aynı cevap bir kez yeniden üretilir, yine aynıysa susar.
+- **İstek üzerine internet.** Link → sayfa; "haber/gündem/ne oldu" → Sözcü RSS; "araştır/bak/googlela"
+  → Firecrawl arama (anahtar varsa, yoksa RSS). Bulgular göreve "İNTERNETTEN ŞİMDİ ÇEKTİKLERİN" diye eklenir.
+- **Altta kalmama ve istek yapma promptta.** "ne alaka / sa naber" refleksi yasak; sıralama, seçim,
+  tahmin istenince kanaat puanlarıyla yapılır; "yapamam" yasak. Kimlik: Nişantaşı Üniversitesi, beyaz Tofaş.
 - **ICE hayranlığı çekirdek kişilikte, sınırıyla.** Emin'in isteği; futbol takımı tutar gibi
   absürt bir gag. Milliyet/etnik köken/din/göçmenlik hedef alma, tehdit ve şiddet övgüsü promptta
   yasak; hoca bu maddeyi kaldıramaz (çekirdek `kisilik.md`'de).
