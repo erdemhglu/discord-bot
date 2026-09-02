@@ -30,13 +30,26 @@ pub fn oku(parca: &str) -> String {
     fs::read_to_string(yol(parca)).unwrap_or_default()
 }
 
+// eşzamanlı yazımlara benzersiz geçici ad için (aynı süreç içinde iki ajan aynı dosyaya
+// aynı anda yazarsa bile geçici dosyaları çakışmasın)
+static YAZMA_SAYAC: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+// geçici dosyaya yazıp yeniden adlandırma atomik: süreç crash/kill olsa bile hiçbir okuyucu
+// yarım yazılmış içerik görmez (`fs::write` tek başına bunu garanti etmez)
 pub fn yaz(parca: &str, icerik: &str) {
     let p = yol(parca);
     if let Some(ust) = p.parent() {
         let _ = fs::create_dir_all(ust);
     }
-    if let Err(e) = fs::write(&p, icerik) {
-        log::error!("{} yazılamadı: {e}", p.display());
+    let n = YAZMA_SAYAC.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let gecici = PathBuf::from(format!("{}.tmp.{}.{n}", p.display(), std::process::id()));
+    if let Err(e) = fs::write(&gecici, icerik) {
+        log::error!("{} yazılamadı: {e}", gecici.display());
+        return;
+    }
+    if let Err(e) = fs::rename(&gecici, &p) {
+        log::error!("{} yeniden adlandırılamadı: {e}", p.display());
+        let _ = fs::remove_file(&gecici);
     }
 }
 
