@@ -489,6 +489,23 @@ Ana bulgular: global 60 sn timeout stream'i kesebilir (P0), mesgul panic'te sız
 dosya yazımları atomik değil + ajanlar arası yarış, döngüler panikte sessiz ölür,
 kişi anahtarı görünen ad (id değil).
 
+## 2026-09-02 · zihin-ss dalı · `!zihin` panel ekran görüntüsü
+Emin: "!zihin yazınca modern web ui şeklinde ss atacak". `src/zihin_gorsel.rs` eklendi:
+SVG metin olarak kuruluyor, `resvg` (0.48, default-features kapalı) ile PNG'ye rasterize
+ediliyor — saf Rust, Chrome/tarayıcı/sunucu yok. Inter Regular/SemiBold/Italic `fonts/`
+altında gömülü (SIL OFL, `fonts/LICENSE`).
+- Panel: tarayıcı şeridi + başlık/chip'ler + 5 kutuluk sayaç şeridi + 7/12–5/12 ızgara
+  (sol: Kişiler, Olaylar · sağ: Konular, Gündem, Kendim, Huyum). Tuval 1280 px, 2x rasterize.
+- Okuma iki aşamalı: `zihin_verisi` kilitli alanları kopyalar, `dosyalari_oku` kilit dışında
+  dosyaları okur; PNG üretimi `spawn_blocking`'de (kural 1 korundu).
+- `!zihin` görseli ek olarak yolluyor, tek satır başlık. Patlarsa eski embed karta düşüyor.
+- `cargo run -- zihin` alt komutu: Discord'suz üretim (tasarımı görmek + doğrulama için).
+- Testler: metin sarma, XML kaçışı, emoji atma, boş veriyle panik yok, dolu veriyle PNG
+  imzası + 8 MB altı, olay satırı çözümü. Toplam 58 test, clippy 0 uyarı.
+- **Doğrulanmadı:** görsel canlı Discord'da görülmedi. Metin genişliği gerçek glif ölçümü
+  değil, Inter harf/em oranı tahmini (bilerek yukarı yuvarlıyor — taşırmak yerine erken sarar).
+
+
 ---
 
 ## Not — doğrulama komutları

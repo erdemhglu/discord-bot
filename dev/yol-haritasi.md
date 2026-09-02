@@ -83,6 +83,18 @@ Kalan risk (canlıda görülecek): emoji tepkisi rate limit davranışı, satır
 kanaldaki temposu, `-` susmasının sıklığı (model fazla susarsa prompt ayarlanır),
 `gonder_satirlar` gecikme sabitleri (ölçülmedi).
 
+## Zihin panel görseli (2026-09-02) — TAMAMLANDI
+`!zihin` embed kart yerine PNG panel atıyor (`src/zihin_gorsel.rs`, SVG → resvg → PNG).
+Gerekçe ve alternatifler (headless Chrome neden değil): docs/kararlar.md.
+Bekleyen uçlar:
+- **Kişi detay görseli.** `/zihin` menüsünden seçilen kişi için tek kişilik panel (bildikleri,
+  son olaylar, puan geçmişi). Şu an o detay modalda metin olarak duruyor.
+- **Açık tema.** Palet `zihin_gorsel.rs` başındaki `C_*` sabitlerinde tek yerde; açık tema
+  ikinci bir palet + `!zihin acik` argümanıyla eklenebilir.
+- **Gerçek glif ölçümü.** Şimdilik harf/em oranı tahmini. `fontdb`/`ttf-parser` ile gerçek
+  advance okunabilir; tahmin yukarı yuvarladığı için taşma değil, boşluk israfı riski var.
+- Görsel canlı Discord'da doğrulanmalı (ek gönderimi, koyu temada görünüm, telefonda okunurluk).
+
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
 - **`reaction_add` olayı yok:** bot tepki verir ama kendi mesajına gelen tepkiyi görmez
   (tepkiye tepki, "kim neye güldü" bilgisi kayıp).

@@ -11,7 +11,7 @@ komutlar:
 `!ajanlar` profilci ve hocayı şimdi çalıştırır
 `!uyan` uykuyu keser · `!uyu [saat]` test için uyutur
 `!durum` evre, sayaçlar, model, düşünme, uyku, seyahat
-`!zihin` zihin kartı: kişiler/konular/olaylar (detay: `/zihin` menüsü)
+`!zihin` zihni panel görseli olarak atar (detay: `/zihin` menüsü)
 `!düşünme göster|gizle|sessiz|kapat` düşünme kipi (göster: cevapla spoiler'da · gizle: düşünürken \"Düşünüyorum...\", cevap sonra · sessiz: arka planda düşünür, hiç iz göstermez · kapat: istekler reasoning'siz)
 `!model [id]` modeli gösterir/değiştirir (yalnız favori)
 slash: `/durum` `/yardim` kart, `/zihin` interaktif kart (kişi menüsü + bölüm butonları → detay modalları)";
@@ -106,14 +106,39 @@ impl Bot {
                 soyle(metin).await;
             }
             "zihin" => {
-                // kanal mesajına bileşen konmaz (modal yalnız interaction'la açılır);
-                // kart + yönlendirme yeterli
-                let embedler = modal::zihin_embedleri(&self.durum());
-                let mesaj = CreateMessage::new()
-                    .content("detay için `/zihin`")
-                    .embeds(embedler);
-                if let Err(e) = kanal.send_message(&ctx.http, mesaj).await {
-                    log::warn!("zihin kartı gönderilemedi: {e}");
+                // görsel: durumun kilitli alanları burada kopyalanır (guard satır
+                // sonunda düşer), dosya okuma ve rasterize bloklayan iş olduğu için
+                // spawn_blocking'e taşınır
+                let mut veri = zihin_gorsel::zihin_verisi(&self.durum());
+                let uretim = tokio::task::spawn_blocking(move || {
+                    zihin_gorsel::dosyalari_oku(&mut veri);
+                    let png = zihin_gorsel::zihin_png(&veri)?;
+                    let yol = hafiza::yol(zihin_gorsel::CIKTI_ADI);
+                    std::fs::write(&yol, png)?;
+                    Ok::<PathBuf, Hata>(yol)
+                })
+                .await;
+                match uretim {
+                    Ok(Ok(yol)) => {
+                        let baslik = format!("zihnim, {}", hafiza::tarih());
+                        self.gonder(ctx, kanal, &baslik, None, Some(&yol), None)
+                            .await;
+                    }
+                    // görsel çıkmazsa eski embed kartı yine gider; !zihin boş dönmez
+                    hata => {
+                        match hata {
+                            Ok(Err(e)) => log::warn!("zihin görseli üretilemedi: {e}"),
+                            Err(e) => log::warn!("zihin görseli görevi düştü: {e}"),
+                            Ok(Ok(_)) => unreachable!(),
+                        }
+                        let embedler = modal::zihin_embedleri(&self.durum());
+                        let mesaj = CreateMessage::new()
+                            .content("detay için `/zihin`")
+                            .embeds(embedler);
+                        if let Err(e) = kanal.send_message(&ctx.http, mesaj).await {
+                            log::warn!("zihin kartı gönderilemedi: {e}");
+                        }
+                    }
                 }
             }
             "düşünme" | "dusunme" => {

@@ -9,6 +9,7 @@ mod promptlar;
 mod seyahat;
 mod sohbet_cli;
 mod uyku;
+mod zihin_gorsel;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -3715,6 +3716,10 @@ async fn kapanis_bekle() {
 
 #[tokio::main]
 async fn main() -> Result<(), Hata> {
+    // alt komut: `cargo run -- zihin` discord'suz zihin görselini üretir
+    if std::env::args().nth(1).as_deref() == Some("zihin") {
+        return zihin_gorsel::cli_zihin();
+    }
     dotenvy::dotenv().ok();
     loglama::kur();
     // panikler log'a backtrace ile düşsün; spawn'lu döngülerde sessiz ölüm kalmasın

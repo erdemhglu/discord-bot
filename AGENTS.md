@@ -18,8 +18,11 @@ arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Pr
 ```
 cargo build            # derle
 cargo test             # 71 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli)
+
+cargo test             # 58 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, zihin gorseli)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
+cargo run -- zihin     # discord'suz zihin panelini durum/zihin.png'ye yazar (tasarimi gormek/test icin)
 cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR isteğe bağlı
 cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, yalnız model anahtarı); çıktı protokolünü denemek için
 ```
@@ -77,6 +80,10 @@ cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, y
 
 ## Bilinen açıklar / doğrulanmamış
 - Canlı Discord akışı hiç test edilmedi (token yok). Serenity çağrıları derleyiciden geçti.
+- **`!zihin` görseli canlı Discord'da görülmedi.** PNG yerelde üretildi ve göze bakıldı
+  (`cargo run -- zihin`), ama ek olarak gönderilmesi, Discord'un koyu temasındaki görünümü
+  ve telefonda okunurluğu doğrulanmadı. Metin genişliği Inter'de harf/em oranıyla tahmin
+  ediliyor (gerçek glif ölçümü değil); alışılmadık metinlerde sarma erken/geç olabilir.
 - Stream + thinking yalnızca birim testleriyle doğrulandı (sahte SSE sunucusu); canlı edit
   temposu (1,2 sn) Discord'ta ayrıca görülmedi.
 - Thinking yalnız model üretirse görünür (`reasoning` / `reasoning_content`); gpt-4o-mini
