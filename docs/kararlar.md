@@ -99,7 +99,7 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   eriştiği her sunucuda/kanalda çalışıyordu; ikisi de boşsa davranış aynen sürer. Ayarlanınca `message`,
   `guild_create`, `guild_member_addition`, `varsayilan_kanal` hepsi filtreler (tarama dahil, API'ye yazık
   olmasın).
-- **2026-09-02 · `mesgul` bayrağı RAII (`MesgulKilit`).** 7 farklı çıkış noktasında elle
+- **2026-09-02 · `mesgul` bayrağı RAII (`MesgulGuard`, PR #2 ile birleşti).** 7 farklı çıkış noktasında elle
   `mesgul.remove` vardı; aradaki bir `.await` panikleseydi kanal sonsuza dek "meşgul" kilitli kalırdı
   (yeniden başlamadan açılmaz). Artık `Drop` ile garanti; elle remove çağrıları kaldırıldı.
 - **2026-09-02 · HTTP client timeout ayrıldı (P0 kapandı).** Tek `.timeout(60sn)` uzun stream'i
