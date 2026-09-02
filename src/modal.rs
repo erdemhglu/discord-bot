@@ -43,8 +43,8 @@ fn sigdir(metin: &str) -> String {
 pub fn durum_metni(d: &Durum) -> String {
     let g = &d.gelisim;
     let m = &d.metrik;
-    format!(
-        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {} · token: {} çağrı, {} giriş + {} çıkış",
+    let ozet = format!(
+        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {} · token: {} çağrı, {} giriş ({} önbellek) + {} çıkış",
         gelisim::evre(g).ad,
         gelisim::gun(g) + 1,
         g.sohbet,
@@ -55,8 +55,28 @@ pub fn durum_metni(d: &Durum) -> String {
         seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
         m.cagri,
         m.giris_token,
+        m.onbellek_token,
         m.cikis_token,
-    )
+    );
+    if m.kategoriler.is_empty() {
+        return ozet;
+    }
+    use std::fmt::Write as _;
+    let mut kirilim: Vec<(&'static str, &Kullanim)> =
+        m.kategoriler.iter().map(|(ad, k)| (*ad, k)).collect();
+    kirilim.sort_by_key(|(_, k)| std::cmp::Reverse(k.prompt_tokens + k.completion_tokens));
+    let mut satirlar = String::new();
+    for (i, (ad, k)) in kirilim.iter().enumerate() {
+        if i > 0 {
+            satirlar.push_str(" · ");
+        }
+        let _ = write!(
+            satirlar,
+            "{ad}: {} giriş + {} çıkış",
+            k.prompt_tokens, k.completion_tokens
+        );
+    }
+    format!("{ozet}\ntoken kırılımı: {satirlar}")
 }
 
 // modal gösterimi için tek kişilik blok: ad + puan, etiketler, not, son bilgiler

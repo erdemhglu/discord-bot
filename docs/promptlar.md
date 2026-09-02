@@ -23,6 +23,7 @@ doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken 
 | ANALIST | analist.md | sistem (analiz) | `analiz` | — | — |
 | ISTEKLILIK | isteklilik.md | görev (analiz) | `isteklilik` (mesaj gelince, rate limitli) | `{ad}` | 80 |
 | HEDEF_SEC | hedef-sec.md | görev (analiz) | `hedef_sec` (2+ kişi yazınca) | `{ad}` | 40 |
+| RUH_HALI | ruh-hali.md | görev (analiz, JSON) | `ruh_hali_belirle` (sohbet açılınca + her 4 turda bir) | `{ad}` | 40 |
 | UYANIS | uyanis.md | görev (analiz) | `uyanis_degerlendir` (uyanış geçişinde) | `{ad}` | 100 |
 | UYANIS_CEVAP | uyanis-cevap.md | görev | `uyanis_degerlendir` (ilgi ≥5) | `{ad}`, `{konu}` | 250 |
 | PROFIL_CIKAR | profil-cikar.md | analiz | `profilci` | — | 1200 |
@@ -40,8 +41,10 @@ doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken 
 sunucu-geneli ham mesajlar few-shot örneği olarak sistem promptuna eklenmez.
 
 ## JSON bekleyen promptlar
-GUNLUKCU tek. Kod `json_ayikla` ile `{…}` arasını alır, `serde(default)` ile eksik alanları
-tolere eder; çözülemezse log'a "gunlukcu: json çözülemedi" düşer, hafıza değişmez.
+GUNLUKCU, ISTEKLILIK, HEDEF_SEC, UYANIS, RUH_HALI. Kod `json_ayikla` ile `{…}` arasını alır,
+`serde(default)` ile eksik alanları tolere eder; çözülemezse (GUNLUKCU) log'a "gunlukcu: json
+çözülemedi" düşer, hafıza değişmez; mini çağrılarda (ör. RUH_HALI) sessizce `None`/yedek davranışa
+düşülür.
 
 ## Sayı bekleyen promptlar
 HABER_SEC (tek numara), GEZGIN_SEC (virgüllü). Kod rakam dışını atar; aralık dışıysa 0 / boş.

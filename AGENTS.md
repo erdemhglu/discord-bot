@@ -5,18 +5,22 @@ ayrıntı `docs/` altındadır. Kural: buraya ancak "her an geçerli" bilgi gire
 
 ## Ne bu
 Bir discord sunucusunda yıllardır takılan bir üye gibi davranan bot. Rust (serenity 0.12 +
-tokio + reqwest), cevaplar OpenRouter (`openai/gpt-4o-mini`) ya da Mistral (`mistral-medium-latest`)
-üzerinden; ikisi de OpenAI uyumlu chat/completions, seçim `.env`'den. Kişiliği kod değil,
-arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Promptlar
-`promptlar/*.md`, `include_str!` ile derlemeye gömülür.
+tokio + reqwest), cevaplar OpenRouter (varsayılan `openai/gpt-4o-mini`) ya da Mistral
+(`mistral-medium-latest`) üzerinden; ikisi de OpenAI uyumlu chat/completions, seçim `.env`'den.
+`MODEL` ile OpenRouter üzerinden herhangi bir model seçilebilir (GLM, Grok, Gemini, Claude, ...);
+sağlayıcıya özel tek fark `cache_control` (prompt cache), hedef adrese göre koşullu eklenir
+(`onbellek_destekler`, src/main.rs — openrouter.ai'ye giden her istekte eklenir, karar openrouter'a
+bırakılır; mistral native api'de ve özel `API_ADRES` router'larında eklenmez). Kişiliği kod değil,
+arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Promptlar `promptlar/*.md`,
+`include_str!` ile derlemeye gömülür.
 
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 34 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef)
+cargo test             # 40 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
-cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI isteğe bağlı
+cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR isteğe bağlı
 ```
 
 ## Yön levhası
@@ -39,8 +43,9 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
    `{ let d = bot.durum(); ... }` bloğunda alınır, `.await` görmeden bırakılır.
 2. **Model çıktısı sınırlanır, koda güvenilir.** Puanlar `clamp`, dosya boyları sabit, mesaj
    başına 1900 karakter (aşan cevap kırpılmaz, yeni mesaja bölünür). Sohbet cevabı bütçesi
-   `cevap_butcesi!()` makrosunda: release'de max_tokens gitmez, debug'da kapak var; diğer
-   çağrılarda max_tokens sabit. Model ne derse desin favori +10.
+   `cevap_butcesi!()` makrosunda: debug `Some(2000)`, release `Some(CEVAP_TAVANI=4096)` — ikisinde
+   de üst sınır var, sıradan cevap altında kalır, yalnız tekrar/döngü gibi kaçak durumları keser;
+   diğer çağrılarda max_tokens sabit. Model ne derse desin favori +10.
 3. **Mention'lar kapalı gider** (`CreateAllowedMentions::new()`), yalnız hoş geldin pingler.
 4. **Botlara, webhook'lara, DM'lere cevap yok.** Uyurken yazmaz ama dinler: mesajlar zihne
    işlenir, uyanınca gece yazılanlar değerlendirilir (etiket varsa kesin dönüş).
@@ -78,3 +83,7 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 - Bayram tarihleri 2026-2027 için elle yazılı (`src/seyahat.rs`), sonraki yıllar eklenmeli.
 - Takma ad değiştirme (isim seçme) botun sunucuda CHANGE_NICKNAME iznine bağlı; yoksa log'a düşer, isim yine kullanılır.
 - Mistral'de görsel yorumu modele bağlı (`mistral-medium-latest` görsel destekler); desteklemezse metin yedeği.
+- `onbellek_destekler` hedef adrese bakar (yalnız `openrouter.ai`); openrouter'ın cache_control'ü
+  desteklemeyen modelde gerçekten sessizce yok saydığı varsayımı canlıda doğrulanmadı.
+- GUILD_ID/KANALLAR filtreleri ve reply-to'nun koşullu hale gelmesi (`son_etiketlendi`) canlıda
+  hiç görülmedi, yalnız derleyici+testlerle doğrulandı.

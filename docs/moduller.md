@@ -7,9 +7,12 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 
 ### Tipler
 - `Mesaj { role: &'static str, content: String }` — OpenRouter'a giden mesaj. `kullanici(..)`, `asistan(..)` kurucular.
-- `Sohbet { gecmis: Vec<Mesaj>, sayac: u32, hackli: u32 }` — bir kanaldaki açık sohbet. `sayac` botun yazdığı mesaj sayısı; `hackli` hack şakasında kalan cevap sayısı.
-- `Durum` — tek paylaşılan durum (bkz mimari.md). `Durum::yukle()` diskten profil/huy/duzeltmeler/kendim/gundem okur, dizini yeniler.
-- `Bot { durum: Mutex<Durum>, http: reqwest::Client, anahtar, haber_kanali: Option<ChannelId>, firecrawl: Option<String> }`.
+- `Sohbet { gecmis: Vec<Mesaj>, sayac: u32, hackli: u32, son_mesaj, son_etiketlendi: bool, gelen: u32, son_gelenler, ruh_hali: String }` —
+  bir kanaldaki açık sohbet. `sayac` botun yazdığı mesaj sayısı; `hackli` hack şakasında kalan cevap
+  sayısı; `son_etiketlendi` reply-to kararı için (bkz `cevapla`); `ruh_hali` `ruh_hali_belirle`'nin
+  son sonucu, "durum (yoğunluk)" biçiminde, boşsa nötr.
+- `Durum` — tek paylaşılan durum (bkz mimari.md). `Durum::yukle()` diskten profil/huy/duzeltmeler/kendim/gundem/taranan okur, dizini yeniler.
+- `Bot { durum: Mutex<Durum>, http: reqwest::Client, anahtar, haber_kanali, firecrawl, guild_id: Option<GuildId>, izinli_kanallar: Option<HashSet<ChannelId>> }`.
 - `Bot::durum() -> MutexGuard<Durum>` — zehirli kilidi de açar. **Await üstünde tutma.**
 - `Handler { bot: Arc<Bot>, baslatildi: AtomicBool }` — serenity `EventHandler`.
 - `Hata = Box<dyn Error + Send + Sync>`.
@@ -48,7 +51,8 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `yaz_akis(ctx, kanal, &mut Vec<Message>, yerlesim, yanit)` — serbest fonksiyon. Yerleşimi açık mesajlarla uzlaştırır: değişeni `EditMessage` ile düzenler, eksiği açar (yalnız ilk mesaj yanıt/mention taşır), fazlasını siler. `sil_mesajlar(ctx, Vec<Message>)` açılanları geri alır.
 - `analiz(metin, talimat, max_tokens)` — **kişiliksiz tek yol.** Sistem = `ANALIST`; kullanıcı mesajı = `metin + "---" + talimat`. Çağıranlar: profilci, gunlukcu, hoca, elestirmen, ozetleyici, haberci seçim, gezgin seçim, isteklilik, hedef seçimi.
 - `isteklilik() -> Option<u8>` — "bu konuşmaya katılayım mı?" mini değerlendirmesi: son 12 mesaj + profil + dizin → `analiz(ISTEKLILIK{ad}, 80)` → `isteklilik_puan` JSON'dan 0-10. Çağıran: `Handler::message` (kanal başına en sık 2 dk, `son_degerlendirme`). Hata/bozukta `None` → yedek zar.
-- `hedef_sec(bekleyenler) -> Option<String>` — 2+ farklı kişi yazınca kime dönüleceğini seçer: son 12 mesaj + bekleyen isimler → `analiz(HEDEF_SEC{ad}, 40)` → `hedef_ayikla` (JSON ya da düz metin, bilinen adlarla eşleştirilir). Çağıran: `cevapla`; seçilen kişinin mesajı `yanit` olur, talimata not girer.
+- `hedef_sec(bekleyenler) -> Option<String>` — 2+ farklı kişi yazınca kime dönüleceğini seçer: son 12 mesaj + bekleyen isimler → sabit blok HEDEF_SEC{ad}, değişken bekleyenler → `sor_bolumlu(..., 40)` → `hedef_ayikla` (JSON ya da düz metin, bilinen adlarla eşleştirilir). Çağıran: `cevapla`; seçilen kişinin mesajı `yanit` olur, talimata not girer.
+- `ruh_hali_belirle(gecmis) -> Option<String>` — bu sohbetin ruh halini belirler: ANALIST sabit, RUH_HALI{ad} değişken, sohbetin kendi geçmişi mesaj listesi olarak gider → `sor_bolumlu(..., 40, "ruh_hali")` → `ruh_hali_ayikla` (yoğunluk <3 ise None, nötr sayılır). Çağıran: `cevapla`, yalnız sohbet açılırken (`sayac==0`) ve her 4 turda bir; sonuç `Sohbet.ruh_hali`'ye yazılır ve talimata "ŞU ANKİ RUH HALİN" satırı olarak eklenir.
 - `gonder(ctx, kanal, metin, ping, dosya, yanit: Option<MessageId>)` — `yanit` verilirse discord yanıtı (`reference_message`) olur ve yanıtlanan kişi pinglenir (`replied_user`).  mention'lar kapalı (`CreateAllowedMentions::new()`, yalnız `ping` açılır), isteğe bağlı ek dosya; başarılıysa `kendi_mesajlarim`'a (50) ekler. Kilit gönderimden SONRA alınır.
 - `Bot::sor_bolumlu(sabit, degisken, gecmis, butce: Option<u32>)` — sistem mesajını `sistem_json` ile iki metin bloğu olarak gönderir, ilki `cache_control: ephemeral`; bütçe `None` ise max_tokens yok.
 - `sistem_json(sabit, degisken) -> Value` — değişken boşsa düz system, değilse iki blok. Serbest fonksiyon.
@@ -87,7 +91,7 @@ döngüler tik başında bakar ve döner, bekçi yeniden başlatmaz; `main`'in k
 - `interaction_create` — `Command` → adına göre modal (`modal_durum`/`modal_zihin`/`modal_yardim`); `Modal` → kısa ephemeral onay (girdi toplanmaz); `Component` → `dusunce_dugmesi` (eski düşünce butonu akışı).
 - `guild_create` — `taranan`'a ilk kez giriyorsa arka planda `gecmisi_oku → profilci → hoca (huy boşsa)`.
 - `guild_member_addition` — kanal: sunucu sistem kanalı → varsayılan; favori ise adını kaydet; sohbet açık/yasaklıysa çık; `uret(HOS_GELDIN)` → mention'lı gönder (ping açık) → sohbet başlat.
-- `message` — bot/webhook/DM ise çık; `content_safe`; boşsa çık. **1. faz (kilit):** etiketlendi mi (mention listesi, yanıtlanan mesaj botun mu, metinde bot adı geçiyor mu) → `hatirla`, `ad_id`/`kullanici_adlari`, `son_kanal`, favori adı; haber bekleme süresi dolduysa sohbeti kapat; **uyuyorsa**: etiketlendiyse `bekleyen_etiketler`'e (20) ekle, çık; sohbet açık mı + isteklilik değerlendirmesi gerekli mi (etiket/açık sohbette hayır; kanal başına en sık 2 dk). **2. faz (kilitsiz):** gerekiyorsa `isteklilik()`; puan ≥ eşik (evre ±1, seyahat +2) ise katılır; çağrı yoksa yedek zar (`SANS`). **3. faz (kilit):** katılıyorsa `sohbet_baslat`, kullanıcı satırını geçmişe ekle (20'de tut), `kanal_not`. Kilit dışı: `cevapla`.
+- `message` — bot/webhook/DM ise çık; `content_safe`; boşsa çık. **1. faz (kilit):** etiketlendi mi (mention listesi, yanıtlanan mesaj botun mu, metinde bot adı geçiyor mu) → `hatirla`, `ad_id`/`kullanici_adlari`, `son_kanal`, favori adı; haber bekleme süresi dolduysa sohbeti kapat; **uyuyorsa**: etiketlendiyse `bekleyen_etiketler`'e (20) ekle, çık; `devam_eden_diyalog` — sohbet açık VE sohbetteki son user mesajının sahibi bu mesajı atanla aynı isimse (gerçekten kendisiyle konuşuyor) → doğrudan cevaplanır, isteklilik değerlendirmesi atlanır. Etiket de aynı şekilde doğrudan cevaplanır. İkisi de değilse (kanalda başka biri yazdı, ya da sohbet yok) isteklilik değerlendirmesi gerekir (kanal başına en sık 2 dk). **2. faz (kilitsiz):** gerekiyorsa `isteklilik()`; puan ≥ eşik (evre ±1, seyahat +2) ise katılır; çağrı yoksa yedek zar (`SANS`). **3. faz (kilit):** katılıyorsa `sohbet_baslat`, kullanıcı satırını geçmişe ekle (20'de tut), `kanal_not`. Kilit dışı: `cevapla`. Not: bu, bir kez açılan sohbette kanaldaki HERKESE otomatik cevap verme davranışını (eski tasarım) kaldırır — yalnız gerçek muhatabına.
 
 ### Başlangıç
 - `ayar(isim)` — boş olmayan env değişkeni ya da açık hata.

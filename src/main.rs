@@ -51,15 +51,18 @@ const MESAJ_SINIRI: usize = 1900; // discord 2000 kabul ediyor, pay bırakıyoru
 const AKIS_DUZENLEME: Duration = Duration::from_millis(1200); // stream düzenlemeleri bundan sık olmaz (discord edit sınırı)
 const DUSUNCE_DUGMESI: &str = "dusunce_goster"; // gizle kipinde cevap sonundaki düşünce butonunun kimliği
 
-// sohbet cevabı token bütçesi: derleme durumuna göre değişir.
-// release'de None → model sonuna kadar konuşur, bütçe yok.
-// debug'da Some → geliştirme/test turunda token yakmasın diye küçük kapak.
+// sohbet cevabı token bütçesi. release'de CEVAP_TAVANI: sıradan bir sohbet cevabı bunun
+// çok altında kalır, yalnız tekrar/döngü gibi kaçak durumlarda maliyeti keser.
+// 4096 seçildi çünkü reasoning üreten modellerde düşünce tokenleri de bu bütçeden düşer;
+// daha dar tavanda uzun düşünce + cevap kırpılabilirdi.
+// debug'da daha küçük Some → geliştirme/test turunda token yakmasın diye kapak.
+const CEVAP_TAVANI: u32 = 4096;
 macro_rules! cevap_butcesi {
     () => {
         if cfg!(debug_assertions) {
             Some(2000u32)
         } else {
-            None
+            Some(CEVAP_TAVANI)
         }
     };
 }
@@ -106,10 +109,12 @@ struct Sohbet {
     sayac: u32,
     hackli: u32, // 0 değilse hacklenmiş taklidi sürüyor, her cevapta bir azalır
     son_mesaj: Option<MessageId>, // cevaplanacak mesaj (discord yanıtı olarak)
+    son_etiketlendi: bool, // son_mesaj etiket/yanıt/ad ile mi geldi (reply-to gerekçesi)
     gelen: u32,  // gelen kullanıcı mesajı sayısı; cevap yazarken yenisi geldi mi anlamak için
     // botun son cevabından beri gelenler (isim, mesaj id); hedef seçiminde kullanılır,
     // bot cevap verince boşalır
     son_gelenler: VecDeque<(String, MessageId)>,
+    ruh_hali: String, // "kafa karışıklığı (6)" gibi; boşsa henüz belirlenmedi ya da yoğunluk düşük
 }
 
 // düşünme gösterim kipi; !düşünme ile değişir, durum/dusunme.md'de kalır
@@ -224,6 +229,13 @@ impl Durum {
                 .map(|(id, v)| (ChannelId::new(id), v))
                 .collect(),
             dusunme: DusunmeKip::oku(),
+            // daha önce taranmış sunucular: her yeniden başlangıçta 14 günlük geçmişi
+            // yeniden çekmesin diye kalıcı (guild_create her ready'de yeniden gelir)
+            taranan: hafiza::oku("taranan.md")
+                .lines()
+                .filter_map(|l| l.trim().parse::<u64>().ok())
+                .map(GuildId::new)
+                .collect(),
             ..Durum::default()
         }
     }
@@ -265,6 +277,8 @@ struct Bot {
     anahtar: String,
     haber_kanali: Option<ChannelId>,
     firecrawl: Option<String>, // yoksa sayfalar düz indirilir
+    guild_id: Option<GuildId>, // .env GUILD_ID; ayarlıysa yalnız bu sunucuda çalışır
+    izinli_kanallar: Option<HashSet<ChannelId>>, // .env KANALLAR; ayarlıysa yalnız bu kanallarda
 }
 
 impl Bot {
@@ -272,13 +286,21 @@ impl Bot {
         self.durum.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    // model kullanımını oturum metriğine ekler
-    fn metrik_ekle(&self, k: Kullanim) {
+    // model kullanımını oturum metriğine ekler, kategoriye göre de kırılır (!durum döker)
+    fn metrik_ekle(&self, kategori: &'static str, k: Kullanim) {
+        log::debug!(
+            "api [{kategori}]: giris={} onbellek={} cikis={}",
+            k.prompt_tokens,
+            k.prompt_tokens_details.cached_tokens,
+            k.completion_tokens,
+        );
         let mut d = self.durum();
         d.metrik.cagri += 1;
         d.metrik.giris_token += k.prompt_tokens;
+        d.metrik.onbellek_token += k.prompt_tokens_details.cached_tokens;
         d.metrik.cikis_token += k.completion_tokens;
         d.metrik.son_cagri_sn = simdi_unix();
+        d.metrik.kategoriler.entry(kategori).or_default().topla(k);
     }
 }
 
@@ -303,45 +325,49 @@ fn hatirla(d: &mut Durum, isim: &str, metin: &str) {
 }
 
 // uzun metni en çok sinir karakterlik parçalara böler: önce cümle sınırı,
-// sonra boşluk, o da yoksa tam sınırdan sert keser; hiçbir şey atılmaz
+// sonra boşluk, o da yoksa tam sınırdan sert keser; hiçbir şey atılmaz.
+// dilim üzerinde yürür: tur başına ara tahsis yok, yalnız çıkan parça String olur
 fn bol(metin: &str, sinir: usize) -> Vec<String> {
     let mut parcalar: Vec<String> = Vec::new();
-    let mut kalan = metin.trim().to_string();
-    while kalan.chars().count() > sinir {
-        let kes = kesim_noktasi(&kalan, sinir);
-        let bas: String = kalan.chars().take(kes).collect();
-        kalan = kalan.chars().skip(kes).collect();
-        let bas = bas.trim().to_string();
+    let mut kalan = metin.trim();
+    while kalan.char_indices().nth(sinir).is_some() {
+        let kes = kesim_noktasi(kalan, sinir); // bayt ofseti
+        let bas = kalan[..kes].trim();
         if !bas.is_empty() {
-            parcalar.push(bas);
+            parcalar.push(bas.to_string());
         }
-        kalan = kalan.trim_start().to_string();
+        kalan = kalan[kes..].trim_start();
     }
     if !kalan.is_empty() {
-        parcalar.push(kalan);
+        parcalar.push(kalan.to_string());
     }
     parcalar
 }
 
-// ilk sinir karakter içindeki en iyi kesim yeri; çok ufak parça çıkmasın diye
-// cümle/boşluk kesimi sınırın dörtte birinden sonra değilse sert kese düşer
+// ilk sinir karakter içindeki en iyi kesim yerinin BAYT ofseti; çok ufak parça
+// çıkmasın diye cümle/boşluk kesimi sınırın dörtte birinden sonra değilse sert kese düşer
 fn kesim_noktasi(metin: &str, sinir: usize) -> usize {
-    let mut cumle = 0;
-    let mut bosluk = 0;
-    for (i, c) in metin.chars().take(sinir).enumerate() {
+    let mut cumle = (0usize, 0usize); // (karakter sırası, bayt ofseti)
+    let mut bosluk = (0usize, 0usize);
+    let mut bitis = metin.len();
+    for (i, (off, c)) in metin.char_indices().enumerate() {
+        if i >= sinir {
+            bitis = off;
+            break;
+        }
         if matches!(c, '.' | '!' | '?' | '\n') {
-            cumle = i + 1;
+            cumle = (i + 1, off + c.len_utf8());
         } else if c == ' ' {
-            bosluk = i;
+            bosluk = (i, off);
         }
     }
     let asgari = sinir / 4;
-    if cumle > asgari {
-        cumle
-    } else if bosluk > asgari {
-        bosluk
+    if cumle.0 > asgari {
+        cumle.1
+    } else if bosluk.0 > asgari {
+        bosluk.1
     } else {
-        sinir
+        bitis
     }
 }
 
@@ -357,32 +383,42 @@ fn kanal_not(d: &mut Durum, kanal: ChannelId, satir: String) {
     while g.len() > KANAL_GECMIS {
         g.pop_front();
     }
-    let icerik = g.iter().cloned().collect::<Vec<_>>().join("\n");
+    // ara Vec yok: doğrudan tek String'e birleştirilir
+    let mut icerik = String::new();
+    for (i, satir) in g.iter().enumerate() {
+        if i > 0 {
+            icerik.push('\n');
+        }
+        icerik.push_str(satir);
+    }
     hafiza::yaz(&format!("kanallar/{}.md", kanal.get()), &icerik);
 }
 
 fn son_mesajlar(d: &Durum, n: usize) -> String {
     let atla = d.hafiza.len().saturating_sub(n);
-    d.hafiza
-        .iter()
-        .skip(atla)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut s = String::new();
+    for (i, satir) in d.hafiza.iter().skip(atla).enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        s.push_str(satir);
+    }
+    s
 }
 
 fn dokum(gecmis: &[Mesaj], bot_adi: &str) -> String {
-    gecmis
-        .iter()
-        .map(|m| {
-            if m.role == "assistant" {
-                format!("{bot_adi}: {}", m.content)
-            } else {
-                m.content.clone()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut s = String::new();
+    for (i, m) in gecmis.iter().enumerate() {
+        if i > 0 {
+            s.push('\n');
+        }
+        if m.role == "assistant" {
+            s.push_str(bot_adi);
+            s.push_str(": ");
+        }
+        s.push_str(&m.content);
+    }
+    s
 }
 
 // karşılaştırma için küçük harfe indirir; İ→i̇ dönüşümünün eklediği birleşik
@@ -391,39 +427,41 @@ fn kucult(s: &str) -> String {
     s.to_lowercase().replace('\u{0307}', "")
 }
 
-// modelin başa ekleyebildiği ad öneki ve tırnakları soyar.
-// char güvenli: bayt dilimi türkçe adlarda panikletebilir (İ→i̇ lowercase'de
-// bayt sayısı değişir), onun yerine karakter sayısıyla atlanır
-fn soy(mut metin: String, bot_adi: &str) -> String {
-    metin = metin.trim().to_string();
+// modelin başa ekleyebildiği ad öneki ve tırnakları soyar; dilim döndürür.
+// sıcak yolda (stream'de her edit) metnin tamamı klonlanıp lowercase edilmez:
+// önek karşılaştırması yalnız ilk karakterlere, kucult'taki gibi birleşik nokta atılarak
+fn soy<'a>(metin: &'a str, bot_adi: &str) -> &'a str {
+    let mut m = metin.trim();
     // "isim: metin" kalıbını taklit edip başına kendi adını koyabiliyor
     let onek = format!("{bot_adi}:");
-    if kucult(&metin).starts_with(&kucult(&onek)) {
-        let karakter = onek.chars().count();
-        metin = metin
-            .chars()
-            .skip(karakter)
-            .collect::<String>()
-            .trim()
-            .to_string();
+    let karakter = onek.chars().count();
+    let bas: String = m
+        .chars()
+        .take(karakter)
+        .flat_map(|c| c.to_lowercase())
+        .filter(|&c| c != '\u{0307}')
+        .collect();
+    if bas.starts_with(&kucult(&onek)) {
+        m = match m.char_indices().nth(karakter) {
+            Some((off, _)) => m[off..].trim(),
+            None => "",
+        };
     }
-    if metin.chars().count() > 1 && metin.starts_with('"') && metin.ends_with('"') {
-        let mut c = metin.chars();
-        c.next();
-        c.next_back();
-        metin = c.as_str().to_string();
+    if m.chars().count() > 1 && m.starts_with('"') && m.ends_with('"') {
+        m = &m[1..m.len() - 1];
     }
-    metin
+    m
 }
 
 // stream'siz yollar tek mesajla sınırlı: soy + 1900 kapak.
 // stream yolu soy'dan sonra bol() ile bölerek gönderir, kırpma yok.
 fn temizle(metin: String, bot_adi: &str) -> String {
-    let mut metin = soy(metin, bot_adi);
-    if metin.chars().count() > MESAJ_SINIRI {
-        metin = metin.chars().take(MESAJ_SINIRI).collect();
+    let m = soy(&metin, bot_adi);
+    // sınırda bayt ofsetini bul, yerinde kes: ara collect yok
+    match m.char_indices().nth(MESAJ_SINIRI) {
+        Some((off, _)) => m[..off].to_string(),
+        None => m.to_string(),
     }
-    metin
 }
 
 // geçici sayılan durum kodları: geri çekilip yeniden denemeye değer
@@ -441,6 +479,12 @@ fn kirp_hata(metin: &str) -> String {
         .chars()
         .take(300)
         .collect()
+}
+
+// sağlayıcı "reasoning kapatılamaz" diye 400 dönmüş mü (bazı GLM reasoning varyantları gibi)
+fn reasoning_zorunlu_hatasi(govde_metni: &str) -> bool {
+    let m = govde_metni.to_lowercase();
+    m.contains("reasoning") && (m.contains("mandatory") || m.contains("cannot be disabled"))
 }
 
 // ```json ... ``` gibi süslerin içinden json'u çıkarır
@@ -491,6 +535,27 @@ fn hedef_ayikla(cevap: &str, bilinenler: &[String]) -> Option<String> {
         .or(Some(aday))
 }
 
+// ruh hali cevabından durum+yoğunluğu çözer; yoğunluk düşükse (nötr) hiç yansıtmaya değmez
+fn ruh_hali_ayikla(cevap: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct RuhHali {
+        #[serde(default)]
+        durum: String,
+        #[serde(default)]
+        yogunluk: i32,
+    }
+    let r: RuhHali = serde_json::from_str(json_ayikla(cevap)).ok()?;
+    let durum = r.durum.trim();
+    if durum.is_empty() {
+        return None;
+    }
+    let yogunluk = r.yogunluk.clamp(1, 10);
+    if yogunluk < 3 {
+        return None; // nötr/belirsiz: talimata eklemeye değmez, düz kişilik konuşsun
+    }
+    Some(format!("{durum} ({yogunluk})"))
+}
+
 // ---------- yapay zeka ----------
 
 #[derive(Deserialize)]
@@ -515,22 +580,35 @@ struct Kullanim {
     prompt_tokens: u64,
     #[serde(default)]
     completion_tokens: u64,
+    #[serde(default)]
+    prompt_tokens_details: OnbellekDetay,
+}
+
+// openai uyumlu sağlayıcıların prompt cache isabetini bildirdiği alan; yoksa 0
+#[derive(Deserialize, Default, Clone, Copy, Debug)]
+struct OnbellekDetay {
+    #[serde(default)]
+    cached_tokens: u64,
 }
 
 impl Kullanim {
     fn topla(&mut self, diger: Kullanim) {
         self.prompt_tokens += diger.prompt_tokens;
         self.completion_tokens += diger.completion_tokens;
+        self.prompt_tokens_details.cached_tokens += diger.prompt_tokens_details.cached_tokens;
     }
 }
 
-// oturum boyu biriken model kullanım metriği; !durum bunu gösterir
-#[derive(Default, Clone, Copy, Debug)]
+// oturum boyu biriken model kullanım metriği; !durum bunu gösterir.
+// kategoriler çağrı türüne göre kırılım verir (sohbet/isteklilik/profilci/...).
+#[derive(Default, Clone, Debug)]
 struct Metrik {
     cagri: u32,
     giris_token: u64,
+    onbellek_token: u64, // giris_token içinden önbellekten karşılanan (sağlayıcı bildirdiyse)
     cikis_token: u64,
     son_cagri_sn: i64,
+    kategoriler: HashMap<&'static str, Kullanim>,
 }
 
 // stream parçası: reasoning modellerde düşünce de gelir, düz modellerde yalnız content
@@ -601,10 +679,11 @@ fn sse_ayikla(satir: &str) -> Option<SseVeri> {
 // stream isteğinin okuyucusu; her çağrıda sıradaki parçayı verir, akış bitince None
 struct AkisOkuyucu {
     cevap: reqwest::Response,
-    tampon: Vec<u8>,    // henüz satıra bölünmemiş baytlar
-    kuyruk: Vec<Parca>, // çözülmüş, verilmeyi bekleyen parçalar
-    kullanim: Kullanim, // son chunk'tan toplanan token sayacı
-    done: bool,         // [DONE] görüldü mü (temiz kapanış işareti)
+    tampon: Vec<u8>,        // henüz satıra bölünmemiş baytlar
+    kuyruk: Vec<Parca>,     // çözülmüş, verilmeyi bekleyen parçalar
+    kullanim: Kullanim,     // son chunk'tan toplanan token sayacı
+    kategori: &'static str, // token metriği kırılımı için (!durum)
+    done: bool,             // [DONE] görüldü mü (temiz kapanış işareti)
     bitti: bool,
 }
 
@@ -692,28 +771,49 @@ struct AkisBaglam<'a> {
 }
 
 impl Bot {
-    // düşünme kapalıysa modelin reasoning üretmesini istekte kapatır (token harcamasın);
+    // düşünme kapalıysa modelin reasoning üretmesini istekte kapatır (token harcamasın).
     // her sağlayıcının dili farklı: openrouter "reasoning", qwen tarzı router'lar
     // "enable_thinking" anlar, mistral'de düğme yok (ikisini birden yollamak bazı
-    // sağlayıcıları bozuyordu, adres bazlı seçilir)
-    fn reasoning_kapat(&self, govde: &mut serde_json::Value) {
+    // sağlayıcıları bozuyordu, adres bazlı seçilir). Alanları gerçekten eklediyse true
+    // döner (bazı modeller yine de reasoning'i kapatmaya izin vermiyor, çağıran taraf
+    // bunu geri alıp bir kez daha dener).
+    fn reasoning_kapat(&self, govde: &mut serde_json::Value) -> bool {
         if self.durum().dusunme != DusunmeKip::Kapali {
-            return;
+            return false;
         }
         let Some(o) = govde.as_object_mut() else {
-            return;
+            return false;
         };
         let adres = self.api_adres.to_lowercase();
         if adres.contains("openrouter") {
             o.insert("reasoning".into(), serde_json::json!({ "enabled": false }));
         } else if !adres.contains("mistral") {
             o.insert("enable_thinking".into(), serde_json::json!(false));
+        } else {
+            return false; // mistral: hiçbir alan eklenmedi, geri alacak bir şey yok
+        }
+        true
+    }
+
+    // reasoning_kapat'ın eklediği alanları geri alır (mandatory-reasoning hatasında yeniden deneme için)
+    fn reasoning_alanlarini_kaldir(govde: &mut serde_json::Value) {
+        if let Some(o) = govde.as_object_mut() {
+            o.remove("reasoning");
+            o.remove("enable_thinking");
         }
     }
 
-    // açıklayıcı hata ile ham istek; ağ hatası / 429 / 5xx'te geri çekilip yeniden dener
-    async fn sor_ham(&self, mut govde: serde_json::Value) -> Result<String, Hata> {
-        self.reasoning_kapat(&mut govde);
+    // açıklayıcı hata ile ham istek; her şey buradan geçer. Ağ hatası / 429 / 5xx'te geri
+    // çekilip yeniden dener; bazı modeller (ör. bazı GLM reasoning varyantları) reasoning'i
+    // kapatmaya izin vermiyor ("mandatory"/"cannot be disabled" 400) — o durumda alanları
+    // kaldırıp açık haliyle yeniden dener, model her turda başarısız olup sohbeti tıkamasın.
+    // kategori yalnız token metriğinde kırılım için (!durum), isteğe hiçbir etkisi yok.
+    async fn sor_ham(
+        &self,
+        mut govde: serde_json::Value,
+        kategori: &'static str,
+    ) -> Result<String, Hata> {
+        let mut kapatildi = self.reasoning_kapat(&mut govde);
         let mut son_hata: Hata = "istek hiç yapılamadı".into();
         for deneme in 0..=AI_YENIDEN_DENEME {
             if deneme > 0 {
@@ -742,6 +842,16 @@ impl Bot {
                 let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
                 let hata: Hata =
                     format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into();
+                if deneme < AI_YENIDEN_DENEME && kapatildi && reasoning_zorunlu_hatasi(&govde_metni)
+                {
+                    log::warn!(
+                        "ai [sor_ham]: model reasoning kapatılmasına izin vermiyor, açık yeniden deneniyor"
+                    );
+                    Self::reasoning_alanlarini_kaldir(&mut govde);
+                    kapatildi = false;
+                    son_hata = hata;
+                    continue;
+                }
                 if deneme < AI_YENIDEN_DENEME && durum_denenebilir(durum) {
                     son_hata = hata;
                     continue;
@@ -750,7 +860,7 @@ impl Bot {
             }
             let yanit: Yanit = serde_json::from_str(&govde_metni)?;
             if let Some(k) = yanit.usage {
-                self.metrik_ekle(k);
+                self.metrik_ekle(kategori, k);
             }
             let metin = yanit
                 .choices
@@ -763,12 +873,19 @@ impl Bot {
         Err(son_hata)
     }
 
-    async fn sor(&self, sistem: &str, gecmis: &[Mesaj], max_tokens: u32) -> Result<String, Hata> {
-        self.sor_bolumlu(sistem, "", gecmis, Some(max_tokens)).await
+    async fn sor(
+        &self,
+        sistem: &str,
+        gecmis: &[Mesaj],
+        max_tokens: u32,
+        kategori: &'static str,
+    ) -> Result<String, Hata> {
+        self.sor_bolumlu(sistem, "", gecmis, Some(max_tokens), kategori)
+            .await
     }
 
-    // sistem mesajı iki blok: sabit blok cache_control ile işaretli (anthropic/gemini önbelleğe alır,
-    // openai zaten öneki kendi önbellekler); değişken blok her seferinde yeniden okunur.
+    // sistem mesajı iki blok: sabit blok destekleyen sağlayıcılarda cache_control ile
+    // işaretli (anthropic/gemini); değişken blok her seferinde yeniden okunur.
     // butce None ise max_tokens gitmez, model bütçesiz konuşur.
     async fn sor_bolumlu(
         &self,
@@ -776,22 +893,24 @@ impl Bot {
         degisken: &str,
         gecmis: &[Mesaj],
         butce: Option<u32>,
+        kategori: &'static str,
     ) -> Result<String, Hata> {
-        let mut mesajlar = vec![sistem_json(sabit, degisken)];
+        let model = self.durum().model.clone();
+        let mut mesajlar = vec![sistem_json(sabit, degisken, &self.api_adres)];
         mesajlar.extend(
             gecmis
                 .iter()
                 .map(|m| serde_json::json!({ "role": m.role, "content": m.content })),
         );
         let mut govde = serde_json::json!({
-            "model": self.durum().model.clone(),
+            "model": model,
             "messages": mesajlar,
             "temperature": 0.7,
         });
         if let Some(t) = butce {
             govde["max_tokens"] = serde_json::json!(t);
         }
-        self.sor_ham(govde).await
+        self.sor_ham(govde, kategori).await
     }
 
     // stream istek: hata kontrolü sor_ham ile aynı, gövdeye stream eklenir.
@@ -802,15 +921,17 @@ impl Bot {
         degisken: &str,
         gecmis: &[Mesaj],
         butce: Option<u32>,
+        kategori: &'static str,
     ) -> Result<AkisOkuyucu, Hata> {
-        let mut mesajlar = vec![sistem_json(sabit, degisken)];
+        let model = self.durum().model.clone();
+        let mut mesajlar = vec![sistem_json(sabit, degisken, &self.api_adres)];
         mesajlar.extend(
             gecmis
                 .iter()
                 .map(|m| serde_json::json!({ "role": m.role, "content": m.content })),
         );
         let mut govde = serde_json::json!({
-            "model": self.durum().model.clone(),
+            "model": model,
             "messages": mesajlar,
             "temperature": 0.7,
             "stream": true,
@@ -820,9 +941,9 @@ impl Bot {
         if let Some(t) = butce {
             govde["max_tokens"] = serde_json::json!(t);
         }
-        self.reasoning_kapat(&mut govde);
-        // yeniden deneme yalnız akış açılmadan önce: parça gelmeye başladıysa
-        // okuyucu dönmüş olur, sonrası gonder_akis'in yarım-kaldı yoludur
+        let mut kapatildi = self.reasoning_kapat(&mut govde);
+        // yeniden deneme yalnız akış açılmadan önce: parça gelmeye başladıysa okuyucu dönmüş
+        // olur, sonrası gonder_akis'in yarım-kaldı yoludur
         let mut son_hata: Hata = "istek hiç yapılamadı".into();
         for deneme in 0..=AI_YENIDEN_DENEME {
             if deneme > 0 {
@@ -850,6 +971,16 @@ impl Bot {
                 let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
                 let hata: Hata =
                     format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into();
+                if deneme < AI_YENIDEN_DENEME && kapatildi && reasoning_zorunlu_hatasi(&govde_metni)
+                {
+                    log::warn!(
+                        "ai [sor_ham_akis]: model reasoning kapatılmasına izin vermiyor, açık yeniden deneniyor"
+                    );
+                    Self::reasoning_alanlarini_kaldir(&mut govde);
+                    kapatildi = false;
+                    son_hata = hata;
+                    continue;
+                }
                 if deneme < AI_YENIDEN_DENEME && durum_denenebilir(durum) {
                     son_hata = hata;
                     continue;
@@ -861,6 +992,7 @@ impl Bot {
                 tampon: Vec::new(),
                 kuyruk: Vec::new(),
                 kullanim: Kullanim::default(),
+                kategori,
                 done: false,
                 bitti: false,
             });
@@ -876,7 +1008,8 @@ impl Bot {
         for m in gecmis.iter().filter(|m| m.role == "user") {
             match m.content.split_once(": ") {
                 Some((isim, metin)) => {
-                    if !katilimcilar.contains(&isim.to_string()) {
+                    // contains için geçici String üretilmez; dilimle karşılaştırılır
+                    if !katilimcilar.iter().any(|k| k.as_str() == isim) {
                         katilimcilar.push(isim.to_string());
                     }
                     metinler.push(metin.to_string());
@@ -893,14 +1026,18 @@ impl Bot {
 
     // kişilikle konuşur: sohbet, hoş geldin, laf atma, haber tanıtma, şakalar.
     // butce None ise max_tokens gitmez; sohbet cevapları bunu cevap_butcesi! ile belirler.
+    // kategori yalnız token metriğinde kırılım için (!durum), isteğe hiçbir etkisi yok.
     async fn uret(
         &self,
         gecmis: &[Mesaj],
         talimat: &str,
         butce: Option<u32>,
+        kategori: &'static str,
     ) -> Result<String, Hata> {
         let (sabit, degisken, bot_adi) = self.sohbet_sistemi(gecmis, talimat);
-        let cevap = self.sor_bolumlu(&sabit, &degisken, gecmis, butce).await?;
+        let cevap = self
+            .sor_bolumlu(&sabit, &degisken, gecmis, butce, kategori)
+            .await?;
         Ok(temizle(cevap, &bot_adi))
     }
 
@@ -910,20 +1047,31 @@ impl Bot {
         gecmis: &[Mesaj],
         talimat: &str,
         butce: Option<u32>,
+        kategori: &'static str,
     ) -> Result<(AkisOkuyucu, String), Hata> {
         let (sabit, degisken, bot_adi) = self.sohbet_sistemi(gecmis, talimat);
-        let okuyucu = self.sor_ham_akis(&sabit, &degisken, gecmis, butce).await?;
+        let okuyucu = self
+            .sor_ham_akis(&sabit, &degisken, gecmis, butce, kategori)
+            .await?;
         Ok((okuyucu, bot_adi))
     }
 
     // kişiliksiz, düz analiz: ajanlar bunu kullanır
-    async fn analiz(&self, metin: &str, talimat: &str, max_tokens: u32) -> Result<String, Hata> {
+    async fn analiz(
+        &self,
+        metin: &str,
+        talimat: &str,
+        max_tokens: u32,
+        kategori: &'static str,
+    ) -> Result<String, Hata> {
         let girdi = kullanici(format!("{metin}\n\n---\n\n{talimat}"));
-        self.sor(ANALIST, &[girdi], max_tokens).await
+        self.sor(ANALIST, &[girdi], max_tokens, kategori).await
     }
 
     // "bu konuşmaya katılmak istiyor muyum?" mini değerlendirmesi (0-10 puan).
-    // etiket/yanıt her zaman cevaplanır, buraya hiç gelmez; hata durumunda None (yedek zar devrede)
+    // etiket/yanıt her zaman cevaplanır, buraya hiç gelmez; hata durumunda None (yedek zar devrede).
+    // profil+dizin sabit blokta (cache_control): ana sohbetteki aynı içerikle örtüşür, 6 saatte
+    // bir değişir; her mesajda tekrar tekrar tam fiyatına yollanmasın diye ayrı tutulur.
     async fn isteklilik(&self) -> Option<u8> {
         let (baglam, profil, dizin, bot_adi) = {
             let d = self.durum();
@@ -937,10 +1085,13 @@ impl Bot {
         if baglam.trim().is_empty() {
             return None;
         }
-        let talimat = ISTEKLILIK.replace("{ad}", &bot_adi);
-        let girdi =
-            format!("GRUP PROFİLİ\n{profil}\n\nKİŞİ DİZİNİ\n{dizin}\n\nSON MESAJLAR\n{baglam}");
-        match self.analiz(&girdi, &talimat, 80).await {
+        let sabit = format!("{ANALIST}\n\nGRUP PROFİLİ\n{profil}\n\nKİŞİ DİZİNİ\n{dizin}");
+        let degisken = ISTEKLILIK.replace("{ad}", &bot_adi);
+        let girdi = kullanici(format!("SON MESAJLAR\n{baglam}"));
+        match self
+            .sor_bolumlu(&sabit, &degisken, &[girdi], Some(80), "isteklilik")
+            .await
+        {
             Ok(c) => isteklilik_puan(&c),
             Err(e) => {
                 log::debug!("isteklilik: çağrı başarısız: {e}");
@@ -949,21 +1100,43 @@ impl Bot {
         }
     }
 
-    // üst üste farklı kişiler yazınca cevap kime dönsün? bekleyen isimler arasından seçer
+    // üst üste farklı kişiler yazınca cevap kime dönsün? bekleyen isimler arasından seçer.
+    // talimat sabit blokta (cache_control): profil/dizin içermez ama en azından kendi başına sabit kalır.
     async fn hedef_sec(&self, bekleyenler: &[String]) -> Option<String> {
         let (baglam, bot_adi) = {
             let d = self.durum();
             (son_mesajlar(&d, 12), d.bot_adi.clone())
         };
-        let talimat = HEDEF_SEC.replace("{ad}", &bot_adi);
-        let girdi = format!(
-            "SON MESAJLAR\n{baglam}\n\nBEKLEYENLER\n- {}",
-            bekleyenler.join("\n- ")
-        );
-        match self.analiz(&girdi, &talimat, 40).await {
+        let sabit = format!("{ANALIST}\n\n{}", HEDEF_SEC.replace("{ad}", &bot_adi));
+        let degisken = format!("BEKLEYENLER\n- {}", bekleyenler.join("\n- "));
+        let girdi = kullanici(format!("SON MESAJLAR\n{baglam}"));
+        match self
+            .sor_bolumlu(&sabit, &degisken, &[girdi], Some(40), "hedef_sec")
+            .await
+        {
             Ok(c) => hedef_ayikla(&c, bekleyenler),
             Err(e) => {
                 log::debug!("hedef_sec: çağrı başarısız: {e}");
+                None
+            }
+        }
+    }
+
+    // bu sohbetin ruh halini belirler: ucuz mini çağrı, `cevapla` yalnız sohbet açılırken ve
+    // birkaç turda bir çağırır (her mesajda değil). Nötr/düşük yoğunluk ya da hata → None,
+    // çağıran taraf bunu "belirgin bir ruh hali yok" olarak ele alır.
+    async fn ruh_hali_belirle(&self, gecmis: &[Mesaj]) -> Option<String> {
+        if gecmis.is_empty() {
+            return None;
+        }
+        let degisken = RUH_HALI.replace("{ad}", &self.durum().bot_adi);
+        match self
+            .sor_bolumlu(ANALIST, &degisken, gecmis, Some(40), "ruh_hali")
+            .await
+        {
+            Ok(c) => ruh_hali_ayikla(&c),
+            Err(e) => {
+                log::debug!("ruh_hali: çağrı başarısız: {e}");
                 None
             }
         }
@@ -1045,8 +1218,8 @@ impl Bot {
                     }
                     if ilk || son_yazma.elapsed() >= AKIS_DUZENLEME {
                         ilk = false;
-                        let yerlesim =
-                            akis_gorunum(kip, &dusunce, &soy(metin.clone(), baglam.bot_adi));
+                        // soy dilim döndürür: her edit'te metnin tamamı klonlanmaz
+                        let yerlesim = akis_gorunum(kip, &dusunce, soy(&metin, baglam.bot_adi));
                         if !yerlesim.is_empty() {
                             yaz_akis(ctx, kanal, &mut gonderilenler, &yerlesim, baglam.yanit).await;
                             son_yazma = Instant::now();
@@ -1062,7 +1235,7 @@ impl Bot {
         }
 
         // kullanım metriği ve akış özeti
-        self.metrik_ekle(okuyucu.kullanim);
+        self.metrik_ekle(okuyucu.kategori, okuyucu.kullanim);
         log::debug!(
             "akis [{kanal}]: parça={parca_sayisi} ilk={ilk_parca_ms:?}ms toplam={}ms done={}",
             baslangic.elapsed().as_millis(),
@@ -1074,7 +1247,7 @@ impl Bot {
 
         // yeni mesaj gelse de akış tamamlanır: cevap snapshot'a gider, yeni mesaj
         // sıradaki turda ele alınır (sil-baştan yok)
-        let mut cevap = soy(metin, baglam.bot_adi);
+        let mut cevap = soy(&metin, baglam.bot_adi).to_string();
         // boş ya da önceki mesajın kırıntısı ("'cım" gibi) gitmesin
         if cevap.chars().count() < 3 || cevap.starts_with('\'') {
             sil_mesajlar(ctx, gonderilenler).await;
@@ -1086,7 +1259,7 @@ impl Bot {
         // aynı lafı iki kez etmesin: bir kez yeniden üret, yine aynıysa susar
         if self.tekrar_mi(kanal, &cevap) {
             let t2 = format!("{}\n\nAz önce aynen şunu yazdın: \"{cevap}\". Aynısını ya da benzerini yazma; başka bir açıdan gir ya da konuyu değiştir.", baglam.talimat);
-            match self.uret(baglam.gecmis, &t2, baglam.butce).await {
+            match self.uret(baglam.gecmis, &t2, baglam.butce, "sohbet").await {
                 Ok(y) if !self.tekrar_mi(kanal, &y) && y.chars().count() >= 3 => cevap = y,
                 _ => {
                     sil_mesajlar(ctx, gonderilenler).await;
@@ -1252,17 +1425,30 @@ async fn sil_mesajlar(ctx: &Context, mesajlar: Vec<Message>) {
     }
 }
 
-// sistem mesajını OpenAI uyumlu bloğa çevirir: değişken boşsa düz metin,
-// değilse sabit blok cache_control ile işaretli iki metin bloğu
-fn sistem_json(sabit: &str, degisken: &str) -> serde_json::Value {
+// cache_control anthropic'in uydurduğu bir alan. OpenRouter'a giden her istekte güvenle
+// eklenebilir: openrouter kendi birleşik şemasının bir parçası olarak kabul eder, hangi modelde
+// gerçekten önbellekleyeceğine (claude, gemini, ...) kendi tarafında karar verir, desteklemeyen
+// modelde sessizce yok sayar — model adını burada tahmin etmeye gerek yok. Mistral'in native
+// API'si ya da `API_ADRES` ile verilen özel bir router aynı garantiyi vermez: bilinmeyen alanla
+// isteği tümden reddedebilir, o yüzden yalnız openrouter adresine gidiyorsa eklenir.
+fn onbellek_destekler(api_adres: &str) -> bool {
+    api_adres.contains("openrouter.ai")
+}
+
+// sistem mesajını OpenAI uyumlu bloğa çevirir: değişken boşsa düz metin, değilse sabit+değişken
+// iki metin bloğu; sabit blok yalnız openrouter'a giderken cache_control ile işaretlenir
+fn sistem_json(sabit: &str, degisken: &str, api_adres: &str) -> serde_json::Value {
     if degisken.is_empty() {
-        serde_json::json!({ "role": "system", "content": sabit })
-    } else {
-        serde_json::json!({ "role": "system", "content": [
-            { "type": "text", "text": sabit, "cache_control": { "type": "ephemeral" } },
-            { "type": "text", "text": degisken }
-        ]})
+        return serde_json::json!({ "role": "system", "content": sabit });
     }
+    let mut ilk = serde_json::json!({ "type": "text", "text": sabit });
+    if onbellek_destekler(api_adres) {
+        ilk["cache_control"] = serde_json::json!({ "type": "ephemeral" });
+    }
+    serde_json::json!({ "role": "system", "content": [
+        ilk,
+        { "type": "text", "text": degisken }
+    ]})
 }
 
 // her cevabın sistem mesajı iki parça: SABİT (kişilik, huy, profil, dizin...; ajan çalışınca
@@ -1401,7 +1587,16 @@ impl Bot {
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
             sleep(Duration::from_millis(150 + (rand::random::<u64>() % 200))).await;
-            let (gecmis, mut yanit, gelen, son_metin, bekleyenler) = {
+            let (
+                gecmis,
+                son_mesaj,
+                son_etiketlendi,
+                gelen,
+                son_metin,
+                bekleyenler,
+                sayac,
+                ruh_hali_eski,
+            ) = {
                 let d = self.durum();
                 let Some(s) = d.sohbetler.get(&kanal) else {
                     return;
@@ -1422,17 +1617,43 @@ impl Bot {
                 (
                     s.gecmis.clone(),
                     s.son_mesaj,
+                    s.son_etiketlendi,
                     s.gelen,
                     son_metin,
                     s.son_gelenler.clone(),
+                    s.sayac,
+                    s.ruh_hali.clone(),
                 )
             };
             log::debug!(
                 "cevapla [{kanal}]: tur başı, geçmiş {} satır, gelen={gelen}",
                 gecmis.len()
             );
+            // reply-to yalnız etiket/ad geçtiyse ya da araya birden fazla mesaj girdiyse;
+            // yoksa düz mesaj (gerçek insan gibi her cevabı "yanıtla" ile bağlamaz)
+            let mut yanit = if son_etiketlendi || bekleyenler.len() > 1 {
+                son_mesaj
+            } else {
+                None
+            };
+            // ruh hali her mesajda değil, birkaç turda bir tazelenir
+            // (ucuz ama yine de bir çağrı; her cevapta yakmasın)
+            let ruh_hali = if sayac % 4 == 0 {
+                let yeni = self.ruh_hali_belirle(&gecmis).await.unwrap_or_default();
+                if let Some(s) = self.durum().sohbetler.get_mut(&kanal) {
+                    s.ruh_hali = yeni.clone();
+                }
+                yeni
+            } else {
+                ruh_hali_eski
+            };
             // istendiyse internete bak (haber, araştır, link) ve bulduklarını göreve ekle
             let mut talimat = talimat.to_string();
+            if !ruh_hali.is_empty() {
+                talimat = format!(
+                    "{talimat}\n\nŞU ANKİ RUH HALİN: {ruh_hali} — bunu ilan etme, üslubuna ve kelime seçimine yedir."
+                );
+            }
             if let Some(bulgu) = self.arastir(&son_metin).await {
                 talimat = format!(
                     "{talimat}\n\nİNTERNETTEN ŞİMDİ ÇEKTİKLERİN (istendiği için baktın; kendi ağzınla anlat, liste yapma, \"kaynak\" deme):\n{bulgu}"
@@ -1460,7 +1681,8 @@ impl Bot {
             // Model çağrısı sürerken yazıyor göstergesi görünsün; stream mesajı ilk delta ile açılır.
             let _ = kanal.broadcast_typing(&ctx.http).await;
             let butce = cevap_butcesi!();
-            let (okuyucu, bot_adi) = match self.uret_akis(&gecmis, &talimat, butce).await {
+            let (okuyucu, bot_adi) = match self.uret_akis(&gecmis, &talimat, butce, "sohbet").await
+            {
                 Ok(x) => x,
                 Err(e) => {
                     log::error!("ai [uret_akis] [{kanal}]: {e}");
@@ -1490,7 +1712,7 @@ impl Bot {
                         drop(_mesgul);
                         continue;
                     }
-                    match self.uret(&gecmis, &talimat, butce).await {
+                    match self.uret(&gecmis, &talimat, butce, "sohbet").await {
                         Ok(c)
                             if c.chars().count() >= 3
                                 && !c.starts_with('\'')
@@ -1715,7 +1937,12 @@ impl Bot {
     // kendine isim seçer, takma adını her sunucuda değiştirir, gruba söyler
     async fn isim_sec(&self, ctx: &Context) {
         let cevap = match self
-            .uret(&[kullanici("isim seçme vakti")], ISIM_SEC, Some(12))
+            .uret(
+                &[kullanici("isim seçme vakti")],
+                ISIM_SEC,
+                Some(12),
+                "isim_sec",
+            )
             .await
         {
             Ok(c) => c,
@@ -1745,6 +1972,7 @@ impl Bot {
                 &[kullanici("ismini seçtin")],
                 &ISIM_DUYURU.replace("{isim}", &isim),
                 Some(150),
+                "isim_duyuru",
             )
             .await
         {
@@ -1780,6 +2008,13 @@ async fn gecmisi_oku(bot: &Bot, ctx: &Context, guild: &Guild) {
 
     let mut toplam: Vec<(i64, String, u64, String)> = Vec::new();
     for k in kanallar {
+        if bot
+            .izinli_kanallar
+            .as_ref()
+            .is_some_and(|s| !s.contains(&k.id))
+        {
+            continue;
+        }
         let izin = guild.user_permissions_in(k, &uye);
         if !izin.contains(Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY) {
             continue;
@@ -1843,17 +2078,21 @@ fn varsayilan_kanal(bot: &Bot, ctx: &Context) -> Option<ChannelId> {
     if let Some(k) = bot.haber_kanali {
         return Some(k);
     }
+    let izinli = |k: ChannelId| bot.izinli_kanallar.as_ref().is_none_or(|s| s.contains(&k));
     for gid in ctx.cache.guilds() {
+        if bot.guild_id.is_some_and(|g| g != gid) {
+            continue;
+        }
         let Some(g) = ctx.cache.guild(gid) else {
             continue;
         };
-        if let Some(k) = g.system_channel_id {
+        if let Some(k) = g.system_channel_id.filter(|k| izinli(*k)) {
             return Some(k);
         }
         if let Some(k) = g
             .channels
             .values()
-            .filter(|k| k.kind == ChannelType::Text)
+            .filter(|k| k.kind == ChannelType::Text && izinli(k.id))
             .min_by_key(|k| k.position)
         {
             return Some(k.id);
@@ -1864,8 +2103,10 @@ fn varsayilan_kanal(bot: &Bot, ctx: &Context) -> Option<ChannelId> {
 
 // ---------- arka plan döngüleri ----------
 
-// döngüleri hayatta tutar: panikte log + 5 sn sonra yeniden başlatır
-// (panik kancası backtrace'i yazar, bekçi sessiz ölümü önler); kapanırken durur
+// döngüleri hayatta tutar: panikte ya da beklenmedik dönüşte log + 5 sn sonra yeniden
+// başlatır (panik kancası backtrace'i yazar, bekçi sessiz ölümü önler; 5 sn bekleme
+// her iki dalda da var ki bir döngü kurulur kurulmaz dönüyorsa CPU yakmasın).
+// Kapanış sinyalinde yeniden başlatmaz.
 fn dongu_bekle<F, Fut>(ad: &'static str, kur: F)
 where
     F: Fn() -> Fut + Send + 'static,
@@ -1876,8 +2117,7 @@ where
             if KAPANIYOR.load(Ordering::SeqCst) {
                 return;
             }
-            let tur = tokio::spawn(kur());
-            match tur.await {
+            match tokio::spawn(kur()).await {
                 Ok(()) => {
                     if KAPANIYOR.load(Ordering::SeqCst) {
                         return;
@@ -1887,9 +2127,9 @@ where
                 }
                 Err(e) => {
                     log::error!("döngü [{ad}]: panik, 5 sn sonra yeniden başlıyor: {e}");
-                    sleep(Duration::from_secs(5)).await;
                 }
             }
+            sleep(Duration::from_secs(5)).await;
         }
     });
 }
@@ -1958,7 +2198,10 @@ impl Bot {
     // küçük, uydurma ama inandırıcı bir yazılım derdi atar, "nasıl çözerim" diye sorar
     async fn sorun_at(&self, ctx: &Context, kanal: ChannelId) {
         let son = son_mesajlar(&self.durum(), 30);
-        match self.uret(&[kullanici(son)], SORUN, Some(160)).await {
+        match self
+            .uret(&[kullanici(son)], SORUN, Some(160), "sorun")
+            .await
+        {
             Ok(laf) => {
                 self.gonder(ctx, kanal, &laf, None, None, None).await;
                 sohbet_baslat(&mut self.durum(), kanal, Some(laf));
@@ -1987,7 +2230,12 @@ impl Bot {
             format!("https://news.ycombinator.com/item?id={}", h.id)
         };
         let girdi = match self
-            .uret(&[kullanici(h.title.clone())], HABER_TANIT, Some(200))
+            .uret(
+                &[kullanici(h.title.clone())],
+                HABER_TANIT,
+                Some(200),
+                "haber_tanit",
+            )
             .await
         {
             Ok(g) => g,
@@ -2014,8 +2262,13 @@ impl Bot {
             return;
         };
         let metin = if hack {
-            self.uret(&[kullanici("şaka başlıyor")], HACK_GIRIS, Some(150))
-                .await
+            self.uret(
+                &[kullanici("şaka başlıyor")],
+                HACK_GIRIS,
+                Some(150),
+                "hack_giris",
+            )
+            .await
         } else {
             self.resimci(&resim).await
         };
@@ -2090,7 +2343,7 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
             continue;
         };
 
-        let laf = match bot.uret(&[kullanici(son)], talimat, Some(120)).await {
+        let laf = match bot.uret(&[kullanici(son)], talimat, Some(120), "laf").await {
             Ok(l) => l,
             Err(e) => {
                 log::error!("ai [durtme]: {e}");
@@ -2249,6 +2502,7 @@ impl Bot {
                     &[kullanici(format!("uyurken sana yazılanlar:\n{liste}"))],
                     UYANDIM,
                     Some(200),
+                    "uyandim",
                 )
                 .await
             {
@@ -2295,7 +2549,7 @@ impl Bot {
             #[serde(default)]
             konu: String,
         }
-        let sonuc = match self.analiz(&gece_metni, &talimat, 100).await {
+        let sonuc = match self.analiz(&gece_metni, &talimat, 100, "uyanis").await {
             Ok(c) => serde_json::from_str::<UyanisSonuc>(json_ayikla(&c)),
             Err(e) => {
                 log::debug!("uyanis: değerlendirme çağrısı başarısız: {e}");
@@ -2327,6 +2581,7 @@ impl Bot {
                 &[kullanici(format!("sen uyurken yazılanlar:\n{gece_metni}"))],
                 &talimat,
                 Some(250),
+                "uyanis_cevap",
             )
             .await
         {
@@ -2386,7 +2641,20 @@ impl EventHandler for Handler {
     }
 
     async fn guild_create(&self, ctx: Context, guild: Guild, _yeni: Option<bool>) {
-        if !self.bot.durum().taranan.insert(guild.id) {
+        // GUILD_ID ayarlıysa yalnız o sunucu taranır; diskteki geçmiş listesine de girmez
+        if self.bot.guild_id.is_some_and(|g| g != guild.id) {
+            return;
+        }
+        let ilk_kez = {
+            let mut d = self.bot.durum();
+            let yeni = d.taranan.insert(guild.id);
+            if yeni {
+                let liste: Vec<String> = d.taranan.iter().map(|g| g.get().to_string()).collect();
+                hafiza::yaz("taranan.md", &liste.join("\n"));
+            }
+            yeni
+        };
+        if !ilk_kez {
             return;
         }
         let bot = self.bot.clone();
@@ -2400,6 +2668,9 @@ impl EventHandler for Handler {
     }
 
     async fn guild_member_addition(&self, ctx: Context, uye: Member) {
+        if self.bot.guild_id.is_some_and(|g| g != uye.guild_id) {
+            return;
+        }
         let kanal = {
             let sistem = ctx
                 .cache
@@ -2427,6 +2698,7 @@ impl EventHandler for Handler {
                 &[kullanici(format!("{isim} sunucuya yeni katıldı."))],
                 HOS_GELDIN,
                 Some(200),
+                "hos_geldin",
             )
             .await
         {
@@ -2454,6 +2726,18 @@ impl EventHandler for Handler {
         if msg.author.bot || msg.webhook_id.is_some() || msg.guild_id.is_none() {
             return;
         }
+        // GUILD_ID/KANALLAR ayarlıysa yalnız izinli sunucu/kanalda çalışır (.env, isteğe bağlı)
+        if self.bot.guild_id.is_some_and(|g| msg.guild_id != Some(g)) {
+            return;
+        }
+        if self
+            .bot
+            .izinli_kanallar
+            .as_ref()
+            .is_some_and(|k| !k.contains(&msg.channel_id))
+        {
+            return;
+        }
         let metin = msg.content_safe(&ctx.cache);
         if metin.trim().is_empty() {
             return;
@@ -2474,7 +2758,7 @@ impl EventHandler for Handler {
         }
 
         // 1. faz (kilit): kayıtlar + bayrak kararları
-        let (acik, etiketlendi, degerlendir) = {
+        let (dogrudan_cevapla, etiketlendi, degerlendir) = {
             let mut d = self.bot.durum();
             // etiketlendi mi, adı geçti mi, mesajına yanıt mı verildi
             let etiketlendi = msg.mentions.iter().any(|u| u.id == bot_id)
@@ -2517,8 +2801,21 @@ impl EventHandler for Handler {
             }
 
             let acik = d.sohbetler.contains_key(&kanal);
-            // sohbet açık ya da etiket varsa değerlendirmeye gerek yok
-            let degerlendir = if !acik && !etiketlendi {
+            // sohbet açık olması tek başına "herkese cevap ver" demek değil: gerçek insan gibi
+            // az önce KENDİSİYLE konuşan kişiye otomatik devam eder (sohbetteki son user
+            // mesajının sahibi bu mesajı atanla aynıysa), ama kanaldaki başka biri yazdıysa ya
+            // da sohbet soğumuşsa yine isteklilik değerlendirir.
+            let devam_eden_diyalog = acik
+                && d.sohbetler.get(&kanal).is_some_and(|s| {
+                    s.gecmis
+                        .iter()
+                        .rev()
+                        .find(|m| m.role == "user")
+                        .and_then(|m| m.content.split_once(": ").map(|(ad, _)| ad))
+                        // eq_ignore_ascii_case Türkçe İ/i̇'de ıskalar; kucult tam bunun için var
+                        .is_some_and(|ad| kucult(ad) == kucult(&isim))
+                });
+            let degerlendir = if !etiketlendi && !devam_eden_diyalog {
                 // rate limit: kanal başına en sık 2 dakikada bir isteklilik çağrısı
                 let simdi = Instant::now();
                 let uygun = d
@@ -2532,12 +2829,12 @@ impl EventHandler for Handler {
             } else {
                 false
             };
-            (acik, etiketlendi, degerlendir)
+            (etiketlendi || devam_eden_diyalog, etiketlendi, degerlendir)
         };
 
         // 2. faz (kilitsiz): isteklilik değerlendirmesi — her mesaja atlamaz,
-        // konu/personalık/ilgi tartılır; etiket ve açık sohbet zaten doğrudan cevaplanır
-        let mut katil = acik || etiketlendi;
+        // konu/personalık/ilgi tartılır; etiket ve sürmekte olan diyalog zaten doğrudan cevaplanır
+        let mut katil = dogrudan_cevapla;
         if degerlendir {
             let esik = {
                 let d = self.bot.durum();
@@ -2578,6 +2875,7 @@ impl EventHandler for Handler {
             if let Some(s) = d.sohbetler.get_mut(&kanal) {
                 s.gecmis.push(kullanici(format!("{isim}: {metin}")));
                 s.son_mesaj = Some(msg.id);
+                s.son_etiketlendi = etiketlendi;
                 s.gelen += 1;
                 s.son_gelenler.push_back((isim.clone(), msg.id));
                 if s.son_gelenler.len() > 20 {
@@ -2589,7 +2887,10 @@ impl EventHandler for Handler {
                 d.son_aktivite.insert(kanal, Instant::now());
             }
             kanal_not(&mut d, kanal, format!("{isim}: {metin}"));
-            acik
+            // isteklilik sonucu açık sohbette de geçerli: başkası yazdı ve puan
+            // eşiğin altındaysa mesaj geçmişe girer ama cevap gelmez (yoksa
+            // değerlendirme yalnız token yakıp çöpe gidiyordu)
+            acik && katil
         };
 
         if cevap_ver {
@@ -2732,6 +3033,25 @@ async fn main() -> Result<(), Hata> {
         Ok(v) if !v.trim().is_empty() => Some(ChannelId::new(v.trim().parse()?)),
         _ => None,
     };
+    // ikisi de isteğe bağlı: ayarlanmazsa bot eskisi gibi eriştiği her sunucuda/kanalda çalışır
+    let guild_id = match std::env::var("GUILD_ID") {
+        Ok(v) if !v.trim().is_empty() => Some(GuildId::new(v.trim().parse()?)),
+        _ => None,
+    };
+    let izinli_kanallar = match std::env::var("KANALLAR") {
+        Ok(v) if !v.trim().is_empty() => {
+            let mut s = HashSet::new();
+            for parca in v.split(',') {
+                let parca = parca.trim();
+                if parca.is_empty() {
+                    continue;
+                }
+                s.insert(ChannelId::new(parca.parse()?));
+            }
+            Some(s)
+        }
+        _ => None,
+    };
     for k in ["kisiler", "konular", "olaylar", "arsiv", "kanallar"] {
         std::fs::create_dir_all(PathBuf::from(DURUM_KLASORU).join(k))?;
     }
@@ -2748,6 +3068,9 @@ async fn main() -> Result<(), Hata> {
     log::info!("model: {}", durum.model);
     let bot = Arc::new(Bot {
         durum: Mutex::new(durum),
+        // bağlantı kurma hızlı elensin (BAGLANTI_ZAMAN_ASIMI); toplam süre sınırı yok, yalnız
+        // iki veri arası en çok OKUMA_ZAMAN_ASIMI (P0: eskiden tek 60sn'lik timeout uzun
+        // düşünme akışını ortasında kesebiliyordu)
         http: reqwest::Client::builder()
             .connect_timeout(BAGLANTI_ZAMAN_ASIMI)
             .read_timeout(OKUMA_ZAMAN_ASIMI)
@@ -2759,6 +3082,8 @@ async fn main() -> Result<(), Hata> {
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty()),
+        guild_id,
+        izinli_kanallar,
     });
 
     let intents = GatewayIntents::GUILDS
@@ -2839,6 +3164,18 @@ mod test {
     fn kisaysa_degmez() {
         assert_eq!(bol("kısa", 100), vec!["kısa"]);
         assert_eq!(bol("  ", 100), Vec::<String>::new());
+    }
+
+    #[test]
+    fn bol_cok_baytlida_sinirda_paniklemez() {
+        // kesim_noktasi bayt ofseti döndürür; çok baytlı karakter sınırda bile
+        // dilim char hizasında kalır, parça birleşince aslına eşittir
+        let m = "üğşçöı ğüşçöı ğüşçöı ğüşçöı ğüşçöı";
+        let p = bol(m, 8);
+        for parca in &p {
+            assert!(parca.chars().count() <= 8);
+        }
+        assert_eq!(p.join(" ").replace(' ', ""), m.replace(' ', ""));
     }
 
     #[test]
@@ -2980,6 +3317,72 @@ mod test {
     }
 
     #[test]
+    fn reasoning_zorunlu_hatasi_tanir() {
+        assert!(reasoning_zorunlu_hatasi(
+            r#"{"error":{"message":"Reasoning is mandatory for this endpoint and cannot be disabled.","code":400}}"#
+        ));
+        assert!(!reasoning_zorunlu_hatasi(
+            r#"{"error":{"message":"model not found","code":404}}"#
+        ));
+        assert!(!reasoning_zorunlu_hatasi("rate limit exceeded"));
+    }
+
+    #[test]
+    fn ruh_hali_ayiklanir() {
+        assert_eq!(
+            ruh_hali_ayikla(r#"{"durum": "kafa karışıklığı", "yogunluk": 6}"#),
+            Some("kafa karışıklığı (6)".into())
+        );
+        // clamp: 15 -> 10
+        assert_eq!(
+            ruh_hali_ayikla(r#"{"durum": "öfke", "yogunluk": 15}"#),
+            Some("öfke (10)".into())
+        );
+        // düşük yoğunluk: nötr sayılır, hiç yansıtılmaz
+        assert_eq!(
+            ruh_hali_ayikla(r#"{"durum": "huzur", "yogunluk": 2}"#),
+            None
+        );
+        assert_eq!(ruh_hali_ayikla(r#"{"durum": "", "yogunluk": 8}"#), None);
+        assert_eq!(ruh_hali_ayikla("bozuk cevap"), None);
+    }
+
+    #[test]
+    fn onbellek_destek_openrouter_adresine_gore() {
+        // openrouter'a giden her istek: model claude/gemini/gpt/glm/grok fark etmez,
+        // openrouter kendi tarafında hangisinde işe yarayacağına karar verir
+        assert!(onbellek_destekler(
+            "https://openrouter.ai/api/v1/chat/completions"
+        ));
+        // mistral'in native api'si ve özel bir router (API_ADRES) aynı garantiyi vermez
+        assert!(!onbellek_destekler(
+            "https://api.mistral.ai/v1/chat/completions"
+        ));
+        assert!(!onbellek_destekler(
+            "http://localhost:8080/v1/chat/completions"
+        ));
+    }
+
+    #[test]
+    fn sistem_json_onbellek_yalniz_openrouterda() {
+        let or = "https://openrouter.ai/api/v1/chat/completions";
+        let claude = sistem_json("sabit", "degisken", or);
+        assert!(claude["content"][0]["cache_control"].is_object());
+        // openrouter üzerinden gpt/glm/grok da işaretlenir, karar openrouter'a bırakılır
+        let glm = sistem_json("sabit", "degisken", or);
+        assert!(glm["content"][0]["cache_control"].is_object());
+        let mistral = sistem_json(
+            "sabit",
+            "degisken",
+            "https://api.mistral.ai/v1/chat/completions",
+        );
+        assert!(mistral["content"][0]["cache_control"].is_null());
+        // değişken boşsa adres ne olursa olsun düz metin (blok yok)
+        let duz = sistem_json("sabit", "", or);
+        assert!(duz["content"].is_string());
+    }
+
+    #[test]
     fn dusunce_sayaci_artar() {
         assert_eq!(
             dusunce_sayaci("tek"),
@@ -3014,11 +3417,8 @@ mod test {
     #[test]
     fn cevap_butcesi_tutarli() {
         let b: Option<u32> = cevap_butcesi!();
-        if cfg!(debug_assertions) {
-            assert!(b.is_some());
-        } else {
-            assert!(b.is_none());
-        }
+        // ikisinde de bir tavan var artık; debug'daki release'den küçük/eşit olmalı
+        assert!(b.is_some_and(|t| t <= CEVAP_TAVANI));
     }
 
     // sahte bir SSE sunucusundan gerçek reqwest akışı okur: utf-8 chunk
@@ -3063,6 +3463,7 @@ mod test {
             tampon: Vec::new(),
             kuyruk: Vec::new(),
             kullanim: Kullanim::default(),
+            kategori: "test",
             done: false,
             bitti: false,
         };
@@ -3078,30 +3479,38 @@ mod test {
 
     #[test]
     fn soy_ad_onekini_alir() {
-        assert_eq!(soy("cicikus: selam".into(), "cicikus"), "selam");
+        assert_eq!(soy("cicikus: selam", "cicikus"), "selam");
         // büyük/küçük harf duyarsız
-        assert_eq!(soy("Cicikus: selam".into(), "cicikus"), "selam");
+        assert_eq!(soy("Cicikus: selam", "cicikus"), "selam");
         // önek yoksa metin aynen kalır
-        assert_eq!(soy("selam".into(), "cicikus"), "selam");
+        assert_eq!(soy("selam", "cicikus"), "selam");
     }
 
     #[test]
     fn soy_turkce_adlarda_paniklemez() {
         // İ→i̇ lowercase'de bayt sayısı değişir; bayt dilimi burada paniklerdi
-        assert_eq!(soy("Çöp: selam".into(), "çöp"), "selam");
-        assert_eq!(soy("İsim: merhaba".into(), "İsim"), "merhaba");
-        assert_eq!(soy("ŞAHİN: tamam".into(), "şahin"), "tamam");
+        assert_eq!(soy("Çöp: selam", "çöp"), "selam");
+        assert_eq!(soy("İsim: merhaba", "İsim"), "merhaba");
+        assert_eq!(soy("ŞAHİN: tamam", "şahin"), "tamam");
     }
 
     #[test]
     fn soy_tirnak_soyar() {
-        assert_eq!(soy("\"selam\"".into(), "bot"), "selam");
-        assert_eq!(soy("\"".into(), "bot"), "\""); // tek tırnak kalır
-        assert_eq!(soy("\"selam".into(), "bot"), "\"selam"); // kapanmamışsa dokunma
+        assert_eq!(soy("\"selam\"", "bot"), "selam");
+        assert_eq!(soy("\"", "bot"), "\""); // tek tırnak kalır
+        assert_eq!(soy("\"selam", "bot"), "\"selam"); // kapanmamışsa dokunma
     }
 
     #[test]
     fn soy_birlesik_kalip() {
-        assert_eq!(soy("bot: \"selam dünya\"".into(), "bot"), "selam dünya");
+        assert_eq!(soy("bot: \"selam dünya\"", "bot"), "selam dünya");
+    }
+
+    #[test]
+    fn soy_dilim_dondurur() {
+        // soy artık &str alır, &str döndürür; tam metin klonu gerekmez
+        let metin = String::from("cicikus: merhaba dünya");
+        let dilim: &str = soy(&metin, "cicikus");
+        assert_eq!(dilim, "merhaba dünya");
     }
 }

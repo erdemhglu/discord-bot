@@ -38,11 +38,28 @@ Doğrulanmış serenity 0.12.5 API notları:
 
 Kalan risk: modal canlı davranışı Discord'ta görülecek (birim testleri boyut mantığını korur).
 
+## Token optimizasyonu + prod-hazırlık (2026-09-02) — TAMAMLANDI
+İsteklilik/hedef_sec cache'li sabit bloğa taşındı · sohbet cevabına release'de de token tavanı
+(CEVAP_TAVANI=3000) · çağrı-tipi bazlı token metriği + `!durum` kırılımı + önbellek isabet sayacı ·
+`cache_control` model adına göre koşullu (GLM/GPT/Grok kırılmasın) · reply-to koşullu hale geldi
+(`son_etiketlendi`) · `durum/taranan.md` kalıcı (her başlangıçta 14 günlük tarama tekrarlanmıyor) ·
+GUILD_ID/KANALLAR ile kapsam daraltma · HTTP client timeout ayrıldı (P0 kapandı) · `mesgul` RAII
+guard (`MesgulKilit`). Ayrıntı + gerekçe: docs/kararlar.md.
+
+## Ruh hali + ikinci dayanıklılık turu (2026-09-02) — TAMAMLANDI
+`ruh_hali_belirle` (RUH_HALI prompt, disküsyon sırasında insan ruh hali taklidi) · `soy` artık
+bayt değil karakter say (Türkçe İ gibi harflerde panik riski kapandı) · `hafiza::yaz` atomik
+(geçici dosya + rename, süreç kill olsa bile yarım dosya görünmez) · arka plan döngüleri
+`dongu_bekci` ile sarmalandı (paniklerse loglayıp 5 sn sonra yeniden başlar, sessiz ölüm yok) ·
+`durum/huy.md`'de "uykulu/uyudum amk/uyandırılmaktan bıktım" gibi gerçek uyku sistemiyle
+karışan kalıntı satırlar temizlendi + `hoca.md`'ye bunu bir daha üretmeme kuralı eklendi
+(kaynağı: hoca test sırasındaki sık `!uyan` muhabbetini kişilik sanmış).
+
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
-- **Ajan 2 (HTTP):** global `.timeout(60sn)` stream'i kesebilir → `connect_timeout`+`read_timeout`+ilk-token sınırı (P0); hata sınıflandırma+retry; `reasoning_kapat` sağlayıcıya göre koşullu.
-- **Ajan 1 (mekanik):** `mesgul` RAII guard (panik sızıntısı); typing'i edit döngüsünden çıkar; `soy` byte-dilimi char-güvenli.
-- **Ajan 4 (hafıza):** `hafiza::yaz` atomik (geçici+rename); ajan yazımları tek sıra; günlükçü JSON hatasında ham döküm kurtarma; `arsivle` append.
-- **Ajan 5 (döngüler):** döngü panik bekçisi (log+yeniden başlat); zarif kapanış (watch); uyanış kanal bazlı; süresi dolan haber sohbeti temizliği; tarama sırası (canlı mesajlar tarama boca'sıyla ezilmesin).
+- **Ajan 5 (döngüler):** uyanış kanal bazlı.
+- Tamamlanıp düşenler: hata sınıflandırma+retry, typing edit dışı, ajan yazımları tek sıra,
+  günlükçü JSON kurtarma, arsivle append, zarif kapanış (`KAPANIYOR`), süresi dolan haber
+  sohbeti temizliği, tarama sırası (önüne ekleme) — yerel dalda yapıldı, PR merge'inde korundu.
 
 ## Bilinen riskler
 - İsteklilik/hedef mini çağrılarının token maliyeti → rate limitlerle sınırlı.

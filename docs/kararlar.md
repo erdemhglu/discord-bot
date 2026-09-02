@@ -70,6 +70,88 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
 - **Sistem mesajı sabit + değişken, sabit blok `cache_control`.** Token faturası: kişilik, huy,
   profil, dizin, gündem, notlar sabit blokta (ajan çalışınca değişir); örnek mesajlar, getirilenler,
   saat ve görev değişken blokta. Anthropic/Gemini sabit bloğu önbelleğe alır, OpenAI öneki kendisi.
+- **2026-09-02 · cache_control hedef adrese göre koşullu (model adına göre değil).** İlk halde
+  model adı "claude"/"anthropic"/"gemini" içeriyor mu diye bakılıyordu; kullanıcı OpenRouter'da GLM
+  kullanacağını belirtince yanlış soru olduğu ortaya çıktı: OpenRouter'a giden istekte cache_control
+  hangi model olursa olsun güvenle eklenebilir — alan OpenRouter'ın kendi birleşik şemasının parçası,
+  hangi modelde işe yarayacağına kendi tarafında karar verir, desteklemeyen modelde yok sayar. Asıl
+  risk Mistral'in native API'si ya da `API_ADRES` ile verilen özel bir router: onlar bu garantiyi
+  vermez, bilinmeyen alanla isteği tümden reddedebilir. `onbellek_destekler(api_adres)` artık yalnız
+  `openrouter.ai` adresine bakar; provider'a özel varsayım tek yerde toplu.
+- **2026-09-02 · isteklilik/hedef_sec de sabit+değişken bloğa taşındı.** Eskiden `analiz()` üzerinden
+  profil+dizin her mini çağrıda user mesajına gömülüp tam fiyatına yeniden yollanıyordu (kanal başına
+  2 dk'da bir, en sık tetiklenen çağrı). Artık `sor_bolumlu` doğrudan çağrılır: profil+dizin (isteklilik)
+  ya da talimat (hedef_sec) sabit blokta, yalnız son mesajlar değişken/user mesajında.
+- **2026-09-02 · Sohbet cevabına release'de de token tavanı (CEVAP_TAVANI=3000).** Eskiden release'de
+  `max_tokens` hiç gitmiyordu ("model sonuna kadar konuşsun"); sıradan cevap bunun çok altında kalır
+  ama tekrar/döngü gibi kaçak durumlarda maliyeti sınırsız büyütüyordu. Tavan sıradan cevabı kesecek
+  kadar düşük değil, yalnız kaçağı durdurur.
+- **2026-09-02 · Token metriği çağrı-tipi kırılımlı.** `Metrik.kategoriler: HashMap<&str, Kullanim>`;
+  her `sor_ham`/stream çağrısı bir kategori etiketiyle gelir (`"sohbet"`, `"isteklilik"`, `"profilci"`...).
+  `!durum` artık en çok token yakan kategorileri de döker. `Kullanim.prompt_tokens_details.cached_tokens`
+  sağlayıcı bildiriyorsa okunur (`onbellek_token`) — prompt cache'in gerçekten isabet edip etmediğini
+  log'dan/`!durum`'dan görmek için (canlıda hâlâ doğrulanmadı, bkz. AGENTS.md bilinen açıklar).
+- **2026-09-02 · `durum/taranan.md` kalıcı.** `guild_create` her `ready`'de yeniden gelir; `taranan`
+  bellek-içiydi, her süreç yeniden başlayışında her sunucunun her kanalının 14 günlük geçmişi API'den
+  yeniden çekiliyordu ("her bağlandığında mesajları en baştan çekiyor" şikayeti). Artık diske yazılır,
+  açılışta okunur; bir sunucu yalnız ilk katılımda taranır.
+- **2026-09-02 · GUILD_ID/KANALLAR ile kapsam daraltma (.env, isteğe bağlı).** Bot varsayılan olarak
+  eriştiği her sunucuda/kanalda çalışıyordu; ikisi de boşsa davranış aynen sürer. Ayarlanınca `message`,
+  `guild_create`, `guild_member_addition`, `varsayilan_kanal` hepsi filtreler (tarama dahil, API'ye yazık
+  olmasın).
+- **2026-09-02 · `mesgul` bayrağı RAII (`MesgulKilit`).** 7 farklı çıkış noktasında elle
+  `mesgul.remove` vardı; aradaki bir `.await` panikleseydi kanal sonsuza dek "meşgul" kilitli kalırdı
+  (yeniden başlamadan açılmaz). Artık `Drop` ile garanti; elle remove çağrıları kaldırıldı.
+- **2026-09-02 · HTTP client timeout ayrıldı (P0 kapandı).** Tek `.timeout(60sn)` uzun stream'i
+  ortasında kesebiliyordu (bkz. yol-haritasi.md Ajan 2). `connect_timeout(10sn)` + `timeout(180sn)`:
+  bağlantı hızlı elenir, toplam süre CEVAP_TAVANI'nın en yavaş sağlayıcıda bile sığacağı kadar geniş.
+- **2026-09-02 · Reasoning kapatılamayan modelde otomatik yeniden deneme.** Canlı hata: GLM
+  reasoning varyantı (`z-ai/glm-5.3-flash`, OpenRouter) `düşünme kapat` kipinde gönderilen
+  `"reasoning":{"enabled":false}` alanına 400 "Reasoning is mandatory ... cannot be disabled"
+  dönüyordu — sohbet o kanalda hiç cevap veremez hale geliyordu. `reasoning_kapat` artık alanları
+  gerçekten ekleyip eklemediğini (`bool`) döner; `sor_ham`/`sor_ham_akis` bu hatayı tanıyınca
+  (`reasoning_zorunlu_hatasi`) alanları kaldırıp bir kez daha dener. Not: aynı modelin küçük
+  `max_tokens` bütçeli mini-çağrılarda (isteklilik 80, hedef_sec/ruh_hali 40, haber_sec 10 gibi)
+  gizli reasoning bütçeyi yiyip "modelden boş yanıt geldi" üretme ihtimali var — bu ayrı, kod
+  tarafından çözülmüş bir sorun değil; reasoning-zorunlu modeller bu mimariyle temelde gerilimli.
+- **2026-09-02 · Açık sohbet artık kanaldaki herkese değil, yalnız sürmekte olan diyaloğa
+  otomatik cevap verir.** Kullanıcı şikayeti: canlıda bot her mesaja cevap veriyordu (reply-to
+  düzeltmesinden ayrı bir şey). Kök neden: `message` handler'da `acik` (bu kanalda sohbet var mı)
+  tek başına "değerlendirmeye gerek yok, direkt cevapla" anlamına geliyordu — sohbet bir kez
+  açılınca kanaldaki HERKESİN mesajı, kiminle konuştuğuna bakılmaksızın, doğrudan cevaplanıyordu.
+  Artık `devam_eden_diyalog`: sohbetteki son user mesajının sahibi bu mesajı atanla aynı isimse
+  (gerçekten kendisiyle konuşuyor) otomatik devam eder; farklı biri yazdıysa (ya da soğumuşsa)
+  yine isteklilik değerlendirmesinden geçer (aynı 2 dk'lık rate limit). Etiket her zaman
+  önceliklidir. `!uyan` gibi ayrı bir komut gerektirmez, `message`'ın kendi mantığı.
+- **2026-09-02 · `hafiza::yaz` atomik (geçici dosya + rename).** `fs::write` doğrudan hedef
+  dosyaya yazıyordu; süreç crash/kill olursa (ya da iki ajan aynı dosyaya yakın anda yazarsa)
+  yarım/bozuk içerik diske kalabilirdi. Artık `<hedef>.tmp.<pid>.<sayaç>` dosyasına yazılıp
+  `fs::rename` ile atomik olarak yerine konuyor; okuyucu hiçbir zaman yarım dosya görmez.
+- **2026-09-02 · Arka plan döngüleri `dongu_bekci` ile sarmalandı.** `tokio::spawn(dongu())`
+  bir döngü paniklerse o işlev süreç yeniden başlayana kadar bir daha hiç çalışmıyordu (panic
+  hook yalnız loglar, yeniden başlatmaz). `dongu_bekci(ad, || dongu(...))` her paniği/beklenmedik
+  dönüşü loglar, 5 sn bekleyip aynı döngüyü yeniden spawn eder.
+- **2026-09-02 · `soy` bayt değil karakter sayar.** `metin[onek.len()..]` — `onek.len()` bayt
+  uzunluğuydu ama `to_lowercase()` bazı harflerde (Türkçe büyük İ → "i̇", 2 bayt → 3 bayt) bayt
+  uzunluğunu değiştirir; karşılaştırma lowercase, kesme orijinal üstünde olunca char sınırı dışına
+  düşüp panikleyebilirdi. `.chars().skip(n)` her zaman güvenli.
+- **2026-09-02 · `durum/huy.md`'deki uyku temalı kalıntı temizlendi, `hoca.md`'ye önleyici kural
+  eklendi.** Kullanıcı şikayeti: "!uyan attım ama hâlâ yorgunum/uykum var diyor". Kök neden: hoca
+  ajanı (huy.md üretici) test sırasındaki sık `!uyan`/uyku muhabbetini kalıcı bir TAVIR ("tembel,
+  uykulu... uyudum amk... uyandırılmaktan bıktım") sanıp yazmıştı — botun GERÇEK uyku programıyla
+  (kod, `!uyan`'ın etkilediği) hiç ilgisi yok, salt kelime çakışması kafa karıştırıyordu. Ayrıca
+  DOĞALLIK bölümü (bırakılması gereken kalıpları söylemesi gerekirken) tersine "KALIPLAR" icat edip
+  sabit replik dayatıyordu. `hoca.md`'ye: yalnız 5 başlığı kullan, uyku/uyanma temalı ifade yazma,
+  DOĞALLIK yeni slogan önermez kuralları eklendi; mevcut `durum/huy.md` elle temizlendi.
+- **2026-09-02 · Ruh hali (RUH_HALI, `ruh_hali_belirle`).** "Disküsyon sırasında insan ruh
+  hallerini taklit etsin" isteği; ağır bir yeni ajan yerine `isteklilik`/`hedef_sec` ile aynı hafif
+  mini-çağrı deseni. Bilişsel/korku/pozitif/çökkünlük/öfke/sosyal muhakeme kategorilerinden bir
+  taksonomi promptta; sohbetin kendi geçmişine bakıp `{"durum","yogunluk"}` döner. Maliyeti
+  sınırlamak için her mesajda değil, yalnız sohbet açılırken ve her 4 turda bir çağrılır
+  (`Sohbet.sayac`); yoğunluk <3 nötr sayılıp None döner (her sohbet dramatik değildir). Sonuç
+  `Sohbet.ruh_hali`'de tutulur (kalıcı değil, sohbetle birlikte uçar), talimata "ŞU ANKİ RUH HALİN"
+  diye eklenir; kişilik promptunda "ilan etme, üsluba yedir" kuralı var (doğrudan "kafam karışık"
+  dedirtmemek için).
 - **Tekrar koruması.** Botun son 5 mesajıyla aynı cevap bir kez yeniden üretilir, yine aynıysa susar.
 - **İstek üzerine internet.** Link → sayfa; "haber/gündem/ne oldu" → Sözcü RSS; "araştır/bak/googlela"
   → Firecrawl arama (anahtar varsa, yoksa RSS). Bulgular göreve "İNTERNETTEN ŞİMDİ ÇEKTİKLERİN" diye eklenir.
@@ -82,6 +164,11 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   yeni mesaj gelirse eski cevap gönderilmeden güncel bağlamla yeniden üretilir.
 - **Yanıt referansı yeniden her cevapta.** Muhatap etiketleme isteği koşullu davranıştan üstündür;
   normal sohbet cevabı her zaman snapshot'taki son kullanıcı mesajına bağlanır ve onu pingler.
+- **2026-09-02 · Yanıt referansı yeniden koşullu (üstteki kararı geri alır).** "Her mesaja reply-to
+  atması robotik, gerçek insan gibi yalnız gerektiğinde yanıtlasın" isteği; `Sohbet.son_etiketlendi`
+  eklendi (mesaj push edilirken tag/isim/reply kontrolü kaydedilir). `cevapla`'da taban `yanit`
+  yalnız etiketliyse ya da `bekleyenler.len() > 1` ise (araya birden fazla mesaj girdiyse)
+  `son_mesaj`, aksi halde `None` → düz mesaj. Kalabalıkta (`hedef_sec` bulduysa) yine üzerine yazar.
 - **Uyku hali konuşma repliği değildir.** Uyku planı cevap verip vermemeyi kodda belirler; aktif
   sohbette "uyuyamadın, o modasın" talimatı artık prompta girmez. Canlıda bot sebepsiz yere
   "uykudan ne bekliyon" diyerek konuşmayı kendine çekiyordu.
@@ -180,3 +267,30 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   döngüler tik başında döner, bekçi yeniden başlatmaz. Süresi dolan haber sohbetleri dakika
   tikinde temizlenir (yorum penceresi geçmiş + aktivite yoksa). Açılış taraması hafızanın
   önüne eklenir: tarama sürerken gelen canlı mesajlar arkada kalır, kronoloji ve canlılar korunur.
+- **2026-09-02 · PR #2 merge'ü + çakışma çözümleri.** Uzak PR (token optimizasyonu, çok
+  sağlayıcılı genellik, tartışma davranışı, prod-hazırlık) yerel dala birleştirildi. Bekçi
+  tek fonksiyonda birleştirildi: yerelin `dongu_bekle` iskeleti (`KAPANIYOR` farkındalığı —
+  kapanırken yeniden başlatmaz) + her iki yeniden başlatma dalında 5 sn uyku (uzağın
+  hot-spin koruması). `hafiza::yaz` yerel gövdeyle kaldı (`YAZMA_KILIDI` + sabit `.tmp`;
+  pid+sayaçlı benzersiz ad her yazımda format! tahsisi ve öksüz dosya biriktirirdi);
+  gerçek append `ekle` korundu (uzak sürüm hâlâ oku+tümünü-yaz'dı).
+- **2026-09-02 · CEVAP_TAVANI 3000 → 4096.** Reasoning üreten modellerde düşünce tokenleri
+  de `max_tokens` bütçesinden düşer; 3000 uzun düşünce + cevabı kırpabilirdi.
+- **2026-09-02 · Tartışma davranışı düzeltmesi: isteklilik açık sohbette de uygulanır.**
+  PR'ın `devam_eden_diyalog` mantığı doğru ama yarım kalmıştı: 3. fazda `cevap_ver = acik`
+  isteklilik sonucunu yok sayıyordu (açık sohbette başkası yazsa, puan eşiğin altında kalsa
+  bile cevap gidiyordu; çağrı yalnız token yakıyordu). Artık `cevap_ver = acik && katil`;
+  mesaj geçmişe girer ama cevap gelmez. Ad karşılaştırması `eq_ignore_ascii_case` yerine
+  `kucult` ile (Türkçe İ/i̇). `ruh_hali` koşulundaki gereksiz `sayac == 0 ||` düştü
+  (0 % 4 == 0 zaten).
+- **2026-09-02 · Sıcak yol tahsis temizliği.** `soy` artık `&str -> &str` dilim döndürür:
+  stream'de her edit'te metnin tamamı klonlanıp lowercase edilmez (önek karşılaştırması
+  yalnız ilk karakterlere). `bol`/`kesim_noktasi` bayt ofsetiyle, tur başına ara
+  take/skip/collect tahsisi yok. `temizle` sınırda `truncate` (yerinde). `kanal_not` /
+  `son_mesajlar` / `dokum` ara `Vec` collect'siz doğrudan String'e birleştirir. `getir`
+  bütçe döngüsü artan sayaçla (her bölümde baştan tarama O(n²) idi), konu dosyaları puan
+  demetinde taşınır (en iyi ikisi ikinci kez okunmaz). `dizin_yenile` konu dosyasını tek
+  okur, kişi için hafif başlık çözümleyici (`kisi_baslik`, bilgilerin/olayların Vec'leri
+  kurulmaz). `konu_ekle` kontrol+başlık+satır tek kilit bölgesinde (eşzamanlı çağrıda
+  başlık çiftlenmesi/satır silinmesi kapanır). `sohbet_sistemi` contains için geçici
+  String üretmez.

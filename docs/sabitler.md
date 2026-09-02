@@ -21,7 +21,7 @@
 | AKIS_DUZENLEME | 1200 ms | stream'de iki düzenleme arası asgari süre (Discord edit sınırı) |
 | BAGLANTI_ZAMAN_ASIMI / OKUMA_ZAMAN_ASIMI | 15 sn / 120 sn | http: el sıkışma / iki veri arası (ilk tokeni kapsar). Toplam süre sınırı yok, uzun düşünme akışı kesilmez |
 | AI_YENIDEN_DENEME | 2 | ağ hatası / 429 / 5xx'te ek deneme sayısı (toplam bu + 1) |
-| `cevap_butcesi!()` (makro) | release `None` / debug `Some(2000)` | sohbet cevabı token bütçesi derleme durumuna göre; release'de max_tokens gitmez |
+| `cevap_butcesi!()` (makro) / CEVAP_TAVANI | debug `Some(2000)` / release `Some(3000)` | sohbet cevabı token bütçesi; ikisinde de üst sınır var, release'de yalnız tekrar/döngü gibi kaçak durumları keser |
 | FAVORI | 259669117248864257 | her zaman sevilen kullanıcı id |
 | GEZGIN_ARALIGI | 4 saat | gündem gezintisi |
 | RESIM_KLASORU / DURUM_KLASORU | resimler / durum | klasörler (çalışma dizinine göre) |
@@ -48,11 +48,18 @@ olay 8, ham satır 12/200, anahtar ≤40, ≥2 eşleşme · `gecmisi_oku` sayfa 
 RSS 12 · gezgin rss 20, sayfa ≤3 · yoldan mesaj günde 1, %25 · hoca son 200 satır · profilci 600 ·
 gözlem 300 · hack giriş max_tokens 150
 
+## `durum/taranan.md`
+`gecmisi_oku` (14 günlük geçmiş taraması) daha önce taranmış sunucu id'lerini burada tutar;
+her yeniden başlangıçta `Durum::yukle` okur, `guild_create`'te güncellenir. Yoksa her süreç
+yeniden başlayışında her sunucunun tüm kanalları baştan taranırdı (API'ye ve zamana yazık).
+
 ## Ortam değişkenleri (.env)
 DISCORD_TOKEN (zorunlu) · OPENROUTER_KEY veya MISTRAL_KEY (biri zorunlu; ikisi de varsa openrouter) ·
 SAGLAYICI=mistral (zorlama) · MODEL (model kimliği, sağlayıcının varsayılanını ezer) ·
 API_ADRES (openai uyumlu chat/completions adresi; seçilen sağlayıcının adresini ezer) ·
 FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı) ·
+GUILD_ID (tek sunucu id; ayarlıysa bot yalnız bu sunucuda çalışır) ·
+KANALLAR (virgüllü kanal id listesi; ayarlıysa bot yalnız bu kanallarda çalışır) ·
 LOG_SEVIYE (error/warn/info/debug/trace, varsayılan info) · LOG_RENK (on/off; varsayılan: terminalde açık, dosyada kapalı)
 
 ## src/gelisim.rs

@@ -36,6 +36,9 @@ pub fn oku(parca: &str) -> String {
     fs::read_to_string(yol(parca)).unwrap_or_default()
 }
 
+// geçici dosyaya yazıp yeniden adlandırma atomik: süreç crash/kill olsa bile hiçbir okuyucu
+// yarım yazılmış içerik görmez (`fs::write` tek başına bunu garanti etmez). geçici ad sabittir:
+// YAZMA_KILIDI altında tek yazar vardır, benzersiz ad için sayaç+pid tahsisine gerek yok
 pub fn yaz(parca: &str, icerik: &str) {
     let _kilit = YAZMA_KILIDI.lock().unwrap_or_else(|e| e.into_inner());
     let p = yol(parca);
@@ -58,11 +61,15 @@ fn ekle(parca: &str, satir: &str) {
     if let Some(ust) = p.parent() {
         let _ = fs::create_dir_all(ust);
     }
+    // iki write_all: satır için ara format tahsisi yok
     let sonuc = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&p)
-        .and_then(|mut f| f.write_all(format!("{satir}\n").as_bytes()));
+        .and_then(|mut f| {
+            f.write_all(satir.as_bytes())
+                .and_then(|_| f.write_all(b"\n"))
+        });
     if let Err(e) = sonuc {
         log::error!("{} eklenemedi: {e}", p.display());
     }
@@ -237,12 +244,30 @@ pub fn kisi_yaz(k: &Kisi) {
 
 // ---------- konu ve olay ----------
 
+// kontrol + başlık + satır tek kilit bölgesinde: iki eşzamanlı çağrı başlığı
+// çiftleyemez ya da birbirinin satırını silemez (oku→yaz→ekle arası açıktı)
 pub fn konu_ekle(ad: &str, not: &str) {
-    let parca = format!("konular/{}.md", slug(ad));
-    if oku(&parca).is_empty() {
-        yaz(&parca, &format!("# {ad}\netiket: \n\n"));
+    let _kilit = YAZMA_KILIDI.lock().unwrap_or_else(|e| e.into_inner());
+    let p = yol(&format!("konular/{}.md", slug(ad)));
+    if let Some(ust) = p.parent() {
+        let _ = fs::create_dir_all(ust);
     }
-    ekle(&parca, &format!("- {}: {}", tarih_saat(), not.trim()));
+    let bos = fs::metadata(&p).map(|m| m.len() == 0).unwrap_or(true);
+    let sonuc = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)
+        .and_then(|mut f| {
+            let mut veri = String::new();
+            if bos {
+                veri.push_str(&format!("# {ad}\netiket: \n\n"));
+            }
+            veri.push_str(&format!("- {}: {}\n", tarih_saat(), not.trim()));
+            f.write_all(veri.as_bytes())
+        });
+    if let Err(e) = sonuc {
+        log::error!("{} eklenemedi: {e}", p.display());
+    }
 }
 
 pub fn olay_ekle(kanal: &str, olay: &str) {
@@ -346,51 +371,93 @@ fn ilk_satir(p: &Path) -> String {
         .to_string()
 }
 
+// dizin gösterimi yalnız başlık alanlarını kullanır; bilgilerin/olayların
+// Vec'lerini kurmadan çözülür (Kisi::coz'un tam çözümünden ucuz)
+struct KisiBaslik {
+    isim: String,
+    puan: i32,
+    etiket: Vec<String>,
+    not: String,
+}
+
+fn kisi_baslik(metin: &str) -> KisiBaslik {
+    let mut k = KisiBaslik {
+        isim: String::new(),
+        puan: 0,
+        etiket: Vec::new(),
+        not: String::new(),
+    };
+    for satir in metin.lines() {
+        let s = satir.trim();
+        if s.starts_with("## ") {
+            break; // başlık bitti, listelere inme
+        }
+        if let Some(b) = s.strip_prefix("# ") {
+            k.isim = b.trim().to_string();
+        } else if let Some(v) = s.strip_prefix("puan:") {
+            k.puan = v.trim().parse().unwrap_or(0);
+        } else if let Some(v) = s.strip_prefix("etiket:") {
+            k.etiket = v
+                .split(',')
+                .map(|e| e.trim().to_string())
+                .filter(|e| !e.is_empty())
+                .collect();
+        } else if let Some(v) = s.strip_prefix("not:") {
+            k.not = v.trim().to_string();
+        }
+    }
+    k
+}
+
 // INDEX.md'yi yeniden üretir ve döndürür: her cevaba giden "ne biliyorum" listesi
 pub fn dizin_yenile() -> String {
+    use std::fmt::Write as _;
     let mut s = String::from("## Kişiler\n");
     for p in dosyalar("kisiler").into_iter().take(DIZIN_KISI) {
         // id bazlı dosya adı; eski slug dosyaları (id çözülemez) atlanır
-        let Some(id) = p
+        let id_li = p
             .file_stem()
             .and_then(|f| f.to_str())
-            .and_then(|f| f.parse::<u64>().ok())
-        else {
+            .is_some_and(|f| f.parse::<u64>().is_ok());
+        if !id_li {
             continue;
-        };
-        let k = Kisi::coz(id, &fs::read_to_string(&p).unwrap_or_default());
+        }
+        let k = kisi_baslik(&fs::read_to_string(&p).unwrap_or_default());
         if k.isim.is_empty() {
             continue;
         }
-        s += &format!("- {} ({:+})", k.isim, k.puan);
+        let _ = write!(s, "- {} ({:+})", k.isim, k.puan);
         if !k.etiket.is_empty() {
-            s += &format!(" · {}", k.etiket.join(", "));
+            let _ = write!(s, " · {}", k.etiket.join(", "));
         }
         if !k.not.is_empty() {
-            s += &format!(" · {}", k.not);
+            let _ = write!(s, " · {}", k.not);
         }
-        s += "\n";
+        s.push('\n');
     }
-    s += "\n## Konular\n";
+    s.push_str("\n## Konular\n");
     for p in dosyalar("konular").into_iter().take(30) {
+        // tek okuma: ad ve son not aynı içerikten türetilir
         let icerik = fs::read_to_string(&p).unwrap_or_default();
+        let ad = icerik.lines().next().unwrap_or("").trim_start_matches("# ");
         let son = icerik
             .lines()
             .rev()
             .find(|l| l.starts_with("- "))
             .and_then(|l| l.get(2..12))
             .unwrap_or("");
-        s += &format!("- {} · son: {}\n", ilk_satir(&p), son);
+        let _ = writeln!(s, "- {ad} · son: {son}");
     }
-    s += "\n## Olaylar\n";
+    s.push_str("\n## Olaylar\n");
     for p in dosyalar("olaylar").into_iter().take(3) {
         let n = fs::read_to_string(&p)
             .unwrap_or_default()
             .lines()
             .filter(|l| l.starts_with("- "))
             .count();
-        s += &format!(
-            "- {} · {n} kayıt\n",
+        let _ = writeln!(
+            s,
+            "- {} · {n} kayıt",
             p.file_stem().and_then(|f| f.to_str()).unwrap_or("")
         );
     }
@@ -458,19 +525,17 @@ pub fn getir(
         }
     }
 
-    let mut konular: Vec<(usize, PathBuf)> = dosyalar("konular")
+    // içerik puan demetinde taşınır: en iyi iki dosya ikinci kez okunmaz
+    let mut konular: Vec<(usize, String)> = dosyalar("konular")
         .into_iter()
-        .map(|p| {
-            (
-                puanla(&fs::read_to_string(&p).unwrap_or_default(), anahtar),
-                p,
-            )
-        })
+        .take(30)
+        .map(|p| fs::read_to_string(&p).unwrap_or_default())
+        .map(|icerik| (puanla(&icerik, anahtar), icerik))
         .filter(|(puan, _)| *puan >= 1)
         .collect();
     konular.sort_by_key(|k| std::cmp::Reverse(k.0));
-    for (_, p) in konular.into_iter().take(2) {
-        bolumler.push(kirp(&fs::read_to_string(&p).unwrap_or_default(), 800));
+    for (_, icerik) in konular.into_iter().take(2) {
+        bolumler.push(kirp(&icerik, 800));
     }
 
     let olaylar = oku(&format!("olaylar/{}.md", ay()));
@@ -502,16 +567,21 @@ pub fn getir(
         }
     }
 
-    // bütçe: sırayla ekle, dolunca dur
+    // bütçe: sırayla ekle, dolunca dur; boy sayaçla yürür, her bölümde
+    // sonuc baştan taranmaz (chars().count() O(n²) yapıyordu)
     let mut sonuc = String::new();
+    let mut boy = 0usize;
     for b in bolumler {
-        if sonuc.chars().count() + b.chars().count() > BAGLAM_BUTCESI {
+        let b_boy = b.chars().count();
+        if boy + b_boy > BAGLAM_BUTCESI {
             break;
         }
         if !sonuc.is_empty() {
-            sonuc += "\n\n";
+            sonuc.push_str("\n\n");
+            boy += 2;
         }
-        sonuc += &b;
+        sonuc.push_str(&b);
+        boy += b_boy;
     }
     sonuc
 }
@@ -603,6 +673,19 @@ mod test {
         assert_eq!(&s[10..11], " ");
         assert_eq!(&s[13..14], ":");
         assert_eq!(&s[16..17], ":");
+    }
+
+    #[test]
+    fn kisi_baslik_listelere_inmez() {
+        let metin = "# Ali\nid: 5\npuan: +3\netiket: rust, oyun\nnot: yakın arkadaş\n\n## Bildiklerin\n- bilgi1\n- bilgi2\n\n## Son olaylar\n- olay1\n";
+        let k = kisi_baslik(metin);
+        assert_eq!(k.isim, "Ali");
+        assert_eq!(k.puan, 3);
+        assert_eq!(k.etiket, vec!["rust", "oyun"]);
+        assert_eq!(k.not, "yakın arkadaş");
+        // boş dosya: her şey boş kalır, panik yok
+        let b = kisi_baslik("");
+        assert!(b.isim.is_empty());
     }
 
     #[test]

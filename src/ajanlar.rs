@@ -55,7 +55,7 @@ impl Bot {
         if ornek.is_empty() {
             return;
         }
-        match self.analiz(&ornek, PROFIL_CIKAR, 1200).await {
+        match self.analiz(&ornek, PROFIL_CIKAR, 1200, "profilci").await {
             Ok(yeni) => {
                 hafiza::yaz("profil.md", &yeni);
                 self.durum().profil = yeni;
@@ -78,7 +78,7 @@ impl Bot {
                 .replace("{favori}", d.favori_adi.as_deref().unwrap_or("kimse"));
             (t, d.favori_adi.clone(), d.bot_adi.clone())
         };
-        let cevap = match self.analiz(&dokum, &talimat, 1200).await {
+        let cevap = match self.analiz(&dokum, &talimat, 1200, "gunlukcu").await {
             Ok(c) => c,
             Err(e) => return log::warn!("gunlukcu: {e}"),
         };
@@ -182,6 +182,7 @@ impl Bot {
                         &eski,
                         &OZETLEYICI_KISI.replace("{sinir}", &hafiza::KISI_HEDEF.to_string()),
                         700,
+                        "ozetleyici_kisi",
                     )
                     .await
                 }
@@ -190,6 +191,7 @@ impl Bot {
                         &eski,
                         &OZETLEYICI_KONU.replace("{sinir}", &hafiza::KONU_HEDEF.to_string()),
                         600,
+                        "ozetleyici_konu",
                     )
                     .await
                 }
@@ -202,7 +204,12 @@ impl Bot {
                     let kes = satirlar.len() * 6 / 10;
                     let (eskiler, yeniler) = satirlar.split_at(kes);
                     match self
-                        .analiz(&eskiler.join("\n"), OZETLEYICI_OLAYLAR, 400)
+                        .analiz(
+                            &eskiler.join("\n"),
+                            OZETLEYICI_OLAYLAR,
+                            400,
+                            "ozetleyici_olaylar",
+                        )
                         .await
                     {
                         Ok(ozet) => {
@@ -262,7 +269,7 @@ impl Bot {
             );
             (metin, HOCA.replace("{ad}", &d.bot_adi))
         };
-        match self.analiz(&metin, &talimat, 800).await {
+        match self.analiz(&metin, &talimat, 800, "hoca").await {
             Ok(huy) => {
                 hafiza::yaz("huy.md", &huy);
                 self.durum().huy = huy;
@@ -282,7 +289,7 @@ impl Bot {
                 .replace("{ad}", &d.bot_adi)
                 .replace("{mevcut}", &d.duzeltmeler)
         };
-        match self.analiz(&dokum, &talimat, 400).await {
+        match self.analiz(&dokum, &talimat, 400, "elestirmen").await {
             Ok(notlar) => {
                 hafiza::yaz("duzeltmeler.md", &notlar);
                 self.durum().duzeltmeler = notlar;
@@ -348,7 +355,12 @@ impl Bot {
             .join("\n");
         let profil = self.durum().profil.clone();
         let secim = self
-            .analiz(&liste, &HABER_SEC.replace("{profil}", &profil), 10)
+            .analiz(
+                &liste,
+                &HABER_SEC.replace("{profil}", &profil),
+                10,
+                "haber_sec",
+            )
             .await?;
         let n: usize = secim
             .chars()
@@ -392,7 +404,7 @@ impl Bot {
                 ]}
             ]
         });
-        let cevap = match self.sor_ham(govde).await {
+        let cevap = match self.sor_ham(govde, "resimci").await {
             Ok(c) => c,
             Err(_) => {
                 self.uret(
@@ -401,6 +413,7 @@ impl Bot {
                     )],
                     RESIM_AT,
                     Some(120),
+                    "resimci",
                 )
                 .await?
             }
