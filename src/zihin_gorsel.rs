@@ -138,13 +138,17 @@ pub fn zihin_verisi(d: &Durum) -> ZihinVerisi {
         model: d.model.clone(),
         kip: d.dusunme.ad().to_string(),
         uyanik: uyku::uyanik_mi(d),
-        // ruh hali sohbet başına tutulur; panelde dolu olan ilki görünür
-        ruh_hali: d
-            .sohbetler
-            .values()
-            .map(|s| s.ruh_hali.trim())
-            .find(|r| !r.is_empty())
-            .map(|r| r.to_string()),
+        // ruh hali sohbet başına tutulur; panelde EN SON canlanan sohbetinki görünür
+        // (HashMap sırası rastgele, iki !zihin farklı chip göstermesin)
+        ruh_hali: {
+            let mut acik: Vec<&ChannelId> = d.sohbetler.keys().collect();
+            acik.sort_by_key(|k| std::cmp::Reverse(d.son_aktivite.get(k).copied()));
+            acik.into_iter()
+                .filter_map(|k| d.sohbetler.get(k))
+                .map(|s| s.ruh_hali.trim())
+                .find(|r| !r.is_empty())
+                .map(|r| r.to_string())
+        },
         toplam_token: (m.cagri > 0).then_some(m.giris_token + m.cikis_token),
         kendim: ilk_satirlar(&d.kendim, KENDIM_SATIRI),
         huy: maddeler(&d.huy, HUY_SATIRI),
@@ -289,18 +293,20 @@ fn maddeler(metin: &str, adet: usize) -> Vec<String> {
 
 // ---------- metin ölçüsü ve sarma ----------
 
-// Inter'de harf genişlikleri em'in kabaca bu oranları. Tahmin bilerek yukarı
-// yuvarlar: fazla sarmak, kartı taşırmaktan iyidir.
+// Inter'de harf genişlikleri em'in kabaca bu oranları. Kovalar Inter-Regular hmtx
+// ölçümünün TAVANINA çekildi (boşluk 0.28, büyük harf ≤0.79, M/W/@/% ≤0.99): tahmin
+// gerçeğin altında kalırsa ad @kullanıcı adının üstüne biner; fazla sarmak taşırmaktan iyidir.
 fn harf_orani(c: char) -> f32 {
     match c {
         'i' | 'ı' | 'l' | 'j' | 'I' | 'İ' | '.' | ',' | ':' | ';' | '!' | '|' | '\'' | '`' => {
-            0.28
+            0.30
         }
-        ' ' | 'f' | 't' | 'r' | '(' | ')' | '[' | ']' | '-' | '/' => 0.40,
-        'm' | 'w' | 'M' | 'W' | '@' | '%' => 0.82,
-        '0'..='9' => 0.58,
-        c if c.is_uppercase() => 0.62,
-        _ => 0.55,
+        ' ' => 0.30,
+        'f' | 't' | 'r' | '(' | ')' | '[' | ']' | '-' | '/' => 0.42,
+        'm' | 'w' | 'M' | 'W' | '@' | '%' => 0.99,
+        '0'..='9' => 0.64,
+        c if c.is_uppercase() => 0.79,
+        _ => 0.60,
     }
 }
 

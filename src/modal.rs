@@ -16,11 +16,17 @@ pub const ZIHIN_KISI_SEC: &str = "zihin_kisi_sec";
 pub const ZIHIN_KONULAR: &str = "zihin_konular";
 pub const ZIHIN_OLAYLAR: &str = "zihin_olaylar";
 pub const ZIHIN_OZET: &str = "zihin_ozet";
+// ayar paneli: düşünme kipi butonlarının kimliği "ayar_dusunme:<kip dosya değeri>"
+pub const AYAR_DUSUNME: &str = "ayar_dusunme:";
+pub const AYAR_DEBUG: &str = "ayar_debug";
+pub const AYAR_UYAN: &str = "ayar_uyan";
+pub const AYAR_UYU: &str = "ayar_uyu";
 
 // embed vurgu renkleri
 const RENK_ZIHIN: u32 = 0x5865F2;
 const RENK_DURUM: u32 = 0x57F287;
 const RENK_YARDIM: u32 = 0xEB459E;
+const RENK_AYAR: u32 = 0xFEE75C;
 
 pub struct Bolum {
     pub etiket: String,
@@ -75,7 +81,7 @@ pub fn durum_metni(d: &Durum) -> String {
     let g = &d.gelisim;
     let m = &d.metrik;
     let ozet = format!(
-        "sürüm: {} · evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {} · token: {} çağrı, {} giriş ({} önbellek) + {} çıkış",
+        "sürüm: {} · evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · debug: {} · seyahat: {} · token: {} çağrı, {} giriş ({} önbellek) + {} çıkış",
         surum_metni(),
         gelisim::evre(g).ad,
         gelisim::gun(g) + 1,
@@ -84,6 +90,7 @@ pub fn durum_metni(d: &Durum) -> String {
         d.model,
         if uyku::uyanik_mi(d) { "uyanık" } else { "uyuyor" },
         d.dusunme.ad(),
+        if d.debug { "açık" } else { "kapalı" },
         seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
         m.cagri,
         m.giris_token,
@@ -482,13 +489,14 @@ pub fn durum_mesaji(d: &Durum) -> CreateInteractionResponseMessage {
         .field(
             "Hal",
             format!(
-                "uyku: {}\ndüşünme: {}\nseyahat: {}",
+                "uyku: {}\ndüşünme: {}\ndebug: {}\nseyahat: {}",
                 if uyku::uyanik_mi(d) {
                     "uyanık"
                 } else {
                     "uyuyor"
                 },
                 d.dusunme.ad(),
+                if d.debug { "açık" } else { "kapalı" },
                 seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
             ),
             true,
@@ -525,6 +533,89 @@ pub fn yardim_mesaji() -> CreateInteractionResponseMessage {
         )
 }
 
+// ---------- ayar paneli (butonlu) ----------
+
+pub fn ayarlar_embed(d: &Durum) -> CreateEmbed {
+    let uyku = if uyku::uyanik_mi(d) {
+        if d.uyanik_zorla > simdi_unix() {
+            "uyanık (zorla, !uyan)"
+        } else {
+            "uyanık"
+        }
+    } else {
+        "uyuyor"
+    };
+    CreateEmbed::new()
+        .title("Ayarlar")
+        .color(RENK_AYAR)
+        .description(format!(
+            "sürüm: {}\nmodel: {} (`!model <id>`, yalnız favori)\ndüşünme: **{}**\ndebug: **{}**\nuyku: **{}**\nseyahat: {}",
+            surum_metni(),
+            d.model,
+            d.dusunme.ad(),
+            if d.debug { "açık" } else { "kapalı" },
+            uyku,
+            seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
+        ))
+        .footer(CreateEmbedFooter::new(
+            "butona bas, panel yerinde yenilenir · göster: düşünce spoiler'da · gizle: düşünüyorum… · sessiz: iz yok · kapat: reasoning'siz",
+        ))
+}
+
+pub fn ayarlar_bilesenleri(d: &Durum) -> Vec<CreateActionRow> {
+    let kipler = [
+        (DusunmeKip::Goster, "göster"),
+        (DusunmeKip::Gizle, "gizle"),
+        (DusunmeKip::Sessiz, "sessiz"),
+        (DusunmeKip::Kapali, "kapat"),
+    ];
+    let dusunme: Vec<CreateButton> = kipler
+        .iter()
+        .map(|(kip, etiket)| {
+            CreateButton::new(format!("{AYAR_DUSUNME}{}", kip.dosya_degeri()))
+                .label(format!("düşünme: {etiket}"))
+                .style(if *kip == d.dusunme {
+                    ButtonStyle::Primary
+                } else {
+                    ButtonStyle::Secondary
+                })
+        })
+        .collect();
+    let uyanik = uyku::uyanik_mi(d);
+    vec![
+        CreateActionRow::Buttons(dusunme),
+        CreateActionRow::Buttons(vec![
+            CreateButton::new(AYAR_DEBUG)
+                .label(if d.debug {
+                    "debug: açık"
+                } else {
+                    "debug: kapalı"
+                })
+                .style(if d.debug {
+                    ButtonStyle::Success
+                } else {
+                    ButtonStyle::Secondary
+                }),
+            CreateButton::new(AYAR_UYAN)
+                .label("uyandır")
+                .style(ButtonStyle::Secondary)
+                .disabled(uyanik),
+            CreateButton::new(AYAR_UYU)
+                .label("uyut (8 saat)")
+                .style(ButtonStyle::Secondary)
+                .disabled(!uyanik),
+        ]),
+    ]
+}
+
+// /ayarlar (ephemeral) ve buton sonrası yerinde yenileme (UpdateMessage) aynı gövde
+pub fn ayarlar_mesaji(d: &Durum, gizli: bool) -> CreateInteractionResponseMessage {
+    CreateInteractionResponseMessage::new()
+        .ephemeral(gizli)
+        .embed(ayarlar_embed(d))
+        .components(ayarlar_bilesenleri(d))
+}
+
 // ---------- slash kaydı ----------
 
 // sunucu komutları: her ready'de çağrılır, discord üstüne yazar (idempotent);
@@ -539,6 +630,8 @@ pub async fn komutlari_kayit(http: &Http, guild: GuildId) -> Result<(), Hata> {
                 CreateCommand::new("yardim").description("Komut listesini kart olarak gösterir"),
                 CreateCommand::new("zihin")
                     .description("Botun bildiklerini interaktif kart + menü/butonlarla gösterir"),
+                CreateCommand::new("ayarlar")
+                    .description("Butonlu ayar paneli: düşünme kipi, debug, uyku"),
             ],
         )
         .await?;

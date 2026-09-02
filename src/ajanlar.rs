@@ -17,6 +17,15 @@ use base64::Engine;
 use serde::Deserialize;
 use std::path::PathBuf;
 
+// günlükçünün bir turda neyi yazdığı; !zihin test ve log için
+#[derive(Default, Debug, Clone, Copy)]
+pub struct GunlukcuOzet {
+    pub kisi: usize,
+    pub konu: usize,
+    pub olay: usize,
+    pub cikti: usize, // model çıktısının karakter sayısı
+}
+
 #[derive(Deserialize, Default)]
 struct Kayit {
     #[serde(default)]
@@ -66,9 +75,14 @@ impl Bot {
     }
 
     // biten sohbetten (ya da 6 saatlik gözlemden) hafızaya yazılacakları çıkarır ve dosyalara işler
-    pub async fn gunlukcu(&self, dokum: String, kaynak: &str, kanal: &str) {
+    pub async fn gunlukcu(
+        &self,
+        dokum: String,
+        kaynak: &str,
+        kanal: &str,
+    ) -> Result<GunlukcuOzet, Hata> {
         if dokum.trim().is_empty() {
-            return;
+            return Err("döküm boş".into());
         }
         let (talimat, favori, bot_adi) = {
             let d = self.durum();
@@ -80,19 +94,32 @@ impl Bot {
         };
         let cevap = match self.analiz(&dokum, &talimat, 1200, "gunlukcu").await {
             Ok(c) => c,
-            Err(e) => return log::warn!("gunlukcu: {e}"),
+            Err(e) => {
+                log::warn!("gunlukcu: {e}");
+                return Err(e);
+            }
+        };
+        let mut ozet = GunlukcuOzet {
+            cikti: cevap.chars().count(),
+            ..GunlukcuOzet::default()
         };
         let kayit: Kayit = match serde_json::from_str(json_ayikla(&cevap)) {
             Ok(k) => k,
             Err(e) => {
                 // modelin emeği kaybolmasın: çözülemeyen çıktı ham haliyle arşive düşer
                 hafiza::arsivle(&format!("gunlukcu-{}.md", hafiza::slug(kaynak)), &cevap);
-                return log::warn!("gunlukcu: json çözülemedi, ham döküm arşivde: {e}");
+                log::warn!("gunlukcu: json çözülemedi, ham döküm arşivde: {e}");
+                return Err(format!(
+                    "json çözülemedi ({e}); çıktı başı: {}",
+                    hafiza::kirp(&cevap, 120)
+                )
+                .into());
             }
         };
 
         if !kayit.olay.is_empty() {
             hafiza::olay_ekle(kanal, &kayit.olay);
+            ozet.olay = 1;
         }
         let (ad_id, kullanici_adlari) = {
             let d = self.durum();
@@ -150,10 +177,12 @@ impl Bot {
                 k.not = hafiza::FAVORI_NOTU.to_string();
             }
             hafiza::kisi_yaz(&k);
+            ozet.kisi += 1;
         }
         for kn in kayit.konular {
             if !kn.ad.trim().is_empty() && !kn.not.trim().is_empty() {
                 hafiza::konu_ekle(kn.ad.trim(), &kn.not);
+                ozet.konu += 1;
             }
         }
         if !kayit.kendim.trim().is_empty() {
@@ -161,9 +190,15 @@ impl Bot {
             self.durum().kendim = kayit.kendim.trim().to_string();
         }
         self.durum().dizin = hafiza::dizin_yenile();
-        log::info!("gunlukcu: {kaynak} kaydedildi");
+        log::info!(
+            "zihin: günlükçü [{kaynak}]: {} kişi, {} konu, {} olay yazıldı",
+            ozet.kisi,
+            ozet.konu,
+            ozet.olay
+        );
 
         self.ozetleyici().await;
+        Ok(ozet)
     }
 
     // sınırı aşan dosyaları küçültür; çıkan ham parça arşive gider

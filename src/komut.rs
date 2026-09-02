@@ -11,9 +11,11 @@ komutlar:
 `!ajanlar` profilci ve hocayı şimdi çalıştırır
 `!uyan` uykuyu keser · `!uyu [saat]` test için uyutur
 `!durum` evre, sayaçlar, model, düşünme, uyku, seyahat
-`!zihin` zihni panel görseli olarak atar (detay: `/zihin` menüsü)
+`!zihin` zihni panel görseli olarak atar (detay: `/zihin` menüsü) · `!zihin test` son 30 satırı hemen günlükçüye verir (zihin zinciri teşhisi)
 `!düşünme göster|gizle|sessiz|kapat` düşünme kipi (göster: cevapla spoiler'da · gizle: düşünürken \"Düşünüyorum...\", cevap sonra · sessiz: arka planda düşünür, hiç iz göstermez · kapat: istekler reasoning'siz)
 `!model [id]` modeli gösterir/değiştirir (yalnız favori)
+`!debug [aç|kapat]` karar izleri kanala düşer: isteklilik puanı/sebebi, hedef, ruh hali, sus/tepki, sohbet kapanışı
+`!ayarlar` butonlu ayar paneli: düşünme kipi, debug, uyku (slash: `/ayarlar`)
 slash: `/durum` `/yardim` kart, `/zihin` interaktif kart (kişi menüsü + bölüm butonları → detay modalları)";
 
 impl Bot {
@@ -68,36 +70,12 @@ impl Bot {
                 let _ = msg.react(&ctx.http, '👍').await;
             }
             "uyan" => {
-                {
-                    // planı silme: silinirse dakika sonra yeniden kurulup tekrar uyutur.
-                    // onun yerine planlı uyku bitene kadar "zorla uyanık" kal
-                    let mut d = self.durum();
-                    let simdi = simdi_unix();
-                    let bitis = d
-                        .planlar
-                        .iter()
-                        .filter(|p| p.bas <= simdi && simdi < p.bit)
-                        .map(|p| p.bit)
-                        .max()
-                        .unwrap_or(simdi + 6 * 3600);
-                    d.uyanik_zorla = bitis;
-                }
+                self.uyandir();
                 let _ = msg.react(&ctx.http, '👍').await;
                 self.uyku_gecisi(ctx).await;
             }
             "uyu" => {
-                {
-                    let mut d = self.durum();
-                    let simdi = simdi_unix();
-                    let sure: i64 = arg.parse().unwrap_or(8); // saat
-                    d.uyanik_zorla = 0;
-                    d.planlar.push(uyku::Plan {
-                        gun: -1,
-                        uykusuz_bas: None,
-                        bas: simdi,
-                        bit: simdi + sure * 3600,
-                    });
-                }
+                self.uyut(arg.parse().unwrap_or(8));
                 let _ = msg.react(&ctx.http, '😴').await;
                 self.uyku_gecisi(ctx).await;
             }
@@ -105,24 +83,71 @@ impl Bot {
                 let metin = modal::durum_metni(&self.durum());
                 soyle(metin).await;
             }
+            "debug" => {
+                let acik = self.debug_ayarla(arg);
+                soyle(if acik {
+                    "debug açık: kararlar bu kanala düşecek (DEBUG_KANALI ayarlıysa oraya)".into()
+                } else {
+                    "debug kapalı".into()
+                })
+                .await;
+            }
+            "ayarlar" | "ayar" => {
+                // butonlu panel; tıklayan interaction_create'te paneli yerinde yeniler
+                let (embed, bilesenler) = {
+                    let d = self.durum();
+                    (modal::ayarlar_embed(&d), modal::ayarlar_bilesenleri(&d))
+                };
+                let mesaj = CreateMessage::new().embed(embed).components(bilesenler);
+                if let Err(e) = kanal.send_message(&ctx.http, mesaj).await {
+                    log::warn!("ayar paneli gönderilemedi: {e}");
+                }
+            }
+            "zihin" if arg.trim().eq_ignore_ascii_case("test") => {
+                // teşhis: bu kanalın son satırlarını hemen günlükçüye ver; zihin zincirinin
+                // çalışıp çalışmadığı 40 dk beklemeden görülsün (reasoning'li modelde boş
+                // dönüyordu, canlı log olmadan anlaşılmıyordu)
+                let mut satirlar: Vec<String> = {
+                    let d = self.durum();
+                    d.kanal_gecmisi
+                        .get(&kanal)
+                        .map(|g| g.iter().rev().take(30).cloned().collect())
+                        .unwrap_or_default()
+                };
+                if satirlar.is_empty() {
+                    soyle("bu kanalda hatırladığım satır yok".into()).await;
+                } else {
+                    satirlar.reverse();
+                    let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
+                    let metin = match self
+                        .gunlukcu(satirlar.join("\n"), "zihin testi", &kanal_adi)
+                        .await
+                    {
+                        Ok(o) => format!(
+                            "günlükçü: {} kişi, {} konu, {} olay yazıldı · model çıktısı {} karakter",
+                            o.kisi, o.konu, o.olay, o.cikti
+                        ),
+                        Err(e) => format!("günlükçü başarısız: {}", hafiza::kirp(&e.to_string(), 300)),
+                    };
+                    soyle(metin).await;
+                }
+            }
             "zihin" => {
                 // görsel: durumun kilitli alanları burada kopyalanır (guard satır
                 // sonunda düşer), dosya okuma ve rasterize bloklayan iş olduğu için
-                // spawn_blocking'e taşınır
+                // spawn_blocking'e taşınır. PNG diske yazılmaz: iki kanalda aynı anda
+                // !zihin aynı dosyaya yarışıp yarım görsel yollamasın, bayt bellekten gider
                 let mut veri = zihin_gorsel::zihin_verisi(&self.durum());
                 let uretim = tokio::task::spawn_blocking(move || {
                     zihin_gorsel::dosyalari_oku(&mut veri);
-                    let png = zihin_gorsel::zihin_png(&veri)?;
-                    let yol = hafiza::yol(zihin_gorsel::CIKTI_ADI);
-                    std::fs::write(&yol, png)?;
-                    Ok::<PathBuf, Hata>(yol)
+                    zihin_gorsel::zihin_png(&veri)
                 })
                 .await;
                 match uretim {
-                    Ok(Ok(yol)) => {
+                    Ok(Ok(png)) => {
                         let baslik = format!("zihnim, {}", hafiza::tarih());
-                        self.gonder(ctx, kanal, &baslik, None, Some(&yol), None)
-                            .await;
+                        let ek = CreateAttachment::bytes(png, zihin_gorsel::CIKTI_ADI);
+                        self.gonder_ekli(ctx, kanal, &baslik, ek).await;
                     }
                     // görsel çıkmazsa eski embed kartı yine gider; !zihin boş dönmez
                     hata => {
@@ -180,6 +205,47 @@ impl Bot {
             _ => return false,
         }
         true
+    }
+
+    // !uyan ve ayar paneli: planı silme (silinirse dakika sonra yeniden kurulup tekrar
+    // uyutur), planlı uyku bitene kadar "zorla uyanık" kal
+    pub fn uyandir(&self) {
+        let mut d = self.durum();
+        let simdi = simdi_unix();
+        let bitis = d
+            .planlar
+            .iter()
+            .filter(|p| p.bas <= simdi && simdi < p.bit)
+            .map(|p| p.bit)
+            .max()
+            .unwrap_or(simdi + 6 * 3600);
+        d.uyanik_zorla = bitis;
+    }
+
+    // !uyu [saat] ve ayar paneli: test için geçici uyku planı
+    pub fn uyut(&self, saat: i64) {
+        let mut d = self.durum();
+        let simdi = simdi_unix();
+        d.uyanik_zorla = 0;
+        d.planlar.push(uyku::Plan {
+            gun: -1,
+            uykusuz_bas: None,
+            bas: simdi,
+            bit: simdi + saat * 3600,
+        });
+    }
+
+    // !debug aç|kapat (boşsa tersine çevirir); durum/debug.md'de kalıcı. Yeni durumu döner
+    pub fn debug_ayarla(&self, arg: &str) -> bool {
+        let mut d = self.durum();
+        let yeni = match arg.trim().to_lowercase().as_str() {
+            "aç" | "ac" | "açık" | "acik" | "on" => true,
+            "kapat" | "kapalı" | "kapali" | "off" => false,
+            _ => !d.debug,
+        };
+        d.debug = yeni;
+        hafiza::yaz("debug.md", if yeni { "acik" } else { "kapali" });
+        yeni
     }
 
     // openrouter model listesinde var mı
