@@ -170,6 +170,11 @@ struct Durum {
     haber_bekleyen: HashMap<ChannelId, Instant>,
     atilan_haberler: HashSet<u64>,
     taranan: HashSet<GuildId>,
+    // uyku: uyandığında gece yazılanları değerlendirebilsin diye başlangıç anı + ham hafıza boyu
+    uyku_basi: i64,
+    uyku_basi_hafiza_len: usize,
+    son_gece_gozlem: i64, // uykuda zihne son işleme anı (2 saatte bir gözlem)
+    stok_haber: Option<ajanlar::Haber>, // uykuda seçilen, uyanınca atılacak haber
     // gündem ve uyku
     gundem: String, // gezgin: son okudukları ve düşündükleri
     // zihin eşlemeleri: görünen ad (küçük harf) → id, id → kullanıcı adı
@@ -1738,6 +1743,17 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(HABER_ARALIGI).await;
         if !uyku::uyanik_mi(&bot.durum()) {
+            // uykuda haber atılmaz ama seçilir: uyanınca "sabah haberi" olarak stoklanır
+            let stok_bos = bot.durum().stok_haber.is_none();
+            if stok_bos {
+                match bot.haberci().await {
+                    Ok(h) => {
+                        bot.durum().stok_haber = Some(h);
+                        log::debug!("haber: uykuda stoklandı");
+                    }
+                    Err(e) => log::debug!("haber: uyku stoku seçilemedi: {e}"),
+                }
+            }
             continue;
         }
         if seyahat::simdi().is_some() {
@@ -1766,7 +1782,16 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
             continue;
         }
 
-        bot.haber_at(&ctx, kanal).await;
+        // uykuda stoklanan haber varsa önce o gider ("sabah haberi")
+        let stok = bot.durum().stok_haber.take();
+        match stok {
+            Some(h) => {
+                bot.haber_gonder(&ctx, kanal, h).await;
+            }
+            None => {
+                bot.haber_at(&ctx, kanal).await;
+            }
+        }
     }
 }
 
@@ -1792,6 +1817,11 @@ impl Bot {
                 return false;
             }
         };
+        self.haber_gonder(ctx, kanal, h).await
+    }
+
+    // seçilmiş haberi paylaşır: tur haberi de uykuda stoklanan da buradan gider
+    async fn haber_gonder(&self, ctx: &Context, kanal: ChannelId, h: ajanlar::Haber) -> bool {
         let link = if h.url.starts_with("https://") || h.url.starts_with("http://") {
             h.url.clone()
         } else {
@@ -1950,6 +1980,20 @@ async fn gezgin_dongusu(bot: Arc<Bot>) {
 async fn bellek_dongusu(bot: Arc<Bot>) {
     loop {
         sleep(Duration::from_secs(10 * 60)).await;
+        // uykuda mesajlar zihne işlenmeye devam eder: 2 saatte bir gece gözlemi kuyruğa düşer
+        {
+            let mut d = bot.durum();
+            if !uyku::uyanik_mi(&d) && simdi_unix() - d.son_gece_gozlem >= 2 * 3600 {
+                let son = son_mesajlar(&d, 300);
+                d.son_gece_gozlem = simdi_unix();
+                d.bellek_kuyruk.push_back((
+                    son,
+                    "gece gözlemi (bot uykuda)".to_string(),
+                    "gece".to_string(),
+                    false,
+                ));
+            }
+        }
         loop {
             let isi = {
                 let mut d = bot.durum();
@@ -1990,34 +2034,125 @@ async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
 impl Bot {
     // uyudu/uyandı geçişini işler; uyanınca uyurken gelen etiketlere döner
     async fn uyku_gecisi(&self, ctx: &Context) {
-        let bekleyen = {
+        let (bekleyen, uyandi) = {
             let mut d = self.durum();
             let uyanik = uyku::uyanik_mi(&d);
             if uyanik == d.uyuyor {
                 log::info!("uyku: {}", if uyanik { "uyandı" } else { "uyudu" });
             }
             let uyandi = uyanik && d.uyuyor;
+            let uyudu = !uyanik && !d.uyuyor;
             d.uyuyor = !uyanik;
+            if uyudu {
+                // gece mesajlarını kesebilmek için başlangıç işaretleri
+                d.uyku_basi = simdi_unix();
+                d.uyku_basi_hafiza_len = d.hafiza.len();
+            }
             if uyandi {
-                std::mem::take(&mut d.bekleyen_etiketler)
+                (std::mem::take(&mut d.bekleyen_etiketler), true)
             } else {
-                Vec::new()
+                (Vec::new(), false)
             }
         };
-        let Some((kanal, _)) = bekleyen.last() else {
+
+        // geçiş yoksa bu tikte uyanış işi yok
+        if !uyandi {
+            return;
+        }
+
+        if !bekleyen.is_empty() {
+            // uyurken etiketlendiyse kesin dönüş: liste hata durumunda geri konur
+            let Some(&(kanal, _)) = bekleyen.last() else {
+                return;
+            };
+            let liste = bekleyen
+                .iter()
+                .map(|(_, m)| format!("- {m}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            match self
+                .uret(
+                    &[kullanici(format!("uyurken sana yazılanlar:\n{liste}"))],
+                    UYANDIM,
+                    Some(200),
+                )
+                .await
+            {
+                Ok(c) => {
+                    self.gonder(ctx, kanal, &c, None, None, None).await;
+                    sohbet_baslat(&mut self.durum(), kanal, Some(c));
+                }
+                Err(e) => {
+                    log::error!("ai hatası: {e}");
+                    let mut d = self.durum();
+                    for b in bekleyen {
+                        d.bekleyen_etiketler.push(b);
+                    }
+                }
+            }
+            return;
+        }
+
+        // etiket yoksa gece yazılanları değerlendir: ilgini çeken varsa sabah sözüyle dön
+        let gece: Vec<String> = {
+            let d = self.durum();
+            d.hafiza
+                .iter()
+                .skip(d.uyku_basi_hafiza_len)
+                .cloned()
+                .collect()
+        };
+        if !gece.is_empty() {
+            self.uyanis_degerlendir(ctx, &gece).await;
+        }
+    }
+
+    // gece yazılanlardan botu ilgilendirenleri seçer; eşiğin üstündeyse sabah sözüyle döner
+    async fn uyanis_degerlendir(&self, ctx: &Context, gece: &[String]) {
+        let gece_metni = gece.join("\n");
+        let talimat = {
+            let d = self.durum();
+            UYANIS.replace("{ad}", &d.bot_adi)
+        };
+        #[derive(Deserialize)]
+        struct UyanisSonuc {
+            #[serde(default)]
+            ilgi: i32,
+            #[serde(default)]
+            konu: String,
+        }
+        let sonuc = match self.analiz(&gece_metni, &talimat, 100).await {
+            Ok(c) => serde_json::from_str::<UyanisSonuc>(json_ayikla(&c)),
+            Err(e) => {
+                log::debug!("uyanis: değerlendirme çağrısı başarısız: {e}");
+                return;
+            }
+        };
+        let Ok(s) = sonuc else {
+            log::debug!("uyanis: sonuç çözülemedi");
             return;
         };
-        let kanal = *kanal;
-        let liste = bekleyen
-            .iter()
-            .map(|(_, m)| format!("- {m}"))
-            .collect::<Vec<_>>()
-            .join("\n");
+        log::debug!("uyanis: ilgi={} konu={}", s.ilgi, s.konu);
+        if s.ilgi < 5 {
+            return;
+        }
+        let Some(kanal) = self.durum().son_kanal else {
+            return;
+        };
+        if self.durum().sohbetler.contains_key(&kanal) {
+            return;
+        }
+        let talimat = {
+            let d = self.durum();
+            UYANIS_CEVAP
+                .replace("{ad}", &d.bot_adi)
+                .replace("{konu}", &s.konu)
+        };
         match self
             .uret(
-                &[kullanici(format!("uyurken sana yazılanlar:\n{liste}"))],
-                UYANDIM,
-                Some(200),
+                &[kullanici(format!("sen uyurken yazılanlar:\n{gece_metni}"))],
+                &talimat,
+                Some(250),
             )
             .await
         {

@@ -4,6 +4,17 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 6 · uyku modu: dinle + biriktir + uyanınca değerlendir
+- Uyurken mesajlar ham hafızaya zaten giriyordu; artık `bellek_dongusu` 2 saatte bir gece
+  gözlemi yapıp zihne işliyor (`son_gece_gozlem` işaretli).
+- Haber turu uyurken haber seçip `stok_haber`'e koyuyor (atmaz); uyanık ilk turda "sabah
+  haberi" olarak gider (`haber_gonder` ortak gönderim yolu).
+- Uyanış geçişinde: bekleyen etiket varsa `UYANDIM` ile kesin dönüş, hata durumunda liste
+  geri konur (kayıp yok). Etiket yoksa `uyanis.md` ajanı gece mesajlarını puanlar
+  (`{"ilgi":0-10,"konu"}`); ilgi ≥5 ise `uyanis-cevap.md` ile son kanala sabah sözü.
+- Haber seçimine "Nişantaşı Üniversitesi ile ilgili konu önceliklidir" kuralı (haber-sec.md).
+- Doğrulama: 34 test, clippy 0 uyarı.
+
 ## 2026-09-02 · Adım 5 · hedef seçimi + sil-baştan kalktı
 - `Sohbet.son_gelenler` (isim + mesaj id, 20): bot sustuğundan beri yazanlar; bot cevap
   verince boşalır. 2+ farklı kişi yazdıysa `hedef-sec.md` mini çağrısı (40 token) hedefi

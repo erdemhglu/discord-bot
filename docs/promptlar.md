@@ -23,6 +23,8 @@ doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken 
 | ANALIST | analist.md | sistem (analiz) | `analiz` | — | — |
 | ISTEKLILIK | isteklilik.md | görev (analiz) | `isteklilik` (mesaj gelince, rate limitli) | `{ad}` | 80 |
 | HEDEF_SEC | hedef-sec.md | görev (analiz) | `hedef_sec` (2+ kişi yazınca) | `{ad}` | 40 |
+| UYANIS | uyanis.md | görev (analiz) | `uyanis_degerlendir` (uyanış geçişinde) | `{ad}` | 100 |
+| UYANIS_CEVAP | uyanis-cevap.md | görev | `uyanis_degerlendir` (ilgi ≥5) | `{ad}`, `{konu}` | 250 |
 | PROFIL_CIKAR | profil-cikar.md | analiz | `profilci` | — | 1200 |
 | GUNLUKCU | gunlukcu.md | analiz (JSON) | `gunlukcu` | `{ad}` `{kaynak}` `{favori}` | 1200 |
 | HOCA | hoca.md | analiz | `hoca` | `{ad}` | 800 |

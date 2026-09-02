@@ -13,7 +13,7 @@ Rust ile yazıldı, cevapları openrouter üzerinden alıyor.
 - saatte bir %30 ihtimalle durup dururken laf atar, eski konulara gönderme yapar
 - 6 saatte bir hacker news + Sözcü gündeminden gruba uygun bir haber atar, 2 saat yorum bekler
 - 4 saatte bir Türkiye gündemini gezer (Sözcü RSS, firecrawl varsa sayfayı okur), kendi görüşünü günlüğüne yazar; kişilik buradan da beslenir
-- geceleri uyur (01-09), nadiren uykusuz gece geçirir (gerginse daha sık); uyurken yazmaz, etiketlenirse uyanınca döner
+- geceleri uyur (01-09), nadiren uykusuz gece geçirir (gerginse daha sık); uyurken yazmaz ama dinler: mesajlar zihne işlenir, haber stoklanır; uyanınca gece yazılanları değerlendirir, ilgisi çekildiyse sabah sözüyle döner
 - etiketlenince, adı geçince ya da mesajına yanıt verilince her zaman cevap verir; cevabı son yazanın mesajına bağlayıp onu etiketler
 - sohbet cevapları canlı akar: mesaj belirir, yazıldıkça büyür; model düşünce üretiyorsa (reasoning) kırpılmadan spoiler içinde gösterilir, 1900'ü aşan cevap kırpılmaz, yeni mesaja bölünür
 - bayram, uzun hafta sonu, yaz, festival zamanlarında seyahatte gibi davranır: az yazar, yoldan mesaj atar, gitmeden haber verir

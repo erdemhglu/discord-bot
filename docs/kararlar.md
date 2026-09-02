@@ -121,6 +121,13 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   son mesajdan 30 dk sonra (`SOHBET_ZAMAN_ASIMI`) sessizce kapanır, dökümü yine günlükçüye ve
   eleştirmene gider. `Durum.son_aktivite` haritası tazelenir (kullanıcı mesajı, sohbet açılışı,
   bot cevabı).
+- **2026-09-02 · Uyku modu: dinle, biriktir, uyanınca değerlendir.** Kullanıcı bildirimi: bot
+  uyurken sağırlaşıyordu. Artık uyurken mesajlar ham hafızaya girer, bellek döngüsü 2 saatte bir
+  gece gözlemi yapar (zihne işler), haber turu haber seçip stoklar (atmaz). Uyanışta: etiket
+  varsa kesin dönüş (hata durumunda liste geri konur, kaybolmaz); yoksa `uyanis.md` ajanı gece
+  yazılanların botu ne kadar ilgilendirdiğini puanlar, ≥5 ise sabah sözüyle döner. Stok haber
+  uyanık ilk turda gider. Haber seçimine "Nişantaşı Üniversitesi ile ilgili konu önceliklidir"
+  kuralı eklendi (kimlik kisilik.md'de).
 - **2026-09-02 · Hedef seçimi + sil-baştan kalktı.** Kullanıcı bildirimi: üst üste farklı kişiler
   yazınca bot önceki mesajları unutup karmançorman cevap veriyordu. Çözüm: (1) `Sohbet.son_gelenler`
   bot sustuğundan beri yazanları (isim+mesaj id) tutar; 2+ farklı kişi varsa `hedef-sec.md` mini

@@ -62,7 +62,9 @@ rss 20 → seçim (`GEZGIN_SEC`, huy+profil) → ≤3 sayfa (`sayfa_oku`: firecr
 
 ## Uyku (dakikada bir)
 `!uyan`: aktif planın bitişine kadar `uyanik_zorla` (planı silmek işe yaramaz, dakika sonra yeniden kurulup uyutur). `!uyu [saat]`: geçici plan, zorlama sıfırlanır.
-`guncelle`: dün+bugün için plan yoksa kur (gergin ise %20, değilse %7 uykusuz gece). Uyanık→uyudu / uyudu→uyandı geçişi loglanır. Uyanınca bekleyen etiket varsa son etiketin kanalına `UYANDIM` ile tek mesaj + sohbet. Uyurken: cevap yok, döngüler geçer, hafıza kaydı devam eder. Uyku hali konuşma promptuna karakter bahanesi olarak girmez.
+`guncelle`: dün+bugün için plan yoksa kur (gergin ise %20, değilse %7 uykusuz gece). Uyanık→uyudu / uyudu→uyandı geçişi loglanır. Uyku hali konuşma promptuna karakter bahanesi olarak girmez.
+**Uyurken dinleme sürer:** mesajlar ham hafızaya girer; `bellek_dongusu` 2 saatte bir gece gözlemi yapıp zihne işler; haber turu uyurken haber seçer ama atmaz, `stok_haber`'e koyar.
+**Uyanınca:** bekleyen etiket varsa `UYANDIM` ile kesin dönüş (hata durumunda liste geri konur, kaybolmaz). Etiket yoksa `uyanis.md` ajanı gece mesajlarını değerlendirir (`{"ilgi":0-10,"konu"}`); ilgi ≥5 ise `uyanis-cevap.md` ile son konuşulan kanala sabah sözü. Stok haber uyanık ilk turda "sabah haberi" olarak atılır.
 
 ## Seyahat (takvimden)
 `seyahat::simdi()` bugünü tabloya bakarak bulur. Etkisi: "ŞU AN" satırı, araya girme ×0.3, haber/şaka yok, dürtme yerine günde ≤1 yoldan mesaj, bir gün önce `GIDIYORUM`. Durum tutulmaz; yalnız `son_yol_mesaji` ve `duyurulan_seyahat` işaretleri.

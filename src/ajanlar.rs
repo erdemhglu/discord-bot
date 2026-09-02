@@ -405,7 +405,7 @@ impl Bot {
     }
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 pub struct Haber {
     #[serde(default)]
     pub id: u64,
