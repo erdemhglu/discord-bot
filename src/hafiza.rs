@@ -511,11 +511,19 @@ fn puanla(metin: &str, anahtar: &[String]) -> usize {
     anahtar.iter().filter(|a| m.contains(a.as_str())).count()
 }
 
+// sonuç HER ZAMAN en çok `sinir` karakter (bazı Discord alanları — select menü seçenek
+// description'ı gibi — tam bu sınırı sert uygular); "…" da sınıra dahil edilir, yoksa
+// kesilen sonuç sinir+1 karaktere çıkar (bkz docs/kararlar.md, canlıda "Must be 100 or
+// fewer in length" hatası verdi)
 pub fn kirp(metin: &str, sinir: usize) -> String {
     if metin.chars().count() <= sinir {
         metin.trim().to_string()
     } else {
-        format!("{}…", metin.chars().take(sinir).collect::<String>().trim())
+        let alinacak = sinir.saturating_sub(1);
+        format!(
+            "{}…",
+            metin.chars().take(alinacak).collect::<String>().trim()
+        )
     }
 }
 
@@ -639,6 +647,19 @@ mod test {
         assert_eq!(tarih_unix(0), "1970-01-01");
         assert_eq!(tarih_unix(1788220800), "2026-09-01");
         assert_eq!(tarih_unix(1788220799), "2026-08-31");
+    }
+
+    #[test]
+    fn kirp_siniri_asmaz() {
+        // discord select menü description'ı gibi sert sınırlarda "…" dahil toplam
+        // `sinir`i aşarsa istek reddediliyordu (canlıda "Must be 100 or fewer" hatası)
+        let uzun = "a".repeat(200);
+        let k = kirp(&uzun, 100);
+        assert_eq!(k.chars().count(), 100);
+        assert!(k.ends_with('…'));
+        // sınıra tam sığan metin dokunulmadan kalır
+        assert_eq!(kirp("kısa", 100), "kısa");
+        assert_eq!(kirp(&"a".repeat(100), 100), "a".repeat(100));
     }
 
     #[test]
