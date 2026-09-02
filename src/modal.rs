@@ -75,7 +75,8 @@ pub fn durum_metni(d: &Durum) -> String {
     let g = &d.gelisim;
     let m = &d.metrik;
     let ozet = format!(
-        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {} · token: {} çağrı, {} giriş ({} önbellek) + {} çıkış",
+        "sürüm: {} · evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {} · token: {} çağrı, {} giriş ({} önbellek) + {} çıkış",
+        surum_metni(),
         gelisim::evre(g).ad,
         gelisim::gun(g) + 1,
         g.sohbet,
@@ -468,7 +469,8 @@ pub fn durum_mesaji(d: &Durum) -> CreateInteractionResponseMessage {
         .field(
             "Genel",
             format!(
-                "evre: {} ({}. gün)\nsohbet: {} · mesaj: {}\nmodel: {}",
+                "sürüm: {}\nevre: {} ({}. gün)\nsohbet: {} · mesaj: {}\nmodel: {}",
+                surum_metni(),
                 gelisim::evre(g).ad,
                 gelisim::gun(g) + 1,
                 g.sohbet,

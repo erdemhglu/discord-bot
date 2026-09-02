@@ -93,6 +93,15 @@ const FAVORI: u64 = 259669117248864257; // bu kişiyi ne olursa olsun sever
 const GEZGIN_ARALIGI: Duration = Duration::from_secs(4 * 60 * 60); // ne sıklıkla internette gezer
 const RESIM_KLASORU: &str = "resimler"; // şakalarda atılacak görseller
 const DURUM_KLASORU: &str = "durum"; // ajanların öğrendikleri buraya yazılır
+                                     // sürüm: Cargo.toml + derlemede build.rs'in git'ten aldığı commit ve tarih.
+                                     // !durum'da görünür, yeniden başlayınca kanala duyurulur (hangi kod koşuyor belli olsun)
+const SURUM: &str = env!("CARGO_PKG_VERSION");
+const SURUM_COMMIT: &str = env!("SURUM_COMMIT");
+const SURUM_TARIH: &str = env!("SURUM_TARIH");
+
+fn surum_metni() -> String {
+    format!("v{SURUM} ({SURUM_COMMIT}, {SURUM_TARIH})")
+}
 
 type Hata = Box<dyn std::error::Error + Send + Sync>;
 
@@ -3144,6 +3153,7 @@ impl Bot {
 struct Handler {
     bot: Arc<Bot>,
     baslatildi: AtomicBool,
+    duyuruldu: AtomicBool, // sürüm duyurusu süreç başına bir kez gider
 }
 
 #[async_trait]
@@ -3199,6 +3209,21 @@ impl EventHandler for Handler {
             }
             yeni
         };
+        // yeniden başlayınca bir kez: hangi sürümün koştuğu kanalda görünsün (Emin isteği).
+        // ready'de sunucu önbelleği henüz dolu değil, kanal burada bulunur. Hafızaya yazılmaz:
+        // bot bunu kendi lafı sanıp sürüm muhabbeti yapmasın.
+        if !self.duyuruldu.swap(true, Ordering::SeqCst) {
+            if let Some(kanal) = varsayilan_kanal(&self.bot, &ctx) {
+                let (model, kip) = {
+                    let d = self.bot.durum();
+                    (d.model.clone(), d.dusunme.ad())
+                };
+                let metin = format!("geldim · {} · model {model} · düşünme {kip}", surum_metni());
+                if let Err(e) = kanal.say(&ctx.http, metin).await {
+                    log::warn!("sürüm duyurusu gönderilemedi ({kanal}): {e}");
+                }
+            }
+        }
         if !ilk_kez {
             return;
         }
@@ -3722,6 +3747,7 @@ async fn main() -> Result<(), Hata> {
         .event_handler(Handler {
             bot,
             baslatildi: AtomicBool::new(false),
+            duyuruldu: AtomicBool::new(false),
         })
         .await?;
 

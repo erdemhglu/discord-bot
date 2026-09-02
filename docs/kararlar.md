@@ -446,3 +446,8 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   diğerleri; bot özeti Durum/Token/Kendim/Gündem. Boş bölümler modalda atlanır. `!zihin` artık
   aynı kartı kanala yollar (ham INDEX dökümü kalktı); kanal mesajında modal açılamadığı için
   detay `/zihin`'e yönlendirir. Eski `modal_zihin`/`bolumler`/5 slot kaldırıldı.
+- **2026-09-02 · Sürüm !durum'da ve yeniden başlayınca kanalda.** Emin isteği: hangi kodun
+  koştuğu belli olsun. Sürüm = Cargo.toml + `build.rs`'in derlemede git'ten aldığı kısa commit
+  (çalışma ağacı kirliyse `+` eki) + derleme tarihi; dış kütüphane yok, git/date yoksa `?`.
+  Duyuru `ready`'de değil `guild_create`'te (önbellek orada dolu, `varsayilan_kanal` bulunur),
+  süreç başına bir kez; hafızaya yazılmaz ki bot "sürüm" muhabbetini kendi lafı sanmasın.

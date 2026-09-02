@@ -116,6 +116,8 @@ döngüler tik başında bakar ve döner, bekçi yeniden başlatmaz; `main`'in k
 - `Bot::kur() -> Result<Arc<Bot>, Hata>` — sağlayıcı seçimi (`SAGLAYICI`/anahtarlar/`MODEL`/`API_ADRES`), `HABER_KANALI`/`GUILD_ID`/`KANALLAR`, `durum/{kisiler,konular,olaylar,arsiv,kanallar}` + `resimler/` klasörleri, `Durum::yukle` + `uyku::guncelle` + `durum/model.md`, reqwest istemcisi. **Discord'a bağlanmaz, DISCORD_TOKEN istemez**: hem `main`'in bot yolu hem `cargo run -- sohbet` buradan geçer (ikisi aynı kurulumu görsün diye tek fonksiyona çıkarıldı).
 - `main` — `.env`, loglama, panic hook; ilk argüman `sohbet` ise `Bot::kur()` + `Bot::sohbet_cli()` (kurulum hatasında tek satır mesaj + çıkış kodu 1) ve döner. Değilse `DISCORD_TOKEN` + `Bot::kur()`, intents `GUILDS|GUILD_MESSAGES|GUILD_MEMBERS|MESSAGE_CONTENT`, kapanışta `shard_manager.shutdown_all`.
 
+- `surum_metni()` — `v{CARGO_PKG_VERSION} ({SURUM_COMMIT}, {SURUM_TARIH})`; iki env'i `build.rs` derlemede git'ten doldurur (git/date yoksa `?`). `modal::durum_metni`/`durum_mesaji` ve `guild_create` sürüm duyurusu kullanır.
+
 ## src/komut.rs (impl Bot)
 Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot::komut(ctx, msg, komut, arg)`'a düşer, tanınan komut true döner ve mesaj sohbete girmez.
 - `komut` dalları: sifirla · haber · sorun · gez · saka/hack · ajanlar · uyan · uyu · durum · zihin · düşünme · model · yardım/help.

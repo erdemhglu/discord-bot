@@ -124,6 +124,7 @@ Paralel düz metin: `!durum` ortak `durum_metni`; `!zihin` aynı embed kartını
 
 ## Sunucuya bağlanınca
 `guild_create` (sunucu başına bir kez) → arka planda: 14 gün geriye tarama (izinli kanallar, 100'lük sayfalar) → ham hafıza son 2000 → profilci → hoca (huy boşsa). Yeniden bağlanmada tekrar taranmaz.
+`guild_create` ayrıca süreç başına bir kez (`Handler.duyuruldu`) varsayılan kanala tek satır sürüm duyurusu atar: `geldim · v0.2.0 (69e2851, 2026-09-02) · model … · düşünme …` — hafızaya/kanal notuna yazılmaz (bot bunu kendi lafı sanmasın). `ready`'de değil, çünkü sunucu önbelleği orada henüz dolu değil.
 
 ## 6 saatlik tur (haber_dongusu)
 uyanık değil → geç · seyahatte → profilci, hoca, geç · profilci → gunlukcu("gözlem", son 300) → hoca → kanalda sohbet açıksa geç → haberci (HN 12 + Sözcü 12, atılmamışlar) → seçim → tanıtım (`uret`) → gönder → sohbet aç, 2 saat yorum bekle, haberi "atıldı" say.

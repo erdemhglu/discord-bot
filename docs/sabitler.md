@@ -3,6 +3,7 @@
 ## src/main.rs
 | Sabit | Değer | Anlam |
 |---|---|---|
+| SURUM / SURUM_COMMIT / SURUM_TARIH | Cargo.toml sürümü / build.rs'in git'ten aldığı commit (+ = derlemede commit'lenmemiş değişiklik vardı) / derleme tarihi | `surum_metni()`: !durum, /durum ve açılış duyurusu |
 | OPENROUTER_ADRES / OPENROUTER_MODEL | …/api/v1/chat/completions / openai/gpt-4o-mini | varsayılan sağlayıcı |
 | MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-medium-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
 | SANS | 0.35 | yedek zar: isteklilik çağrısı başarısızsa araya girme olasılığı |

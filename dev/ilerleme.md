@@ -4,6 +4,13 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Sürüm bilgisi: !durum + açılış duyurusu
+- `build.rs` (yeni): `SURUM_COMMIT` (git rev-parse --short HEAD, kirliyse `+`) ve `SURUM_TARIH`
+  env'leri; `surum_metni()` main.rs'de. `!durum`/`/durum` "sürüm: v0.2.0 (69e2851, 2026-09-02)".
+- `guild_create`: süreç başına bir kez varsayılan kanala "geldim · sürüm · model · düşünme"
+  (`Handler.duyuruldu`); kanal notuna girmez.
+- Doğrulama: 71 test, clippy 0 uyarı.
+
 ## 2026-09-02 · İnceleme turu: protokol düzeltmeleri (satır bazlı varsayımların tamamlanması)
 Kapı + üç incelemeci raporundan çıkan yüksek/orta bulguların hepsi uygulandı. Hepsi aynı
 kökten geliyordu: cevap tek mesajken doğru olan varsayımlar satır bazlı protokolde bozuluyor.
