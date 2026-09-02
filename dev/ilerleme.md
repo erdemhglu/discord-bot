@@ -4,6 +4,14 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 8 planlandı: Modal'lar + /zihin (kod henüz yazılmadı)
+- Kararlar: slash komutlar modal açar + `!` komutları düz metin paralel kalır; zihin modalı
+  herkese açık; 5 slot: Bot özeti / Kişiler I-II / Konular / Olaylar+Gündem.
+- `!zihin` mesaj komutu INDEX özeti + `/zihin` yönlendirmesi verecek (kanala 5×4000 dökmek yok).
+- serenity 0.12.5 kaynağından teyit: `CreateModal::new(custom_id, title)` (sıra önemli),
+  `CreateInputText` create_components.rs'te. Ayrıntılı yapılacak listesi yol-haritasi.md'de.
+- Yol haritasındaki Adım 3-6 metin duplikasyonu temizlendi.
+
 ## 2026-09-02 · Log gürültüsü kesildi + renkli çıktı + mesaj temizliği
 - Konsolu basan serenity/reqwest tracing olayları hedef filtresiyle kesildi: sink yalnız
   `discord_bot*` hedefli kayıtları seviyeye göre geçiriyor; yabancı crate'lerden yalnız

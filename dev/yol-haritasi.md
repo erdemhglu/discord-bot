@@ -21,27 +21,49 @@ Gece gözlemi (2 saat), stok haber + sabah haberi, uyanış değerlendirmesi (`u
 etiket listesi hata kaybına karşı geri konur, üniversite haber önceliği.
 ### Adım 7 · Final — TAMAMLANDI
 Tüm adımlar bitti; docs + doğrulama + push tamam. Açık kalanlar aşağıdaki "Bekleyen" listesinde.
-### Adım 3 · Zihin id bazlı + zaman damgası + bellek döngüsü
-- `kisiler/<id>.md`: id, kullanici_adi, gorunen_ad, eski_adlar + mevcut alanlar.
-  Temiz başlangıç (eski slug dosyalarına dokunulmaz).
-- `Durum.ad_id` eşlemesi; günlükçü dökümüne `KATILIMCILAR: ad=id` bloğu; JSON isim→id kodda çevrilir.
-- `tarih_saat()` (YYYY-AA-GG SS:DD:SS) tüm kayıtlarda.
-- `bellek_dongusu` (10 dk): sohbet sonu ajanları inline değil, kuyruktan işlenir
-  (günlükçü → özetleyici → eleştirmen). Uyku kontrolüne takılmaz.
-### Adım 4 · Cevap istekliliği
-Etiket/yanıt/ad her zaman. Diğerleri: mini model çağrısı (~50 token, `isteklilik.md`)
-→ `{"puan":0-10,"sebep"}`; eşik üstüyse girer. Kanal başına en sık 2 dk'da bir; açık sohbette çağrı yok.
-### Adım 5 · Hedef kişi seçimi + Eski kalksın
-- Sil-baştan (Eski) kaldırılır; akış tamamlanır, yeni mesaj sıradaki turda.
-- Bot sustuğundan beri 2+ kişi yazdıysa mini hedef çağrısı (`hedef-sec.md`) kime dönüleceğini seçer.
-- Sisteme "doğru kişiye adıyla dön" kuralı.
-### Adım 6 · Uyku modu
-- Bellek döngüsü geceleri 2 saatte bir gece gözlemi yapar (zihne işler).
-- Uyanışta `uyanis.md` ajanı gece mesajlarından ilgili olanları seçer, en çok 2 kanala cevap.
-- Uyurken gezgin/haberci çalışır ama stoklar; uyanınca "sabah haberi".
-- Haber seçimine "Nişantaşı Üniversitesi ile ilgili konu öncelikli" kuralı.
-### Adım 7 · Final
-docs/ + AGENTS.md güncelle, tam doğrulama, push.
+
+## Etkin plan — Adım 8: Modal'lar + /zihin (PLANLANDI, henüz kodlanmadı)
+
+Kararlar (kullanıcı onaylı): modal'lar slash komutlarla açılır, `!` mesaj komutları paralel
+düz metin olarak kalır (ikisi birden) · zihin modalı herkese açık · 5 slot önerilen dağılımda.
+
+Discord kısıtları (tasarımı belirler):
+- Modal yalnız bir interaction'a (slash/buton) yanıt olarak gönderilebilir; mesaj komutuyla açılamaz.
+- Modal en fazla 5 bileşen (her biri TextInput, değer ≤4000 karakter), başlık ≤45, etiket ≤45.
+
+### Yapılacaklar
+1. Yeni modül `src/modal.rs`:
+   - `zihin_bolumleri(&Durum) -> Vec<(başlık, içerik)>` — 5 slot, her değer ≤4000 (taşanı kes + not):
+     1) Bot özeti: evre/gün, sohbet+mesaj sayacı, model, token metriği, uyku, seyahat, düşünme kipi, kendim.md özeti
+     2-3) Kişiler (iki slotta): ad, puan, etiketler, not, bildikler (`kisiler/<id>.md`, mtime sırası)
+     4) Konular: adlar + son notlar
+     5) Olaylar (bu ay) + son gündem girişleri
+   - `modal_durum`, `modal_yardim` (tek slotluk dar modal'lar)
+   - `modal_olustur(baslik, custom_id, bolumler)`: `CreateModal` + ≤5 `CreateActionRow` →
+     `InputText(paragraph, required=false)`; boş bölüm "(henüz boş)".
+2. Slash kayıt (`ready`): her sunucuya guild komutu `/durum`, `/yardim`, `/zihin`
+   (guild komutu anında görünür; her ready'de idempotent; adlar ASCII).
+3. `interaction_create` genişletmesi (main.rs):
+   - `Interaction::Command` → ada göre modal (`CreateInteractionResponse::Modal`)
+   - `Interaction::ModalSubmit` → kısa ephemeral onay (modal gösterimlik, girdi toplamıyoruz)
+   - Mevcut Düşünce butonu akışına dokunulmaz.
+4. `komut.rs`: yeni `!zihin` → INDEX.md düz metin + "ayrıntı için /zihin" yönlendirmesi
+   (5×4000 karakteri kanala dökmek spam); YARDIM metnine slash notu.
+5. Test: `zihin_bolumleri` slot ≤5 ve içerik ≤4000, kesme davranışı.
+6. Docs: moduller (modal.rs), akislar (interaction akışı), README (komutlar + slash), kararlar.
+7. Doğrulama + commit + push.
+
+### Doğrulanmış API notları (serenity 0.12.5 kaynağından)
+- `CreateModal::new(custom_id, title)` — ARGÜMAN SIRASI: önce custom_id, sonra title!
+  (`src/builder/create_interaction_response.rs:441`), `.components(Vec<CreateActionRow>)`.
+- `CreateInputText` aynı dosyada (`create_components.rs:357`); API'si teyit edilecek
+  (new/style/value/required).
+- Slash kayıt yöntemi teyit edilecek: `GuildId::set_guild_commands` ya da eşdeğeri
+  (kayıtlı komut adları: durum/yardim/zihin, description zorunlu).
+
+### Notlar / riskler
+- Zihin büyürse 2 kişi slotu yetmeyebilir → taşan kırpılır; ileride sayfalama düşünülebilir.
+- Modal canlı davranışı Discord'ta doğrulanmalı (birim testleri boyut mantığını korur).
 
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
 - **Ajan 2 (HTTP):** global `.timeout(60sn)` stream'i kesebilir → `connect_timeout`+`read_timeout`+ilk-token sınırı (P0); hata sınıflandırma+retry; `reasoning_kapat` sağlayıcıya göre koşullu.
