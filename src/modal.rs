@@ -216,11 +216,18 @@ fn kisi_secenekleri() -> Vec<CreateSelectMenuOption> {
             if !k.not.is_empty() {
                 aciklama.push(k.not.clone());
             }
-            CreateSelectMenuOption::new(
+            let secenek = CreateSelectMenuOption::new(
                 hafiza::kirp(&format!("{} ({:+})", k.isim, k.puan), ETIKET_SINIRI),
                 k.id.to_string(),
-            )
-            .description(hafiza::kirp(&aciklama.join(" · "), ACIKLAMA_SINIRI))
+            );
+            // discord description alanı verilirse boş olamaz (min uzunluk 1); etiket/not
+            // yoksa alan hiç eklenmez, "Invalid Form Body" ile tüm menüyü düşürüyordu
+            let aciklama = aciklama.join(" · ");
+            if aciklama.trim().is_empty() {
+                secenek
+            } else {
+                secenek.description(hafiza::kirp(&aciklama, ACIKLAMA_SINIRI))
+            }
         })
         .collect()
 }
