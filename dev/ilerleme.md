@@ -4,6 +4,16 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Log gürültüsü kesildi + renkli çıktı + mesaj temizliği
+- Konsolu basan serenity/reqwest tracing olayları hedef filtresiyle kesildi: sink yalnız
+  `discord_bot*` hedefli kayıtları seviyeye göre geçiriyor; yabancı crate'lerden yalnız
+  warn/error görünüyor (gateway hatası vb. kaybolmaz).
+- ANSI renk: ERROR kırmızı+kalın, WARN sarı, INFO yeşil, DEBUG/TRACE soluk; zaman damgası
+  soluk. TTY algılamalı (dosyaya çıkışta renk yok), `LOG_RENK=on|off` dayatır.
+- 10 bağlamsız `ai hatası: {e}` aşamalı oldu (`ai [uret_akis] [{kanal}]:`, `ai [haber_tanit]:`,
+  `ai [uyandim]:` ...); `akis yarıda kesildi` uyarısına kanal öneki geldi.
+- Doğrulama: 34 test, clippy 0 uyarı, release build.
+
 ## 2026-09-02 · Adım 7 · final: docs + doğrulama
 - AGENTS.md tazelendi (test sayısı, uyku kuralı, id bazlı kişiler, yeni açık noktalar).
 - Tüm adımların docs güncellemeleri tamam (akislar, moduller, sabitler, kararlar, promptlar,

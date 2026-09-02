@@ -121,6 +121,13 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   son mesajdan 30 dk sonra (`SOHBET_ZAMAN_ASIMI`) sessizce kapanır, dökümü yine günlükçüye ve
   eleştirmene gider. `Durum.son_aktivite` haritası tazelenir (kullanıcı mesajı, sohbet açılışı,
   bot cevabı).
+- **2026-09-02 · Log gürültüsü kesildi + renkli çıktı.** Kullanıcı bildirimi: konsol serenity'nin
+  iç tracing olaylarıyla doluyordu (recv, do_heartbeat, ratelimit dökümleri). Tracing abonesi
+  yokken olaylar `log` facade'ine düşüyordu; sink artık hedefe göre filtreler: yalnız
+  `discord_bot*` kayıtları `LOG_SEVIYE`'ye göre geçer, yabancı crate'ler yalnız warn/error.
+  Terminalde ANSI renk (ERROR kırmızı, WARN sarı, INFO yeşil, DEBUG soluk); dosyaya çıkışta
+  renk otomatik kapanır, `LOG_RENK=on|off` dayatır. `ai hatası` loglarına aşama eklendi
+  (`ai [uret_akis] [kanal]: ...` gibi).
 - **2026-09-02 · Uyku modu: dinle, biriktir, uyanınca değerlendir.** Kullanıcı bildirimi: bot
   uyurken sağırlaşıyordu. Artık uyurken mesajlar ham hafızaya girer, bellek döngüsü 2 saatte bir
   gece gözlemi yapar (zihne işler), haber turu haber seçip stoklar (atmaz). Uyanışta: etiket

@@ -1030,7 +1030,7 @@ impl Bot {
         kanal_not(&mut d, kanal, satir);
         drop(d);
         if let Some(e) = akis_hatasi {
-            log::warn!("akis yarıda kesildi, elimizdeki gönderildi: {e}");
+            log::warn!("akis [{kanal}]: yarıda kesildi, elimizdeki gönderildi: {e}");
         }
         Ok(AkisSonuc::Gonderildi(cevap))
     }
@@ -1358,7 +1358,7 @@ impl Bot {
             let (okuyucu, bot_adi) = match self.uret_akis(&gecmis, &talimat, butce).await {
                 Ok(x) => x,
                 Err(e) => {
-                    log::error!("ai hatası: {e}");
+                    log::error!("ai [uret_akis] [{kanal}]: {e}");
                     self.durum().mesgul.remove(&kanal);
                     return;
                 }
@@ -1399,14 +1399,14 @@ impl Bot {
                             return;
                         }
                         Err(e) => {
-                            log::error!("ai hatası: {e}");
+                            log::error!("ai [uret yedek] [{kanal}]: {e}");
                             self.durum().mesgul.remove(&kanal);
                             return;
                         }
                     }
                 }
                 Err(e) => {
-                    log::error!("ai hatası: {e}");
+                    log::error!("ai [gonder_akis] [{kanal}]: {e}");
                     self.durum().mesgul.remove(&kanal);
                     return;
                 }
@@ -1804,7 +1804,7 @@ impl Bot {
                 self.gonder(ctx, kanal, &laf, None, None, None).await;
                 sohbet_baslat(&mut self.durum(), kanal, Some(laf));
             }
-            Err(e) => log::error!("ai hatası: {e}"),
+            Err(e) => log::error!("ai [sorun]: {e}"),
         }
     }
 
@@ -1833,7 +1833,7 @@ impl Bot {
         {
             Ok(g) => g,
             Err(e) => {
-                log::error!("ai hatası: {e}");
+                log::error!("ai [haber_tanit]: {e}");
                 return false;
             }
         };
@@ -1863,7 +1863,7 @@ impl Bot {
         let metin = match metin {
             Ok(m) => m,
             Err(e) => {
-                log::error!("ai hatası: {e}");
+                log::error!("ai [saka]: {e}");
                 return;
             }
         };
@@ -1931,7 +1931,7 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
         let laf = match bot.uret(&[kullanici(son)], talimat, Some(120)).await {
             Ok(l) => l,
             Err(e) => {
-                log::error!("ai hatası: {e}");
+                log::error!("ai [durtme]: {e}");
                 continue;
             }
         };
@@ -2083,7 +2083,7 @@ impl Bot {
                     sohbet_baslat(&mut self.durum(), kanal, Some(c));
                 }
                 Err(e) => {
-                    log::error!("ai hatası: {e}");
+                    log::error!("ai [uyandim]: {e}");
                     let mut d = self.durum();
                     for b in bekleyen {
                         d.bekleyen_etiketler.push(b);
@@ -2160,7 +2160,7 @@ impl Bot {
                 self.gonder(ctx, kanal, &c, None, None, None).await;
                 sohbet_baslat(&mut self.durum(), kanal, Some(c));
             }
-            Err(e) => log::error!("ai hatası: {e}"),
+            Err(e) => log::error!("ai [uyanis_cevap]: {e}"),
         }
     }
 }
@@ -2244,7 +2244,7 @@ impl EventHandler for Handler {
         {
             Ok(s) => s,
             Err(e) => {
-                log::error!("ai hatası: {e}");
+                log::error!("ai [hos_geldin]: {e}");
                 return;
             }
         };

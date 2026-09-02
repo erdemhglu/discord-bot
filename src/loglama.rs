@@ -1,9 +1,12 @@
 // Hafif loglama: `log` makroları + elle yazılmış sink. Seviye LOG_SEVIYE
-// ortam değişkeninden (varsayılan info); zaman damgası hafiza/uyku'nun
-// mevcut tarih-saat fonksiyonlarından, yeni bağımlılık yok.
+// ortam değişkeninden (varsayılan info); renk terminalde otomatik, LOG_RENK=on|off
+// ile dayatılır. Yalnız discord_bot kayıtları seviyeye göre geçer; yabancı
+// crate'lerin (serenity, reqwest, ...) iç olayları konsolu sel basmasın diye
+// yalnız warn/error seviyesinde gösterilir.
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::io::IsTerminal;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 fn numara_filtre(s: LevelFilter) -> u8 {
     match s {
@@ -28,6 +31,10 @@ fn numara_seviye(l: Level) -> u8 {
 
 // 0=off 1=error 2=warn 3=info 4=debug 5=trace
 static SEVIYE: AtomicU8 = AtomicU8::new(3);
+static RENK: AtomicBool = AtomicBool::new(false);
+
+const SIFIRLA: &str = "\x1b[0m";
+const SOLUK: &str = "\x1b[2m";
 
 fn seviye_oku() -> LevelFilter {
     match std::env::var("LOG_SEVIYE")
@@ -44,22 +51,47 @@ fn seviye_oku() -> LevelFilter {
     }
 }
 
+fn seviye_renk(l: Level) -> &'static str {
+    match l {
+        Level::Error => "\x1b[1;31m", // kırmızı, kalın
+        Level::Warn => "\x1b[33m",    // sarı
+        Level::Info => "\x1b[32m",    // yeşil
+        Level::Debug | Level::Trace => SOLUK,
+    }
+}
+
+fn bizim_hedef(target: &str) -> bool {
+    target.starts_with("discord_bot")
+}
+
 struct Kutuk;
 
 impl Log for Kutuk {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        numara_seviye(metadata.level()) <= SEVIYE.load(Ordering::Relaxed)
+        let gecir = numara_seviye(metadata.level()) <= SEVIYE.load(Ordering::Relaxed);
+        if bizim_hedef(metadata.target()) {
+            gecir
+        } else {
+            // serenity/reqwest/... iç olayları: yalnız uyarı ve hatalar görünsün
+            gecir && metadata.level() <= Level::Warn
+        }
     }
 
     fn log(&self, record: &Record) {
-        if self.enabled(record.metadata()) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        let tarih = crate::hafiza::tarih();
+        let saat = crate::uyku::saat();
+        if RENK.load(Ordering::Relaxed) {
+            let kod = seviye_renk(record.level());
             println!(
-                "{} {} {:<5} {}",
-                crate::hafiza::tarih(),
-                crate::uyku::saat(),
+                "{SOLUK}{tarih} {saat}{SIFIRLA} {kod}{:<5}{SIFIRLA} {kod}{}{SIFIRLA}",
                 record.level(),
                 record.args()
             );
+        } else {
+            println!("{} {} {:<5} {}", tarih, saat, record.level(), record.args());
         }
     }
 
@@ -72,5 +104,15 @@ pub fn kur() {
     let seviye = seviye_oku();
     SEVIYE.store(numara_filtre(seviye), Ordering::Relaxed);
     log::set_max_level(seviye);
+    let renk = match std::env::var("LOG_RENK")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "on" | "acik" => true,
+        "off" | "kapali" => false,
+        _ => std::io::stdout().is_terminal(),
+    };
+    RENK.store(renk, Ordering::Relaxed);
     let _ = log::set_logger(&KUTUK);
 }

@@ -50,7 +50,8 @@ gözlem 300 · hack giriş max_tokens 150
 DISCORD_TOKEN (zorunlu) · OPENROUTER_KEY veya MISTRAL_KEY (biri zorunlu; ikisi de varsa openrouter) ·
 SAGLAYICI=mistral (zorlama) · MODEL (model kimliği, sağlayıcının varsayılanını ezer) ·
 API_ADRES (openai uyumlu chat/completions adresi; seçilen sağlayıcının adresini ezer) ·
-FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı)
+FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı) ·
+LOG_SEVIYE (error/warn/info/debug/trace, varsayılan info) · LOG_RENK (on/off; varsayılan: terminalde açık, dosyada kapalı)
 
 ## src/gelisim.rs
 ISIM_EVRESI 2 (yerlesik) · EVRELER: yeni (0 gün, 0 sohbet, sans×0.7, dürtme×0.4) · isinma (3g, 8s, ×0.8, ×0.7) ·
