@@ -22,6 +22,7 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 ## Yön levhası
 | İhtiyaç | Nereye bak |
 |---|---|
+| Oturum durumu: yapılanlar, açık plan (compact sonrası İLK buraya bak) | dev/ilerleme.md, dev/yol-haritasi.md |
 | Genel resim, katmanlar, veri akışı | docs/mimari.md |
 | Bir fonksiyonun ne yaptığı, kim çağırıyor, kilit kuralı | docs/moduller.md |
 | Bir olay olunca sırayla ne oluyor (mesaj, sohbet, uyku, seyahat, şaka, haber) | docs/akislar.md |
@@ -52,6 +53,10 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
    gibi durmamalı: kısa, düz, açıklamalar sebep söyler.
 9. `cargo fmt` satırları yeniden akıtır; metin eşleştirmeli yama yapacaksan önce dosyanın
    güncel halini oku (docs/gelistirme.md "tuzaklar").
+10. **Oturum hafızası `dev/` klasöründedir.** Context compact edilirse ya da yeni oturumda
+    önce `dev/ilerleme.md` ve `dev/yol-haritasi.md` okunur; her anlamlı adımda (commit
+    ölçeğinde) `dev/ilerleme.md`'ye kronolojik not düşülür, plan değişirse `yol-haritasi.md`
+    güncellenir.
 
 ## Durum klasörü (çalışma zamanı, git'e girmez)
 `durum/INDEX.md` işaretçi · `kisiler/` `konular/` `olaylar/` içerik · `arsiv/` taşan ·
