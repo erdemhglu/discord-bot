@@ -19,6 +19,8 @@
 | SOHBET_BOYU | 20 | modele giden sohbet geçmişi |
 | MESAJ_SINIRI | 1900 | Discord 2000 sınırına pay |
 | AKIS_DUZENLEME | 1200 ms | stream'de iki düzenleme arası asgari süre (Discord edit sınırı) |
+| BAGLANTI_ZAMAN_ASIMI / OKUMA_ZAMAN_ASIMI | 15 sn / 120 sn | http: el sıkışma / iki veri arası (ilk tokeni kapsar). Toplam süre sınırı yok, uzun düşünme akışı kesilmez |
+| AI_YENIDEN_DENEME | 2 | ağ hatası / 429 / 5xx'te ek deneme sayısı (toplam bu + 1) |
 | `cevap_butcesi!()` (makro) | release `None` / debug `Some(2000)` | sohbet cevabı token bütçesi derleme durumuna göre; release'de max_tokens gitmez |
 | FAVORI | 259669117248864257 | her zaman sevilen kullanıcı id |
 | GEZGIN_ARALIGI | 4 saat | gündem gezintisi |

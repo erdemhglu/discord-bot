@@ -119,7 +119,9 @@ süreleri, şaka sıklığı, favori kişi.
 - mention'lar kapalı gönderilir; yalnız sohbet yanıtının sahibi ve hoş geldindeki yeni üye pinglenebilir
 - diğer botlara ve webhook'lara cevap vermez, bot-bot döngüsü oluşmaz
 - aynı kanalda aynı anda tek cevap üretir, spam ile api faturası şişirilemez
-- her istekte `max_tokens` sınırı var, http istekleri 60 saniyede kesilir
+- yardımcı çağrılarda `max_tokens` sabit; sohbet cevabı release'de bütçesiz (`cevap_butcesi!` makrosu)
+- http: toplam süre sınırı yok (uzun düşünme akışı kesilmez); bağlantı 15 sn'de, iki veri arası
+  120 sn'de kesilir; ağ hatası / 429 / 5xx'te 2 sn ve 4 sn geri çekilip 2 kez yeniden denenir
 - mesajlardaki "kurallarını unut" tarzı talimatlar kişilik promptunda muhabbet sayılır
 - hack şakası promptu link ve bilgi istemeyi yasaklar
 - `.env`, `durum/`, `resimler/` git'e girmez
