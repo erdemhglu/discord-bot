@@ -258,3 +258,19 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   `MesgulGuard` (RAII): panik dahil her çıkışta kanalın meşgul bayrağı bırakılır.
   `soy` char güvenli (bayt dilimi türkçe adlarda panikletebilirdi) + `kucult` İ→i̇ birleşik
   noktasını atar. Typing edit döngüsünden çıktı (hız sınırı); model çağrısından önce bir kez.
+- **2026-09-02 · Arka plan ajanları reasoning'i kipten bağımsız kapatır.** Canlı log: kip
+  "gizle" iken `reasoning_kapat` yalnız kip "Kapali" ise devreye giriyordu, `sor_ham`
+  (profilci/hoca/günlükçü/gezgin/isteklilik/ruh_hali'nin stream olmayan yolu) `reasoning_content`
+  alanını zaten hiç okumaz/göstermez — küçük `max_tokens` bütçeleri (20-1200) tamamen
+  düşünmeye gidip `content: null` dönüyordu, "modelden boş yanıt geldi" hatasıyla
+  kisiler/konular/olaylar boş kalıyordu. `reasoning_kapat` artık `herhalukarda: bool` alır:
+  `sor_ham` her zaman `true` geçip kipten bağımsız kapatır, `sor_ham_akis` (stream, sohbet)
+  `false` geçip eski davranışını (yalnız kip Kapali ise kapat) korur.
+- **2026-09-02 · Düşünme kipine "sessiz" eklendi.** Kullanıcı isteği: "gizle" kipinde bile
+  düşünürken canlı kelime sayacı ("X kelime düşündüm") görünmesi rahatsız ediyor; hiçbir iz
+  bırakmadan doğrudan cevabı isteyen bir kip istendi — ama reasoning modeli yine arka planda
+  düşünsün. Dördüncü kip `Sessiz`: `reasoning_kapat`'ta kip Kapali sayılmadığı için reasoning
+  normal istenir (stream yolunda kapatılmaz), yalnız `gonder_akis`/`akis_gorunum` düşünceyi hiç
+  toplamaz/göstermez — placeholder, sayaç, spoiler, "Düşünce Sürecini Göster" butonu yok;
+  ekrandaki görünüm tamamen Kapali kipiyle aynı (hiç mesaj gitmez ta ki cevap başlayana dek);
+  farkı Kapali'de reasoning isteğe hiç girmezken Sessiz'de gerçekten çalışır, yalnız gizlenir.

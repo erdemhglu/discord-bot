@@ -12,7 +12,7 @@ komutlar:
 `!uyan` uykuyu keser · `!uyu [saat]` test için uyutur
 `!durum` evre, sayaçlar, model, düşünme, uyku, seyahat
 `!zihin` ne bildiğimin özeti (ayrıntı: `/zihin` modalı)
-`!düşünme göster|gizle|kapat` düşünme kipi (göster: cevapla spoiler'da · gizle: düşünürken \"Düşünüyorum...\", cevap sonra · kapat: istekler reasoning'siz)
+`!düşünme göster|gizle|sessiz|kapat` düşünme kipi (göster: cevapla spoiler'da · gizle: düşünürken \"Düşünüyorum...\", cevap sonra · sessiz: arka planda düşünür, hiç iz göstermez · kapat: istekler reasoning'siz)
 `!model [id]` modeli gösterir/değiştirir (yalnız favori)
 slash: `/durum` `/yardim` `/zihin` aynı şeyleri modal'da açar";
 
@@ -124,7 +124,7 @@ impl Bot {
                     None => {
                         let kip = self.durum().dusunme;
                         soyle(format!(
-                            "düşünme şu an {} · !düşünme göster / gizle / kapat",
+                            "düşünme şu an {} · !düşünme göster / gizle / sessiz / kapat",
                             kip.ad()
                         ))
                         .await;

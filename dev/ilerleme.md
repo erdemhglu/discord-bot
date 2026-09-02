@@ -4,6 +4,23 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Düşünme kipine "sessiz" eklendi (4. kip)
+
+Kullanıcı isteği: "gizle" modunda bile düşünürken 'X kelime düşünüldü' yazıyor, bunu hiç
+göstermeyen — buton bile eklemeyen — ama arka planda gerçekten düşünen bir kip istiyorum.
+
+- `DusunmeKip` dördüncü varyant `Sessiz` aldı. `reasoning_kapat`'ta Kapali sayılmadığı için
+  stream isteğinde reasoning normal istenir (kapatılmaz, model gerçekten düşünür).
+- `gonder_akis`: dusunce yalnız Goster/Gizle kiplerinde biriktirilir; Sessiz'de hiç toplanmaz.
+- `akis_gorunum`: düşünme fazında (cevap boş) Sessiz de Kapali gibi boş vektör döner — mesaj
+  cevap gelene kadar hiç açılmaz. Cevap başladığında da yalnız cevap gider, buton eklenmez
+  (`kip == Gizle` koşulu zaten Sessiz'i dışarıda bırakıyor).
+- `!düşünme` yardım metni ve komut çıktısı güncellendi: `göster/gizle/sessiz/kapat`.
+- Doğrulama: 46 test (2 yeni assert `Sessiz` için genişletildi), clippy 0 uyarı, `cargo fmt`,
+  debug build.
+
+---
+
 ## 2026-09-02 · Arka plan ajanlarında sessiz "boş yanıt" hatası çözüldü
 
 Önceki turda "bu kod tarafında tam çözülebilecek bir şey değil" denen ihtimal gerçekleşti:

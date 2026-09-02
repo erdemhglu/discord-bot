@@ -118,6 +118,7 @@ enum DusunmeKip {
     #[default]
     Goster, // reasoning istenir, cevapla birlikte spoiler içinde gösterilir
     Gizle,  // reasoning istenir ama gösterilmez; düşünürken "Düşünüyorum..." yazar
+    Sessiz, // reasoning istenir (arka planda düşünür) ama hiçbir iz göstermez: placeholder/sayaç/buton yok, doğrudan cevap gelir
     Kapali, // reasoning istenmez, istekler düşünmesiz atılır
 }
 
@@ -126,6 +127,7 @@ impl DusunmeKip {
         match self {
             DusunmeKip::Goster => "goster",
             DusunmeKip::Gizle => "gizle",
+            DusunmeKip::Sessiz => "sessiz",
             DusunmeKip::Kapali => "kapali",
         }
     }
@@ -133,6 +135,7 @@ impl DusunmeKip {
     fn oku() -> Self {
         match hafiza::oku("dusunme.md").trim() {
             "gizle" => DusunmeKip::Gizle,
+            "sessiz" => DusunmeKip::Sessiz,
             "kapali" => DusunmeKip::Kapali,
             _ => DusunmeKip::Goster,
         }
@@ -143,6 +146,7 @@ impl DusunmeKip {
         match arg {
             "göster" | "goster" | "aç" | "ac" | "on" => Some(DusunmeKip::Goster),
             "gizle" => Some(DusunmeKip::Gizle),
+            "sessiz" => Some(DusunmeKip::Sessiz),
             "kapat" | "kapalı" | "kapali" | "off" => Some(DusunmeKip::Kapali),
             _ => None,
         }
@@ -152,6 +156,7 @@ impl DusunmeKip {
         match self {
             DusunmeKip::Goster => "göster",
             DusunmeKip::Gizle => "gizli",
+            DusunmeKip::Sessiz => "sessiz",
             DusunmeKip::Kapali => "kapalı",
         }
     }
@@ -1197,7 +1202,7 @@ impl Bot {
                         ilk_parca_ms = Some(baslangic.elapsed().as_millis());
                     }
                     metin.push_str(&p.metin);
-                    if kip != DusunmeKip::Kapali {
+                    if matches!(kip, DusunmeKip::Goster | DusunmeKip::Gizle) {
                         dusunce.push_str(&p.dusunce);
                     }
                     if ilk || son_yazma.elapsed() >= AKIS_DUZENLEME {
@@ -1295,14 +1300,15 @@ impl Bot {
 }
 
 // thinking fazı: cevap henüz başlamadıysa ve model düşünüyorsa placeholder gider;
-// gizlede canlı kelime sayacı, göstergede düz "Düşünüyorum...". Cevap başlayınca
-// aynı mesaj düzenlenerek stream edilir
+// gizlede canlı kelime sayacı, göstergede düz "Düşünüyorum...". Sessiz ve kapalıda hiçbir
+// şey gitmez (sessizde reasoning arka planda çalışır ama iz bırakmaz, kapalıda zaten yok).
+// Cevap başlayınca aynı mesaj düzenlenerek stream edilir
 fn akis_gorunum(kip: DusunmeKip, dusunce: &str, cevap: &str) -> Vec<String> {
     if cevap.trim().is_empty() && !dusunce.trim().is_empty() {
         return match kip {
             DusunmeKip::Gizle => vec![dusunce_sayaci(dusunce)],
             DusunmeKip::Goster => vec!["Düşünüyorum...".to_string()],
-            DusunmeKip::Kapali => Vec::new(),
+            DusunmeKip::Sessiz | DusunmeKip::Kapali => Vec::new(),
         };
     }
     let dusunce = tek_satir(dusunce);
@@ -1314,8 +1320,8 @@ fn akis_gorunum(kip: DusunmeKip, dusunce: &str, cevap: &str) -> Vec<String> {
         }
         v.extend(kod_bloklari(&dusunce));
     }
-    // gizle ve kapalı kiplerde düşünce yerleşime girmez; gizlede cevap sonunda
-    // "Düşünce Sürecini Göster" butonu gider (gonder_akis ekler)
+    // gizle/sessiz/kapalı kiplerde düşünce yerleşime girmez; gizlede cevap sonunda
+    // "Düşünce Sürecini Göster" butonu gider (gonder_akis ekler), sessizde hiç buton yok
     v.extend(bol(cevap, MESAJ_SINIRI));
     v
 }
@@ -3169,10 +3175,12 @@ mod test {
         assert_eq!(DusunmeKip::arg_ile("göster"), Some(DusunmeKip::Goster));
         assert_eq!(DusunmeKip::arg_ile("aç"), Some(DusunmeKip::Goster));
         assert_eq!(DusunmeKip::arg_ile("gizle"), Some(DusunmeKip::Gizle));
+        assert_eq!(DusunmeKip::arg_ile("sessiz"), Some(DusunmeKip::Sessiz));
         assert_eq!(DusunmeKip::arg_ile("kapat"), Some(DusunmeKip::Kapali));
         assert_eq!(DusunmeKip::arg_ile("kapalı"), Some(DusunmeKip::Kapali));
         assert_eq!(DusunmeKip::arg_ile("saçma"), None);
         assert_eq!(DusunmeKip::Goster.dosya_degeri(), "goster");
+        assert_eq!(DusunmeKip::Sessiz.dosya_degeri(), "sessiz");
     }
 
     #[test]
@@ -3183,6 +3191,9 @@ mod test {
         // gizle: canlı kelime sayacı
         let v = akis_gorunum(DusunmeKip::Gizle, "bir iki üç dört beş", "");
         assert_eq!(v, vec!["Düşünüyorum... Şu ana kadar 5 kelime düşündüm."]);
+        // sessiz: arka planda düşünür ama placeholder yok (kapalıyla aynı görünüm)
+        let v = akis_gorunum(DusunmeKip::Sessiz, "hmm düşünüyorum", "");
+        assert!(v.is_empty());
         // kapalıyken placeholder yok
         let v = akis_gorunum(DusunmeKip::Kapali, "", "");
         assert!(v.is_empty());
@@ -3198,6 +3209,9 @@ mod test {
         assert_eq!(v[2], "cevap bu");
         // gizle: yalnız cevap (butonu gonder_akis ekler)
         let v = akis_gorunum(DusunmeKip::Gizle, "düşündüm", "cevap bu");
+        assert_eq!(v, vec!["cevap bu"]);
+        // sessiz: yalnız cevap, hiç iz yok (buton da eklenmez)
+        let v = akis_gorunum(DusunmeKip::Sessiz, "düşündüm", "cevap bu");
         assert_eq!(v, vec!["cevap bu"]);
     }
 
