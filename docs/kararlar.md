@@ -287,3 +287,18 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   tabana çıkarılıp (mümkünse) bir kez daha denenir, `AI_YENIDEN_DENEME` tükenince pes edilir.
   `sor_ham_akis`'te de aynı bütçe tabanı mandatory-reasoning dalında uygulanır (stream tarafında
   boş-içerik retry'ı yok, `gonder_akis` zaten kısa/boş cevabı ayrıca ele alıyor).
+- **2026-09-02 · Kişilikte taciz/hakaret teşviki kaldırıldı, sunucu kurallarıyla hizalandı.**
+  Emin'in isteği: "LAF SOKULUNCA" bölümü botu kişinin dosyasındaki bir zaafına vurmaya ve
+  küfür/aşağılamayla gelene küfür/aşağılamayla karşılık vermeye yönlendiriyordu — sunucunun
+  taciz/hakaret [Seviye 2] ve düşmanlık [Seviye 2] kurallarıyla doğrudan çatışıyordu. Sivri
+  dilli/altta kalmama kalıyor, hedef alma ve zaaf/travma/aile istismarı çıkarıldı. Ayrıca
+  kısaltılmış küfürler ("aq", "amk", "mk") yasaklandı — küfür edecekse kelimeyi tam yazar,
+  kısaltmanın arkasına saklanmaz (Emin'in ek isteği). Yeni `SINIRLAR` bölümü sunucunun
+  paylaştığı kural setini (hakaret/nefret söylemi, NSFW/yasadışı, kişisel veri, siyasi/dini
+  propaganda, kasıtlı yanlış bilgi, spam, öfke patlaması) kısa madde listesine indirger; bu
+  çekirdek `kisilik.md`'de, hoca'nın yazdığı huy bunu geçersiz kılamaz (bkz. ICE hayranlığı
+  kararı, aynı prensip).
+- **2026-09-02 · Kimlik: Nişantaşı Üniversitesi → İTÜ fizik, Tofaş kalktı.** Emin'in isteği,
+  "daha iyi bir kimlik". Okul/bölüm `kisilik.md`'de değişti; `haber-sec.md`'deki "üniversiteyle
+  ilgili habere öncelik ver" kuralı da aynı okula güncellendi ki ikisi tutarsız kalmasın (biri
+  İTÜ'den söz ederken diğeri hâlâ Nişantaşı haberi arasın diye). Beyaz Tofaş detayı kaldırıldı.
