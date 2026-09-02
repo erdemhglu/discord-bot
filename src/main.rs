@@ -47,6 +47,7 @@ const SOHBET_TOHUM: usize = 10; // yeni sohbet açılırken kanal geçmişinden 
 const SOHBET_BOYU: usize = 20; // bir sohbette modele giden son mesaj sayısı
 const MESAJ_SINIRI: usize = 1900; // discord 2000 kabul ediyor, pay bırakıyoruz
 const AKIS_DUZENLEME: Duration = Duration::from_millis(1200); // stream düzenlemeleri bundan sık olmaz (discord edit sınırı)
+const DUSUNCE_DUGMESI: &str = "dusunce_goster"; // gizle kipinde cevap sonundaki düşünce butonunun kimliği
 
 // sohbet cevabı token bütçesi: derleme durumuna göre değişir.
 // release'de None → model sonuna kadar konuşur, bütçe yok.
@@ -175,7 +176,10 @@ struct Durum {
     kullanici_adi: String, // discord kullanıcı adı; bot_adi seçilen isim olabilir
     model: String,         // kullanılan model; !model ile değişir, durum/model.md'de kalır
     dusunme: DusunmeKip,   // düşünme kipi; !düşünme ile değişir, durum/dusunme.md'de kalır
-    son_yol_mesaji: i64,   // seyahatte en son hangi gün yoldan yazdı
+    // gizle kipinde butonla gösterilmek üzere son cevapların düşüncesi (mesaj id → düşünce)
+    dusunce_deposu: HashMap<MessageId, String>,
+    dusunce_sirasi: VecDeque<MessageId>,
+    son_yol_mesaji: i64,    // seyahatte en son hangi gün yoldan yazdı
     duyurulan_seyahat: i64, // "yarın gidiyorum" dediği seyahatin başlangıç günü
 }
 
@@ -196,6 +200,18 @@ impl Durum {
                 .collect(),
             dusunme: DusunmeKip::oku(),
             ..Durum::default()
+        }
+    }
+
+    // gizle kipinde butonun bulması için düşünceyi son cevabın mesajına bağlar;
+    // depo sınırlı, eskiden başlayarak düşer
+    fn dusunce_bagla(&mut self, mesaj: MessageId, dusunce: String) {
+        self.dusunce_deposu.insert(mesaj, dusunce);
+        self.dusunce_sirasi.push_back(mesaj);
+        while self.dusunce_sirasi.len() > 50 {
+            if let Some(eski) = self.dusunce_sirasi.pop_front() {
+                self.dusunce_deposu.remove(&eski);
+            }
         }
     }
 }
@@ -778,6 +794,30 @@ impl Bot {
         let yerlesim = akis_gorunum(kip, &dusunce, &cevap);
         yaz_akis(ctx, kanal, &mut gonderilenler, &yerlesim, baglam.yanit).await;
 
+        // gizlede düşünce mesajda görünmez; cevap sonuna buton konur, tıklayana
+        // ephemeral kod bloğu olarak açılır (interaction_create bakar)
+        if kip == DusunmeKip::Gizle {
+            let dusunce_tek = tek_satir(&dusunce);
+            if !dusunce_tek.is_empty() {
+                if let Some(son) = gonderilenler.last_mut() {
+                    self.durum().dusunce_bagla(son.id, dusunce_tek);
+                    let dugme = CreateButton::new(DUSUNCE_DUGMESI)
+                        .label("Düşünce Sürecini Göster")
+                        .style(ButtonStyle::Secondary);
+                    if let Err(e) = son
+                        .edit(
+                            &ctx.http,
+                            EditMessage::new()
+                                .components(vec![CreateActionRow::Buttons(vec![dugme])]),
+                        )
+                        .await
+                    {
+                        eprintln!("düşünce butonu eklenemedi ({kanal}): {e}");
+                    }
+                }
+            }
+        }
+
         // gönderilenler kayda geçer; thinking kayda girmez, hoca ve eleştirmen yalnız cevabı görür
         let mut d = self.durum();
         d.kendi_mesajlarim.push_back(cevap.clone());
@@ -794,34 +834,57 @@ impl Bot {
     }
 }
 
-// stream'in discord mesajlarına dizilişi: önce thinking spoiler'ları, sonra cevap;
-// 1900'ü aşan her parça yeni mesaj olur, hiçbir şey kırpılmaz
-fn akis_yerlesimi(dusunce: &str, cevap: &str) -> Vec<String> {
+// thinking fazı: cevap henüz başlamadıysa ve model düşünüyorsa placeholder gider;
+// gizlede canlı kelime sayacı, göstergede düz "Düşünüyorum...". Cevap başlayınca
+// aynı mesaj düzenlenerek stream edilir
+fn akis_gorunum(kip: DusunmeKip, dusunce: &str, cevap: &str) -> Vec<String> {
+    if cevap.trim().is_empty() && !dusunce.trim().is_empty() {
+        return match kip {
+            DusunmeKip::Gizle => vec![dusunce_sayaci(dusunce)],
+            DusunmeKip::Goster => vec!["Düşünüyorum...".to_string()],
+            DusunmeKip::Kapali => Vec::new(),
+        };
+    }
+    let dusunce = tek_satir(dusunce);
     let mut v: Vec<String> = Vec::new();
-    let dusunce = dusunce.trim();
-    if !dusunce.is_empty() {
-        // "||||" dört karakter yer tutar
-        for p in bol(dusunce, MESAJ_SINIRI - 4) {
+    if kip == DusunmeKip::Goster && !dusunce.is_empty() {
+        // göster: hem spoiler hem kod bloğu
+        for p in bol(&dusunce, MESAJ_SINIRI - 4) {
             v.push(spoiler(&p));
         }
+        v.extend(kod_bloklari(&dusunce));
     }
+    // gizle ve kapalı kiplerde düşünce yerleşime girmez; gizlede cevap sonunda
+    // "Düşünce Sürecini Göster" butonu gider (gonder_akis ekler)
     v.extend(bol(cevap, MESAJ_SINIRI));
     v
 }
 
-// thinking fazı: cevap henüz başlamadıysa ve model düşünüyorsa "Düşünüyorum..."
-// placeholder'ı gider; cevap başlayınca aynı mesaj düzenlenerek stream edilir
-fn akis_gorunum(kip: DusunmeKip, dusunce: &str, cevap: &str) -> Vec<String> {
-    if kip != DusunmeKip::Kapali && cevap.trim().is_empty() && !dusunce.trim().is_empty() {
-        return vec!["Düşünüyorum...".to_string()];
+// gizlede düşünürken canlı sayaç: kaçıncı kelimede olduğu görünür
+fn dusunce_sayaci(dusunce: &str) -> String {
+    let n = dusunce.split_whitespace().count();
+    format!("Düşünüyorum... Şu ana kadar {n} kelime düşündüm.")
+}
+
+// thinking'in kod bloğu biçimi; 1900'ü aşarsa birden çok blok
+fn kod_bloklari(metin: &str) -> Vec<String> {
+    bol(metin, MESAJ_SINIRI - 10)
+        .into_iter()
+        .map(|p| format!("```\n{p}\n```"))
+        .collect()
+}
+
+// butonla açılan ephemeral düşünce: tek mesaja sığacak şekilde kod bloğu
+fn dusunce_gosterim(metin: &str) -> String {
+    let not = "\n_(düşünce uzun, kısaltıldı)_";
+    let sinir = MESAJ_SINIRI - 12 - not.chars().count();
+    let toplam = metin.chars().count();
+    let govde: String = metin.chars().take(sinir).collect();
+    let mut s = format!("```\n{govde}\n```");
+    if toplam > sinir {
+        s.push_str(not);
     }
-    // düşünme gizli ya da kapalıysa spoiler hiç oluşmaz
-    let gosterilen = if kip == DusunmeKip::Goster {
-        tek_satir(dusunce)
-    } else {
-        String::new()
-    };
-    akis_yerlesimi(&gosterilen, cevap)
+    s
 }
 
 // thinking'de her düşünce için newline atılmasın; tek akıcı satıra indirgenir
@@ -1873,6 +1936,45 @@ impl EventHandler for Handler {
             self.bot.cevapla(&ctx, kanal).await;
         }
     }
+
+    // gizle kipindeki "Düşünce Sürecini Göster" butonu: düşünenin deposundan
+    // bulur, yalnız tıklayana görünen ephemeral kod bloğu olarak açar
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        let Interaction::Component(c) = interaction else {
+            return;
+        };
+        if c.data.custom_id != DUSUNCE_DUGMESI {
+            return;
+        }
+        let dusunce = self.bot.durum().dusunce_deposu.get(&c.message.id).cloned();
+        let Some(dusunce) = dusunce else {
+            let _ = c
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .ephemeral(true)
+                            .content("düşünce bulunamadı (bot yeniden başlamış olabilir)"),
+                    ),
+                )
+                .await;
+            return;
+        };
+        let icerik = dusunce_gosterim(&dusunce);
+        if let Err(e) = c
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .ephemeral(true)
+                        .content(icerik),
+                ),
+            )
+            .await
+        {
+            eprintln!("düşünce ephemeral yanıtı gönderilemedi: {e}");
+        }
+    }
 }
 
 // ---------- başlangıç ----------
@@ -2064,23 +2166,28 @@ mod test {
     }
 
     #[test]
-    fn akis_yerlesimi_bolunur() {
-        let dusunce = "düşün ".repeat(700); // ~4200 karakter, birden çok spoiler ister
+    fn gorunum_bolunur() {
+        let dusunce = "düşün ".repeat(700); // ~4200 karakter, birden çok blok ister
         let cevap = "kelime ".repeat(400); // ~2800 karakter, birden çok mesaj ister
-        let v = akis_yerlesimi(&dusunce, &cevap);
+        let v = akis_gorunum(DusunmeKip::Goster, &dusunce, &cevap);
         assert!(v.len() >= 5);
         for (i, m) in v.iter().enumerate() {
             assert!(m.chars().count() <= MESAJ_SINIRI, "parça {i} çok uzun");
         }
-        // thinking parçaları spoiler içinde, cevap parçaları değil
+        // önce spoiler blokları, sonra kod blokları, en sonda cevap parçaları
         assert!(v[0].starts_with("||") && v[0].ends_with("||"));
-        assert!(v[1].starts_with("||"));
+        assert!(v.iter().any(|m| m.starts_with("```")));
         assert!(!v[v.len() - 1].starts_with("||"));
+        // gizle: düşünce yerleşime hiç girmez
+        let v = akis_gorunum(DusunmeKip::Gizle, &dusunce, &cevap);
+        assert!(v
+            .iter()
+            .all(|m| !m.starts_with("||") && !m.starts_with("```")));
     }
 
     #[test]
-    fn yerlesim_dusuncesiz() {
-        let v = akis_yerlesimi("", "kısa cevap");
+    fn gorunum_dusuncesiz() {
+        let v = akis_gorunum(DusunmeKip::Goster, "", "kısa cevap");
         assert_eq!(v, vec!["kısa cevap"]);
     }
 
@@ -2097,11 +2204,12 @@ mod test {
 
     #[test]
     fn gorunum_dusunurken_placeholder() {
-        // cevap başlamadı, model düşünüyor → "Düşünüyorum..."
+        // göster: düz placeholder
         let v = akis_gorunum(DusunmeKip::Goster, "hmm düşünüyorum", "");
         assert_eq!(v, vec!["Düşünüyorum..."]);
-        let v = akis_gorunum(DusunmeKip::Gizle, "hmm", "");
-        assert_eq!(v, vec!["Düşünüyorum..."]);
+        // gizle: canlı kelime sayacı
+        let v = akis_gorunum(DusunmeKip::Gizle, "bir iki üç dört beş", "");
+        assert_eq!(v, vec!["Düşünüyorum... Şu ana kadar 5 kelime düşündüm."]);
         // kapalıyken placeholder yok
         let v = akis_gorunum(DusunmeKip::Kapali, "", "");
         assert!(v.is_empty());
@@ -2109,14 +2217,39 @@ mod test {
 
     #[test]
     fn gorunum_cevap_basladi() {
-        // göster: thinking spoiler + cevap
+        // göster: thinking hem spoiler hem kod bloğu + cevap
         let v = akis_gorunum(DusunmeKip::Goster, "düşündüm", "cevap bu");
-        assert_eq!(v.len(), 2);
+        assert_eq!(v.len(), 3);
         assert!(v[0].starts_with("||") && v[0].ends_with("||"));
-        assert_eq!(v[1], "cevap bu");
-        // gizle: yalnız cevap
+        assert!(v[1].starts_with("```"));
+        assert_eq!(v[2], "cevap bu");
+        // gizle: yalnız cevap (butonu gonder_akis ekler)
         let v = akis_gorunum(DusunmeKip::Gizle, "düşündüm", "cevap bu");
         assert_eq!(v, vec!["cevap bu"]);
+    }
+
+    #[test]
+    fn dusunce_sayaci_artar() {
+        assert_eq!(
+            dusunce_sayaci("tek"),
+            "Düşünüyorum... Şu ana kadar 1 kelime düşündüm."
+        );
+        assert_eq!(
+            dusunce_sayaci("a b\nc  d"),
+            "Düşünüyorum... Şu ana kadar 4 kelime düşündüm."
+        );
+    }
+
+    #[test]
+    fn dusunce_gosterim_kod_bloku() {
+        let s = dusunce_gosterim("düşünce metni");
+        assert!(s.starts_with("```\n") && s.ends_with("\n```"));
+        assert!(s.contains("düşünce metni"));
+        // uzun düşünce kısaltılır ve not düşer
+        let uzun = "a".repeat(5000);
+        let s = dusunce_gosterim(&uzun);
+        assert!(s.chars().count() <= MESAJ_SINIRI);
+        assert!(s.contains("kısaltıldı"));
     }
 
     #[test]

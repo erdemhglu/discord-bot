@@ -17,7 +17,7 @@
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
 bekle 0,15-0,35 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── yazıyor…
 uret_akis(stream, bütçe: cevap_butcesi!; release'de bütçe yok) ── (hata: meşgul=0, çık)
-gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünme kipi: göster=thinking tek satır spoiler'da (newline'sız), gizle/kapalı=spoiler yok ── düşünürken (cevap başlamadı) göster/gizle kipinde "Düşünüyorum...", cevap başlayınca aynı mesaj düzenlenerek stream ── kapalı kipte istek reasoning'siz, düşünce biriktirilmez ── 1900'ü aşan parça yeni mesaj ── discord yanıtı her cevapta ilk mesajda
+gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünürken (cevap başlamadı): göster="Düşünüyorum...", gizle=canlı kelime sayacı ── cevap başlayınca aynı mesaj düzenlenerek stream ── göster: thinking newline'sız tek satır, hem spoiler hem kod bloğu ── gizle: thinking mesajda yok, cevap sonunda "Düşünce Sürecini Göster" butonu (interaction_create tıklayana ephemeral kod bloğu açar, düşünce deposu 50 mesaj) ── kapalı: istek reasoning'siz ── 1900'ü aşan parça yeni mesaj ── discord yanıtı her cevapta ilk mesajda
 tekrar_mi? bir kez yeniden üret, yine tekrarsa açılanları sil ve sus; üretim sırasında yeni mesaj geldiyse açılanları sil, güncel bağlamla başa dön
 stream hiçbir şey üretmediyse uret ile stream'siz yedek
 … bitti değilse: yeni mesaj yoksa çık
