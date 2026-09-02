@@ -10,6 +10,8 @@ Kullanıcının bildirdiği 6 kök problemi çözer. Her adım: commit + push + 
 ### Adım 1 · Log sadeleştirme — TAMAMLANDI
 ### Adım 2 · 12 mesaj sınırı kalksın — TAMAMLANDI
 `SOHBET_ZAMAN_ASIMI` 30 dk, `zaman_asimi_kapat` uyku tikinde, kanal yasağı yok.
+### Adım 3 · Zihin id bazlı + zaman damgası + bellek döngüsü — TAMAMLANDI
+`kisiler/<id>.md`, `ad_id` çözümlemesi, `tarih_saat()`, `bellek_dongusu` kuyruk işleme.
 ### Adım 3 · Zihin id bazlı + zaman damgası + bellek döngüsü
 - `kisiler/<id>.md`: id, kullanici_adi, gorunen_ad, eski_adlar + mevcut alanlar.
   Temiz başlangıç (eski slug dosyalarına dokunulmaz).

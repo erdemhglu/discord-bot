@@ -92,7 +92,7 @@ Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot
 
 ## src/ajanlar.rs (impl Bot)
 - `profilci()` — son 600 satır → `analiz(PROFIL_CIKAR, 1200)` → `profil.md` + `Durum.profil`.
-- `gunlukcu(dokum, kaynak, kanal)` — `analiz(GUNLUKCU{ad,kaynak,favori}, 1200)` → JSON `Kayit{olay, kisiler[{isim,puan_degisimi,not,bilgiler,etiketler}], konular[{ad,not}], kendim}` → olay satırı (`olay_ekle`), her kişi: dosya oku, puan += clamp(-3..3) sonra clamp(-10..10), not değişirse, bilgiler tekrar etmeden, etiketler ≤6, olay satırı kişiye de, favori ise +10 ve sabit not, `kisi_yaz`; konular `konu_ekle`; kendim → `kendim.md`; dizin yenile; sonra `ozetleyici`.
+- `gunlukcu(dokum, kaynak, kanal)` — `analiz(GUNLUKCU{ad,kaynak,favori}, 1200)` → JSON `Kayit{olay, kisiler[{isim,puan_degisimi,not,bilgiler,etiketler}], konular[{ad,not}], kendim}` → olay satırı (`olay_ekle`, saniyeli), her kişi: isim `Durum.ad_id` ile id'ye çevrilir (çözülemeyen atlanır, loglanır), `kisiler/<id>.md` oku, ad değiştiyse eskisi `eski_adlar`'a, puan += clamp(-3..3) sonra clamp(-10..10), not/bilgiler/etiketler, favori ise +10 ve sabit not, `kisi_yaz`; konular `konu_ekle`; kendim → `kendim.md`; dizin yenile; sonra `ozetleyici`.
 - `ozetleyici()` — `hafiza::sinir_asanlar()` için: kişi → `analiz(OZETLEYICI_KISI{sinir=1000}, 700)`, konu → `OZETLEYICI_KONU{800}`, olay → eski %60 satır `OZETLEYICI_OLAYLAR` ile 3-5 satıra, yeni %40 kalır. Sonuç boş değil ve eskisinden kısaysa: kişi/konu için eski dosya arşive, yeni yazılır; olayda taşınan satırlar arşive. Küçülmediyse dokunmaz. Dizin yenile.
 - `hoca()` — profil + dizin + gündem + kendim + mevcut huy + son 200 satır + botun son mesajları → `analiz(HOCA{ad}, 800)` → `huy.md`.
 - `elestirmen(dokum)` — `analiz(ELESTIRMEN{ad,mevcut}, 400)` → `duzeltmeler.md`.
@@ -106,7 +106,7 @@ Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot
 - `yol(parca)`, `oku(parca)`, `yaz(parca, icerik)` (üst klasörü açar), `ekle(parca, satir)` (özel), `arsivle(parca, icerik)` (`arsiv/parca`'ya tarihli başlıkla ekler).
 - `slug(isim)` — küçük harf, Türkçe harf sadeleştirme, alfanümerik dışı `-`, boşsa "bilinmeyen".
 - `tarih()`, `tarih_unix(unix)` (Hinnant civil-from-days), `ay()` "YYYY-AA".
-- `Kisi { isim, puan, etiket, not, bilgiler, olaylar }` — `coz(isim, metin)` dosyadan, `metin()` dosyaya. Biçim: `# İsim` / `puan: +3` / `etiket: a, b` / `not: ...` / `## Bildiklerin` `- ...` / `## Son olaylar` `- tarih: ...`.
+- `Kisi { id, isim, kullanici_adi, eski_adlar, puan, etiket, not, bilgiler, olaylar }` — `coz(id, metin)` dosyadan, `metin()` dosyaya; dosya `kisiler/<id>.md`. Biçim: `# İsim` / `id:` / `kullanici_adi:` / `eski_adlar:` / `puan: +3` / `etiket: a, b` / `not: ...` / `## Bildiklerin` `- ...` / `## Son olaylar` `- tarih saat: ...`.
 - `kisi_oku(isim)`, `kisi_yaz(&Kisi)` — `kisiler/<slug>.md`.
 - `konu_ekle(ad, not)` — `konular/<slug>.md`, yoksa başlık+etiket satırı, sonra `- tarih: not`.
 - `olay_ekle(kanal, olay)` — `olaylar/YYYY-AA.md`'ye `- tarih #kanal: olay`.
@@ -114,7 +114,7 @@ Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot
 - `dizin_yenile() -> String` — `## Kişiler` (≤40: `- ad (+p) · etiketler · not`), `## Konular` (≤30: `- ad · son: tarih`), `## Olaylar` (≤3 ay: `- YYYY-AA · n kayıt`); `INDEX.md`'ye yazar.
 - `DURAK` — elenen sık kelimeler. `anahtarlar(&[String])` — 4+ harf, durak değil, tekrarsız, ≤40.
 - `puanla(metin, anahtar)` — kaç anahtar geçiyor. `kirp(metin, sinir)` — karakter sınırı + `…`.
-- `getir(katilimcilar, anahtar, hafiza, atla_son) -> String` — sırayla: katılımcıların kişi dosyaları (≤4, her biri ≤1200), en çok eşleşen 2 konu dosyası (≤800), ayın son 8 olayı, ham hafızadan (son `atla_son` hariç) ≥2 anahtarla eşleşen en fazla 12 satır (puan sonra yenilik sırası, sonra kronolojik). Bütçe 6000 karakter; sığmayan bölüm ve sonrası atlanır.
+- `getir(katilimcilar, ad_id, anahtar, hafiza, atla_son) -> String` — sırayla: katılımcıların kişi dosyaları (`ad_id` ile id'ye çevrilir, ≤4, her biri ≤1200), en çok eşleşen 2 konu dosyası (≤800), ayın son 8 olayı, ham hafızadan (son `atla_son` hariç) ≥2 anahtarla eşleşen en fazla 12 satır (puan sonra yenilik sırası, sonra kronolojik). Bütçe 6000 karakter; sığmayan bölüm ve sonrası atlanır.
 - `sinir_asanlar() -> Vec<(tür, yol)>` — boyutu aşan kişi/konu dosyaları ve bu ayın olay dosyası.
 
 ## src/gundem.rs

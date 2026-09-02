@@ -4,6 +4,18 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 3 · zihin id bazlı + saniyeli zaman + bellek döngüsü
+- Kişi dosyaları `kisiler/<id>.md`; `Kisi` alanları: id, kullanici_adi, eski_adlar + eskiler.
+  Ad değişince eski ad `eski_adlar`'a düşer, hafıza bölünmez. Temiz başlangıç: eski slug
+  dosyaları dizinde atlanır.
+- `Durum.ad_id` (ad→id) ve `kullanici_adlari` (id→kullanıcı adı) her mesajda ve açılış
+  taramasında beslenir; `gunlukcu` isimleri buradan id'ye çevirir, çözülemeyeni atlar+loglar.
+- Tüm kayıtlar `tarih_saat()` ile saniyeli (olay/konu/kişi/arşiv/gündem).
+- Bellek döngüsü: kapanan sohbetin dökümü ve 6 saatlik gözlem `bellek_kuyruk`'a düşer;
+  `bellek_dongusu` (10 dk, uyku kontrolüne takılmaz) günlükçü+özetleyici (+biten sohbette
+  eleştirmen) sırasıyla işler. Kuyruk 50'yi aşarsa en eski atılır (warn).
+- Doğrulama: 32 test, clippy 0 uyarı.
+
 ## 2026-09-02 · Adım 1+2 · log sadeleştirme + 12 mesaj sınırı kalktı
 - **Adım 1:** info logda yalnız kritik olaylar: uyudu/uyandı, PANİK/error, zihin kaydı
   (günlükçü), evre geçişi, açılış/kapanış. Ajan güncellemeleri, gezgin, mesaj taraması debug'a indi.

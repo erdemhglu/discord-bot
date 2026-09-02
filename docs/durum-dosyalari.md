@@ -10,7 +10,7 @@
 | `duzeltmeler.md` | elestirmen | her cevap | her biten sohbette yeniden yazılır (400) |
 | `kendim.md` | gunlukcu (`kendim` alanı doluysa) | her cevap, hoca, uyku (gerginlik) | tek parça, üstüne yazılır |
 | `gundem.md` | gezgin | her cevap (son 3), hoca (son 3) | 12 giriş; eskisi `arsiv/gundem.md` |
-| `kisiler/<slug>.md` | gunlukcu, ozetleyici | `getir` (sohbetteki kişiler), dizin | >1800 kr → özet, hedef 1000; eski hali `arsiv/kisiler/<slug>.md` |
+| `kisiler/<id>.md` | gunlukcu, ozetleyici | `getir` (sohbetteki kişiler), dizin | >1800 kr → özet, hedef 1000; eski hali `arsiv/kisiler/<id>.md` |
 | `konular/<slug>.md` | gunlukcu, ozetleyici | `getir` (anahtar eşleşmesi), dizin | >1500 → özet, hedef 800 |
 | `olaylar/YYYY-AA.md` | gunlukcu, ozetleyici | `getir` (son 8), dizin | >6000 → eski %60 satır 3-5 satıra; taşınanlar `arsiv/olaylar/YYYY-AA.md` |
 | `arsiv/…` | arsivle | insan | yalnız eklenir, `## tarih öncesi` başlıklı |
@@ -21,9 +21,13 @@
 
 ## Biçimler
 
-### kisiler/<slug>.md
+### kisiler/<id>.md
+Dosya adı discord kullanıcı id'si (ad değişikliği bölünme yaratmaz).
 ```
 # Emin
+id: 259669117248864257
+kullanici_adi: kaju
+eski_adlar: önceki görünen ad
 puan: +3
 etiket: rust, oyun
 not: rust'ı övdüm diye üç mesaj laf soktu
@@ -33,12 +37,14 @@ not: rust'ı övdüm diye üç mesaj laf soktu
 - otosaray diye bir projesi var
 
 ## Son olaylar
-- 2026-09-01: rust vs go tartışması, bot kaçtı
+- 2026-09-01 22:14:03: rust vs go tartışması, bot kaçtı
 ```
 `puan` -10..10 (favori sabit +10, not sabit). `etiket` ≤6, küçük harf. `not` tek cümle,
-kanaat. `Bildiklerin` tekrar etmeyen kalıcı bilgiler. `Son olaylar` her biten sohbetten bir satır.
-Ayrıştırma `Kisi::coz`: `# ` başlık, `puan:` `etiket:` `not:` başlık alanları, `## Bildik…` ve
-`## Son…` bölümleri, `- ` satırları. Bilinmeyen satır yok sayılır.
+kanaat. `eski_adlar` ≤5. `Bildiklerin` tekrar etmeyen kalıcı bilgiler. `Son olaylar` her biten
+sohbetten bir satır, zaman damgaları saniyeli (`tarih_saat`). Ayrıştırma `Kisi::coz`: `# ` başlık,
+`id:` `kullanici_adi:` `eski_adlar:` `puan:` `etiket:` `not:` alanları, `## Bildik…` ve
+`## Son…` bölümleri, `- ` satırları. Bilinmeyen satır yok sayılır. İsim→id çözümü `Durum.ad_id`;
+çözülemeyen kayıt o tur atlanır (loglanır). Eski slug dosyaları okunmaz, zamanla silinebilir.
 
 ### konular/<slug>.md
 ```

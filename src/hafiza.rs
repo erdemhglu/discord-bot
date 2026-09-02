@@ -49,7 +49,7 @@ fn ekle(parca: &str, satir: &str) {
 pub fn arsivle(parca: &str, icerik: &str) {
     ekle(
         &format!("arsiv/{parca}"),
-        &format!("\n## {} öncesi\n{}", tarih(), icerik.trim_end()),
+        &format!("\n## {} öncesi\n{}", tarih_saat(), icerik.trim_end()),
     );
 }
 
@@ -87,6 +87,11 @@ pub fn tarih() -> String {
     tarih_unix(simdi_unix())
 }
 
+// tüm kayıtlar saniyeli zaman damgasıyla düşer: YYYY-AA-GG SS:DD:SS
+pub fn tarih_saat() -> String {
+    format!("{} {}", tarih(), crate::uyku::saat_saniye())
+}
+
 pub fn tarih_unix(unix: i64) -> String {
     let z = unix.div_euclid(86400) + 719468;
     let era = z.div_euclid(146097);
@@ -108,7 +113,10 @@ pub fn ay() -> String {
 
 #[derive(Default, Clone)]
 pub struct Kisi {
-    pub isim: String,
+    pub id: u64,                 // dosya anahtarı; discord kullanıcı id'si
+    pub isim: String,            // görünen ad (global_name ya da kullanıcı adı)
+    pub kullanici_adi: String,   // discord kullanıcı adı
+    pub eski_adlar: Vec<String>, // önceki görünen adlar
     pub puan: i32,
     pub etiket: Vec<String>,
     pub not: String,
@@ -117,9 +125,9 @@ pub struct Kisi {
 }
 
 impl Kisi {
-    pub fn coz(isim: &str, metin: &str) -> Kisi {
+    pub fn coz(id: u64, metin: &str) -> Kisi {
         let mut k = Kisi {
-            isim: isim.to_string(),
+            id,
             ..Default::default()
         };
         let mut bolum = "";
@@ -135,6 +143,16 @@ impl Kisi {
                 } else {
                     ""
                 };
+            } else if let Some(v) = s.strip_prefix("id:") {
+                k.id = v.trim().parse().unwrap_or(k.id);
+            } else if let Some(v) = s.strip_prefix("kullanici_adi:") {
+                k.kullanici_adi = v.trim().to_string();
+            } else if let Some(v) = s.strip_prefix("eski_adlar:") {
+                k.eski_adlar = v
+                    .split(',')
+                    .map(|e| e.trim().to_string())
+                    .filter(|e| !e.is_empty())
+                    .collect();
             } else if let Some(v) = s.strip_prefix("puan:") {
                 k.puan = v.trim().parse().unwrap_or(0);
             } else if let Some(v) = s.strip_prefix("etiket:") {
@@ -158,8 +176,11 @@ impl Kisi {
 
     pub fn metin(&self) -> String {
         let mut s = format!(
-            "# {}\npuan: {:+}\netiket: {}\nnot: {}\n\n## Bildiklerin\n",
+            "# {}\nid: {}\nkullanici_adi: {}\neski_adlar: {}\npuan: {:+}\netiket: {}\nnot: {}\n\n## Bildiklerin\n",
             self.isim,
+            self.id,
+            self.kullanici_adi,
+            self.eski_adlar.join(", "),
             self.puan,
             self.etiket.join(", "),
             self.not
@@ -175,20 +196,20 @@ impl Kisi {
     }
 }
 
-pub fn kisi_oku(isim: &str) -> Kisi {
-    let m = oku(&format!("kisiler/{}.md", slug(isim)));
+pub fn kisi_oku(id: u64) -> Kisi {
+    let m = oku(&format!("kisiler/{id}.md"));
     if m.is_empty() {
         Kisi {
-            isim: isim.to_string(),
+            id,
             ..Default::default()
         }
     } else {
-        Kisi::coz(isim, &m)
+        Kisi::coz(id, &m)
     }
 }
 
 pub fn kisi_yaz(k: &Kisi) {
-    yaz(&format!("kisiler/{}.md", slug(&k.isim)), &k.metin());
+    yaz(&format!("kisiler/{}.md", k.id), &k.metin());
 }
 
 // ---------- konu ve olay ----------
@@ -198,13 +219,13 @@ pub fn konu_ekle(ad: &str, not: &str) {
     if oku(&parca).is_empty() {
         yaz(&parca, &format!("# {ad}\netiket: \n\n"));
     }
-    ekle(&parca, &format!("- {}: {}", tarih(), not.trim()));
+    ekle(&parca, &format!("- {}: {}", tarih_saat(), not.trim()));
 }
 
 pub fn olay_ekle(kanal: &str, olay: &str) {
     ekle(
         &format!("olaylar/{}.md", ay()),
-        &format!("- {} #{}: {}", tarih(), kanal, olay.trim()),
+        &format!("- {} #{}: {}", tarih_saat(), kanal, olay.trim()),
     );
 }
 
@@ -262,7 +283,18 @@ fn ilk_satir(p: &Path) -> String {
 pub fn dizin_yenile() -> String {
     let mut s = String::from("## Kişiler\n");
     for p in dosyalar("kisiler").into_iter().take(DIZIN_KISI) {
-        let k = Kisi::coz("", &fs::read_to_string(&p).unwrap_or_default());
+        // id bazlı dosya adı; eski slug dosyaları (id çözülemez) atlanır
+        let Some(id) = p
+            .file_stem()
+            .and_then(|f| f.to_str())
+            .and_then(|f| f.parse::<u64>().ok())
+        else {
+            continue;
+        };
+        let k = Kisi::coz(id, &fs::read_to_string(&p).unwrap_or_default());
+        if k.isim.is_empty() {
+            continue;
+        }
         s += &format!("- {} ({:+})", k.isim, k.puan);
         if !k.etiket.is_empty() {
             s += &format!(" · {}", k.etiket.join(", "));
@@ -342,6 +374,7 @@ pub fn kirp(metin: &str, sinir: usize) -> String {
 // son olaylar ve ham hafızadan anahtar kelimeye uyan eski satırlar. bütçe sabit.
 pub fn getir(
     katilimcilar: &[String],
+    ad_id: &std::collections::HashMap<String, u64>,
     anahtar: &[String],
     hafiza: &VecDeque<String>,
     atla_son: usize,
@@ -349,7 +382,10 @@ pub fn getir(
     let mut bolumler: Vec<String> = Vec::new();
 
     for isim in katilimcilar.iter().take(4) {
-        let m = oku(&format!("kisiler/{}.md", slug(isim)));
+        let Some(id) = ad_id.get(&isim.to_lowercase()) else {
+            continue;
+        };
+        let m = oku(&format!("kisiler/{id}.md"));
         if !m.is_empty() {
             bolumler.push(kirp(&m, 1200));
         }
@@ -463,15 +499,21 @@ mod test {
     #[test]
     fn kisi_gidip_gelir() {
         let k = Kisi {
+            id: 259669117248864257,
             isim: "Emin".into(),
+            kullanici_adi: "kaju".into(),
+            eski_adlar: vec!["eski ad".into()],
             puan: -3,
             etiket: vec!["rust".into(), "oyun".into()],
             not: "laf soktu".into(),
             bilgiler: vec!["yks'ye hazırlanıyor".into()],
-            olaylar: vec!["2026-09-01: tartıştık".into()],
+            olaylar: vec!["2026-09-01 14:03:22: tartıştık".into()],
         };
-        let g = Kisi::coz("", &k.metin());
+        let g = Kisi::coz(k.id, &k.metin());
+        assert_eq!(g.id, k.id);
         assert_eq!(g.isim, "Emin");
+        assert_eq!(g.kullanici_adi, "kaju");
+        assert_eq!(g.eski_adlar, k.eski_adlar);
         assert_eq!(g.puan, -3);
         assert_eq!(g.etiket, k.etiket);
         assert_eq!(g.not, k.not);
@@ -486,12 +528,25 @@ mod test {
     }
 
     #[test]
+    fn tarih_saat_bicimi() {
+        // YYYY-AA-GG SS:DD:SS (19 karakter, saniyeli)
+        let s = tarih_saat();
+        assert_eq!(s.chars().count(), 19);
+        assert_eq!(&s[4..5], "-");
+        assert_eq!(&s[10..11], " ");
+        assert_eq!(&s[13..14], ":");
+        assert_eq!(&s[16..17], ":");
+    }
+
+    #[test]
     fn hafizadan_ceker() {
         let mut h = VecDeque::new();
         h.push_back("emin: rust derleme süresi çok uzun".to_string());
         h.push_back("lng: bugün hava güzel".to_string());
         h.push_back("emin: son mesaj, sohbette zaten var".to_string());
-        let g = getir(&[], &["rust".into(), "derleme".into()], &h, 1);
+        let mut ad_id = std::collections::HashMap::new();
+        ad_id.insert("emin".to_string(), 1u64);
+        let g = getir(&[], &ad_id, &["rust".into(), "derleme".into()], &h, 1);
         assert!(g.contains("rust derleme süresi"));
         assert!(!g.contains("hava güzel"));
         assert!(!g.contains("son mesaj"));

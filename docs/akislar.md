@@ -34,7 +34,7 @@ Talimat önceliği: hack devam > hack çıkış > boş.
 ## uret (her kişilikli çağrı)
 1. Geçmişteki `user` satırlarından `isim` (": " öncesi) ve metin ayrıştırılır.
 2. `anahtarlar(metinler)` → ≤40 kelime.
-3. Kilit: `getir(katilimcilar, anahtar, ham hafıza, 20)` → bütçeli bağlam; `sistem_metni`.
+3. Kilit: `getir(katilimcilar, ad_id, anahtar, ham hafıza, 20)` → bütçeli bağlam; `sistem_metni`.
 4. `sor` → `temizle` (ad öneki, tırnak, 1900).
 Sohbet cevapları bunu kullanmaz; `uret_akis` aynı sistemi kurup stream açar (`gonder_akis` yazar), kırpma yoktur.
 
@@ -69,4 +69,9 @@ evresine girince bir kez isim seçer: model tek kelime verir, takma ad her sunuc
 `bot_adi` olur, gruba duyurulur. Sayaçlar `durum/gelisim.md`'de; yeniden başlatma sıfırlamaz.
 
 ## Biten sohbet → hafıza
-`gunlukcu`: JSON → `olaylar/AA.md` satırı, kişi dosyaları (puan, not, bilgiler, etiket, olay), konu dosyaları, `kendim.md`, `INDEX.md` → `ozetleyici` sınır aşanları küçültür (arşivle) → `elestirmen` → `duzeltmeler.md`.
+Sohbet 30 dk sessiz kalınca `zaman_asimi_kapat` kapatır; döküm `Durum.bellek_kuyruk`'a düşer.
+`bellek_dongusu` (10 dk'da bir, uykudan bağımsız) kuyruğu işler: `gunlukcu` JSON → `olaylar/AA.md`
+satırı (saniyeli), kişi dosyaları id bazlı (isim `ad_id` ile çevrilir; puan, not, bilgiler,
+etiket, olay), konu dosyaları, `kendim.md`, `INDEX.md` → `ozetleyici` sınır aşanları küçültür
+(arşivle) → biten sohbette ayrıca `elestirmen` → `duzeltmeler.md`. 6 saatlik turun gözlemi de
+aynı kuyruktan geçer.

@@ -166,6 +166,11 @@ struct Durum {
     taranan: HashSet<GuildId>,
     // gündem ve uyku
     gundem: String, // gezgin: son okudukları ve düşündükleri
+    // zihin eşlemeleri: görünen ad (küçük harf) → id, id → kullanıcı adı
+    ad_id: HashMap<String, u64>,
+    kullanici_adlari: HashMap<u64, String>,
+    // bellek döngüsünün işleyeceği kuyruk: (döküm, kaynak, kanal adı, eleştirmen de çalışsın mı)
+    bellek_kuyruk: VecDeque<(String, String, String, bool)>,
     planlar: Vec<uyku::Plan>,
     uyuyor: bool,
     uyanik_zorla: i64, // !uyan sonrası bu ana kadar uyku planı işlemez (unix)
@@ -731,7 +736,7 @@ impl Bot {
         }
         let anahtar = hafiza::anahtarlar(&metinler);
         let d = self.durum();
-        let getirilen = hafiza::getir(&katilimcilar, &anahtar, &d.hafiza, SOHBET_BOYU);
+        let getirilen = hafiza::getir(&katilimcilar, &d.ad_id, &anahtar, &d.hafiza, SOHBET_BOYU);
         let (sabit, degisken) = sistem_metni(&d, talimat, &getirilen);
         (sabit, degisken, d.bot_adi.clone())
     }
@@ -1442,9 +1447,13 @@ impl Bot {
             let dokum_metni = dokum(&s.gecmis, &bot_adi);
             let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
             log::debug!("sohbet [{kanal}]: zaman aşımıyla sessizce kapandı");
-            self.gunlukcu(dokum_metni.clone(), "biten sohbet", &kanal_adi)
-                .await;
-            self.elestirmen(dokum_metni).await;
+            // ajanlar inline değil, bellek döngüsünde işlenir (elestirmen de çalışsın)
+            self.durum().bellek_kuyruk.push_back((
+                dokum_metni,
+                "biten sohbet".to_string(),
+                kanal_adi,
+                true,
+            ));
             self.durum().gelisim.sohbet += 1;
             self.gelisim_kontrol(ctx).await;
         }
@@ -1583,6 +1592,7 @@ async fn gecmisi_oku(bot: &Bot, ctx: &Context, guild: &Guild) {
         if *id == FAVORI {
             d.favori_adi = Some(isim.clone());
         }
+        d.ad_id.entry(isim.to_lowercase()).or_insert(*id);
         hatirla(&mut d, isim, metin);
     }
     log::debug!("{}: {} mesaj okundu", guild.name, toplam.len());
@@ -1631,8 +1641,13 @@ async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
         bot.gelisim_kontrol(&ctx).await;
         bot.profilci().await;
         let son = son_mesajlar(&bot.durum(), 300);
-        bot.gunlukcu(son, "6 saatlik gözlem, bot konuşmamış olabilir", "gozlem")
-            .await;
+        // gözlem de kuyruktan işlenir (elestirmen gerekmez)
+        bot.durum().bellek_kuyruk.push_back((
+            son,
+            "6 saatlik gözlem, bot konuşmamış olabilir".to_string(),
+            "gozlem".to_string(),
+            false,
+        ));
         bot.hoca().await;
 
         let Some(kanal) = varsayilan_kanal(&bot, &ctx) else {
@@ -1821,6 +1836,35 @@ async fn gezgin_dongusu(bot: Arc<Bot>) {
     }
 }
 
+// 10 dakikada bir: kapanan sohbetlerin ve gözlemlerin kuyruğunu zihne işler.
+// uyku kontrolüne takılmaz; gece birikenler de sabaha kalmadan kaydedilir
+async fn bellek_dongusu(bot: Arc<Bot>) {
+    loop {
+        sleep(Duration::from_secs(10 * 60)).await;
+        loop {
+            let isi = {
+                let mut d = bot.durum();
+                if d.bellek_kuyruk.len() > 50 {
+                    log::warn!(
+                        "bellek: kuyruk şişti ({}), en eski atılıyor",
+                        d.bellek_kuyruk.len()
+                    );
+                    d.bellek_kuyruk.pop_front();
+                }
+                d.bellek_kuyruk.pop_front()
+            };
+            let Some((dokum_metni, kaynak, kanal_adi, elestir)) = isi else {
+                break;
+            };
+            let dokum_kopya = dokum_metni.clone();
+            bot.gunlukcu(dokum_metni, &kaynak, &kanal_adi).await;
+            if elestir {
+                bot.elestirmen(dokum_kopya).await;
+            }
+        }
+    }
+}
+
 // dakikada bir uyku planına bakar; uyanınca uyurken gelen etiketlere döner
 async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
@@ -1904,6 +1948,7 @@ impl EventHandler for Handler {
             tokio::spawn(durtme_dongusu(self.bot.clone(), ctx.clone()));
             tokio::spawn(saka_dongusu(self.bot.clone(), ctx.clone()));
             tokio::spawn(gezgin_dongusu(self.bot.clone()));
+            tokio::spawn(bellek_dongusu(self.bot.clone()));
             tokio::spawn(uyku_dongusu(self.bot.clone(), ctx));
         }
     }
@@ -2009,6 +2054,9 @@ impl EventHandler for Handler {
                     .any(|a| !a.is_empty() && metin.to_lowercase().contains(&a.to_lowercase()));
             d.gelisim.mesaj += 1;
             hatirla(&mut d, &isim, &metin);
+            d.ad_id.insert(isim.to_lowercase(), msg.author.id.get());
+            d.kullanici_adlari
+                .insert(msg.author.id.get(), msg.author.name.clone());
             d.son_kanal = Some(kanal);
             if msg.author.id.get() == FAVORI {
                 d.favori_adi = Some(isim.clone());

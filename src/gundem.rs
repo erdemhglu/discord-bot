@@ -254,12 +254,7 @@ impl Bot {
         };
 
         let mut g = girisler(&hafiza::oku("gundem.md"));
-        g.push(format!(
-            "## {} {}\n{}",
-            hafiza::tarih(),
-            uyku::saat(),
-            not.trim()
-        ));
+        g.push(format!("## {}\n{}", hafiza::tarih_saat(), not.trim()));
         while g.len() > GUNDEM_KAYIT {
             hafiza::arsivle("gundem.md", &g.remove(0));
         }

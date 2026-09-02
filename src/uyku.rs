@@ -27,6 +27,11 @@ pub fn saat() -> String {
     format!("{:02}:{:02}", sn / 3600, (sn % 3600) / 60)
 }
 
+pub fn saat_saniye() -> String {
+    let (_, sn) = yerel(simdi_unix());
+    format!("{:02}:{:02}:{:02}", sn / 3600, (sn % 3600) / 60, sn % 60)
+}
+
 pub fn saat_metni() -> String {
     let (gun, _) = yerel(simdi_unix());
     let adlar = [

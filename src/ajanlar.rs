@@ -90,11 +90,35 @@ impl Bot {
         if !kayit.olay.is_empty() {
             hafiza::olay_ekle(kanal, &kayit.olay);
         }
+        let (ad_id, kullanici_adlari) = {
+            let d = self.durum();
+            (d.ad_id.clone(), d.kullanici_adlari.clone())
+        };
         for kk in kayit.kisiler {
             if kk.isim.is_empty() || kk.isim.eq_ignore_ascii_case(&bot_adi) {
                 continue;
             }
-            let mut k: Kisi = hafiza::kisi_oku(&kk.isim);
+            // zihin id bazlı: isim çözülemiyorsa bu tur kaydı atlanır
+            let Some(&id) = ad_id.get(&kk.isim.to_lowercase()) else {
+                log::warn!("gunlukcu: '{}' id'ye çevrilemedi, atlandı", kk.isim);
+                continue;
+            };
+            let mut k: Kisi = hafiza::kisi_oku(id);
+            if k.isim.is_empty() {
+                k.isim = kk.isim.clone(); // yeni kişi
+            } else if !k.isim.eq_ignore_ascii_case(&kk.isim) {
+                // görünen ad değişmiş: eski ad kaybolmasın
+                if !k.eski_adlar.iter().any(|e| e.eq_ignore_ascii_case(&k.isim)) {
+                    k.eski_adlar.push(k.isim.clone());
+                    k.eski_adlar.truncate(5);
+                }
+                k.isim = kk.isim.clone();
+            }
+            if k.kullanici_adi.is_empty() {
+                if let Some(ka) = kullanici_adlari.get(&id) {
+                    k.kullanici_adi = ka.clone();
+                }
+            }
             // model ne derse desin sınırlar bizde
             k.puan = (k.puan + kk.puan_degisimi.clamp(-3, 3)).clamp(-10, 10);
             if !kk.not.trim().is_empty() {
@@ -115,9 +139,9 @@ impl Bot {
             k.etiket.truncate(6);
             if !kayit.olay.is_empty() {
                 k.olaylar
-                    .push(format!("{}: {}", hafiza::tarih(), kayit.olay));
+                    .push(format!("{}: {}", hafiza::tarih_saat(), kayit.olay));
             }
-            if favori.as_deref() == Some(k.isim.as_str()) {
+            if id == FAVORI || favori.as_deref() == Some(k.isim.as_str()) {
                 k.puan = 10;
                 k.not = hafiza::FAVORI_NOTU.to_string();
             }
