@@ -4,6 +4,30 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Hafıza sertleştirme + döngü bekçisi + tarama sırası
+- `hafiza::yaz` atomik (geçici + rename) + `YAZMA_KILIDI` ile tek sıradan; `ekle` gerçek append
+  (dosyanın tamamı yeniden yazılmıyor). Test: disk round-trip + geçici dosya kalmıyor (43 test).
+- Günlükçü JSON'u çözülemezse ham çıktı `arsiv/gunlukcu-<kaynak>.md`'ye kurtarılır.
+- `dongu_bekle`: altı döngü bekçiyle başlar, panikte log + 5 sn sonra yeniden; `KAPANIYOR`
+  (AtomicBool) ile zarif kapanış — döngüler tik başında döner, bekçi yeniden başlatmaz.
+- Süresi dolan haber sohbetleri dakika tikinde temizlenir (`zaman_asimi_kapat`), `haber_bekleyen` şişmez.
+- Açılış taraması hafızanın ÖNÜNE eklenir: tarama sürerken gelen canlı mesajlar ezilmez,
+  kronoloji korunur; `ad_id` yalnız boşsa dolar (canlı eşleme öncelikli).
+- Doğrulama: 43 test, clippy 0 uyarı, fmt temiz.
+
+## 2026-09-02 · HTTP timeout mimarisi + mekanik sertleştirme (d8d7fc8)
+- Global 60 sn zaman aşımı kalktı: `connect_timeout` 15 sn + `read_timeout` 120 sn (her okumada
+  sıfırlanır → ilk tokeni kapsar); toplam süre sınırı yok, uzun düşünme akışı kesilmez.
+- Geçici hatalarda (ağ, 429, 500/502/503/504) yeniden deneme: 2 sn ve 4 sn geri çekilme,
+  en çok 2 ek deneme (`sor_ham` + `sor_ham_akis`; akış yalnız açılmadan önce).
+- `reasoning_kapat` sağlayıcıya göre: openrouter `reasoning.enabled`, mistral'e parametre yok,
+  diğerleri `enable_thinking:false` (ikisini birden yollamak bazı sağlayıcıları bozuyordu).
+- `MesgulGuard` (RAII): panik dahil her çıkışta kanalın meşgul bayrağı bırakılır;
+  8 dağınık remove tek guard'a indi.
+- `soy` char güvenli (bayt dilimi yok) + `kucult` (İ→i̇ birleşik noktası) — 4 yeni test.
+- Typing edit döngüsünden çıktı (`yaz_akis`); model çağrısından önce bir kez.
+- Doğrulama: 42 test, clippy 0 uyarı.
+
 ## 2026-09-02 · Adım 8 · Modal'lar + /zihin kodlandı
 - Yeni `src/modal.rs`: slash komutlar (`/durum` `/yardim` `/zihin`) modal açar, `!` komutları
   paralel düz metin kalır; zihin modalı herkese açık, 5 slot (bot özeti / kişiler iki yarıda /

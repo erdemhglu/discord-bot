@@ -59,18 +59,21 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `Bot::sorun_at(ctx, kanal)` — `uret(SORUN, 160)` ile uydurma kod derdi, gönder, sohbet aç. Dürtme döngüsü (%25) ve `!sorun`.
 - `sohbet_baslat(&mut Durum, kanal, acilis: Option<String>) -> &mut Sohbet` — kanal geçmişinin son 10 satırıyla tohumlar (bot satırları assistant), açılış mesajı geçmişte zaten varsa iki kez koymaz;  varsa mevcut sohbeti döner (`entry().or_insert`), yoksa yeni; açılış varsa `asistan` mesajı + `sayac=1`.
 - `sohbet_bitir(&mut Durum, kanal) -> Option<Sohbet>` — haber bekleme silinir, sohbet çıkarılıp döner; kanal yasağı yok, kapatma `zaman_asimi_kapat`'tan gelir.
-- `Bot::zaman_asimi_kapat(ctx)` — dakika tikinde: `SOHBET_ZAMAN_ASIMI` (30 dk) sessiz kalan sohbetleri meşgul değilse kapatır, dökümü `gunlukcu`+`elestirmen`'e verir, `gelisim.sohbet++`.
+- `Bot::zaman_asimi_kapat(ctx)` — dakika tikinde: `SOHBET_ZAMAN_ASIMI` (30 dk) sessiz kalan sohbetleri meşgul değilse kapatır, dökümü `gunlukcu`+`elestirmen`'e verir, `gelisim.sohbet++`; ayrıca süresi dolan haber sohbetlerini temizler (yorum penceresi geçmiş + o pencerede aktivite yoksa sessizce kapanır, `haber_bekleyen` haritası şişmez).
 - `Bot::komut` → artık `src/komut.rs` içinde (aşağıda).
 - `Bot::haber_at(ctx, kanal) -> bool` — haberci → link → tanıtım → gönder → sohbet + 2 saat yorum bekleme. `haber_dongusu` ve `!haber` çağırır.
 - `Bot::saka_yap(ctx, kanal, hack)` — görsel seç, hack ise `HACK_GIRIS`, değilse `resimci`; gönder; sohbet (`hackli=3`). `saka_dongusu` ve `!saka`/`!hack` çağırır.
 - `Bot::cevapla(ctx, kanal)` — döngü: (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç ve meşgul işaretle. (2) 0,15-0,35 sn mesaj biriktirme payı; güncel geçmiş, hedef mesaj, `gelen`; `arastir` bulgusu göreve eklenir; `broadcast_typing`. (3) `uret_akis` (bütçe `cevap_butcesi!()`) ile stream açılır. (4) `gonder_akis`: mesaj ilk delta ile belirir, thinking spoiler'da, 1900'ü aşan kısım yeni mesaj; üretim sırasında yeni mesaj geldiyse açılanları silip güncel bağlamla başa döner (Eski); tekrar_mi bir kez yeniden üretir. (5) stream kullanılır bir şey üretmezse `uret` ile stream'siz yedek (Bos). (6) meşgul kaldır, asistan satırı ekle, sayaçları ilerlet, `son_aktivite` tazele. Yeni mesaj geldiyse başa dön. Kapatma yok; sessiz kalan sohbeti zaman aşımı kapatır.
 
 ### Hafıza (discord tarafı)
-- `gecmisi_oku(bot, ctx, guild)` — botun üyeliğini çeker, izinli (`VIEW_CHANNEL|READ_MESSAGE_HISTORY`) metin kanallarını pozisyon sırasıyla gezer, `GetMessages` 100'lük sayfalarla 14 gün geriye okur, bot/boş mesajları atlar, `content_safe` ile mention'ları ada çevirir, zamana göre sıralar, son 2000'i `hatirla`; favori id görürse `favori_adi` yazar.
+- `gecmisi_oku(bot, ctx, guild)` — botun üyeliğini çeker, izinli (`VIEW_CHANNEL|READ_MESSAGE_HISTORY`) metin kanallarını pozisyon sırasıyla gezer, `GetMessages` 100'lük sayfalarla 14 gün geriye okur, bot/boş mesajları atlar, `content_safe` ile mention'ları ada çevirir, zamana göre sıralar; favori id görürse `favori_adi` yazar, `ad_id` yalnız boşsa dolar (canlı eşleme öncelikli). Tarih hafızanın ÖNÜNE eklenir (tarama sürerken gelen canlı mesajlar arkada kalır, kronoloji bozulmaz, boca canlıları ezmez).
 - `varsayilan_kanal(bot, ctx) -> Option<ChannelId>` — `HABER_KANALI` → sunucu sistem kanalı → en üst metin kanalı. Önbellekten, await yok.
 - `bos_kanal(bot) -> Option<(ChannelId, String)>` — son konuşulan kanal; sohbet açık değil, yasaklı değil, profil var → (kanal, son 40 satır). Dürtme ve şaka bunu kullanır.
 
-### Döngüler (tokio::spawn, `ready`'de bir kez)
+### Döngüler (`dongu_bekle`, `ready`'de bir kez)
+`dongu_bekle(ad, kur)` — her döngüyü bekçiyle başlatır: panikte log + 5 sn sonra yeniden,
+temiz dönüşte de yeniden (döngüler sonsuzdur). `KAPANIYOR` (AtomicBool) kapanış sinyali:
+döngüler tik başında bakar ve döner, bekçi yeniden başlatmaz; `main`'in kapanış görevi kurar.
 - `haber_dongusu(bot, ctx)` — 6 saatte bir: **uykudaysa** haber seçer ama atmaz, `stok_haber`'e koyar (bir kez); seyahatteyse profilci+hoca, geç; uyanıkken: profilci → gözlem kuyruğa → hoca → varsayılan kanalda sohbet açıksa geç → stok varsa `haber_gonder(stok)`, yoksa `haber_at`.
 - `durtme_dongusu(bot, ctx)` — saatte bir: uyanık değilse geç; seyahatteyse günde bir kez %25 ile `YOLDA`; yarın seyahat başlıyorsa bir kez `GIDIYORUM`; değilse %30 ile `DURUP_DURURKEN`; `bos_kanal` → `uret(son 40 satır)` → gönder → sohbet başlat.
 - `saka_dongusu(bot, ctx)` — 3 saatte bir: uyanık değilse/seyahatteyse geç; %10; `bos_kanal`; `rastgele_resim` yoksa geç; %30 hack: `uret(HACK_GIRIS)`, değilse `resimci(resim)`; görselle gönder; sohbet başlat, hack ise `hackli = 3`.
@@ -112,7 +115,7 @@ Slash komut modalları; discord sınırları tasarımı belirler (en çok 5 bile
 
 ## src/ajanlar.rs (impl Bot)
 - `profilci()` — son 600 satır → `analiz(PROFIL_CIKAR, 1200)` → `profil.md` + `Durum.profil`.
-- `gunlukcu(dokum, kaynak, kanal)` — `analiz(GUNLUKCU{ad,kaynak,favori}, 1200)` → JSON `Kayit{olay, kisiler[{isim,puan_degisimi,not,bilgiler,etiketler}], konular[{ad,not}], kendim}` → olay satırı (`olay_ekle`, saniyeli), her kişi: isim `Durum.ad_id` ile id'ye çevrilir (çözülemeyen atlanır, loglanır), `kisiler/<id>.md` oku, ad değiştiyse eskisi `eski_adlar`'a, puan += clamp(-3..3) sonra clamp(-10..10), not/bilgiler/etiketler, favori ise +10 ve sabit not, `kisi_yaz`; konular `konu_ekle`; kendim → `kendim.md`; dizin yenile; sonra `ozetleyici`.
+- `gunlukcu(dokum, kaynak, kanal)` — `analiz(GUNLUKCU{ad,kaynak,favori}, 1200)` → JSON `Kayit{olay, kisiler[{isim,puan_degisimi,not,bilgiler,etiketler}], konular[{ad,not}], kendim}`; JSON çözülemezse ham çıktı `arsiv/gunlukcu-<kaynak>.md`'ye kurtarılır (emek kaybolmaz). → olay satırı (`olay_ekle`, saniyeli), her kişi: isim `Durum.ad_id` ile id'ye çevrilir (çözülemeyen atlanır, loglanır), `kisiler/<id>.md` oku, ad değiştiyse eskisi `eski_adlar`'a, puan += clamp(-3..3) sonra clamp(-10..10), not/bilgiler/etiketler, favori ise +10 ve sabit not, `kisi_yaz`; konular `konu_ekle`; kendim → `kendim.md`; dizin yenile; sonra `ozetleyici`.
 - `ozetleyici()` — `hafiza::sinir_asanlar()` için: kişi → `analiz(OZETLEYICI_KISI{sinir=1000}, 700)`, konu → `OZETLEYICI_KONU{800}`, olay → eski %60 satır `OZETLEYICI_OLAYLAR` ile 3-5 satıra, yeni %40 kalır. Sonuç boş değil ve eskisinden kısaysa: kişi/konu için eski dosya arşive, yeni yazılır; olayda taşınan satırlar arşive. Küçülmediyse dokunmaz. Dizin yenile.
 - `haber_gonder(ctx, kanal, h) -> bool` — seçilmiş haberi paylaşır (tur haberi ya da uyku stoku); tanıtım `uret(HABER_TANIT)`, sohbet açılır, 2 saat yorum beklenir.
 - `hoca()` — profil + dizin + gündem + kendim + mevcut huy + son 200 satır + botun son mesajları → `analiz(HOCA{ad}, 800)` → `huy.md`.
@@ -124,7 +127,8 @@ Slash komut modalları; discord sınırları tasarımı belirler (en çok 5 bile
 
 ## src/hafiza.rs
 - Sabitler: `KISI_SINIRI 1800 / KISI_HEDEF 1000 / KONU_SINIRI 1500 / KONU_HEDEF 800 / OLAY_SINIRI 6000 / BAGLAM_BUTCESI 6000 / DIZIN_KISI 40 / FAVORI_NOTU`.
-- `yol(parca)`, `oku(parca)`, `yaz(parca, icerik)` (üst klasörü açar), `ekle(parca, satir)` (özel), `arsivle(parca, icerik)` (`arsiv/parca`'ya tarihli başlıkla ekler).
+- `yol(parca)`, `oku(parca)`, `yaz(parca, icerik)` — `YAZMA_KILIDI` (static Mutex) ile tek sıradan ve atomik (geçici + rename); `ekle(parca, satir)` — gerçek append (OpenOptions), aynı kilit; `arsivle(parca, icerik)` (`arsiv/parca`'ya tarihli başlıkla ekler).
+- `kisi_dokumleri` / `konu_dokumleri` / `olay_dokumu` — modal gösterimi için mtime sıralı dökümler.
 - `slug(isim)` — küçük harf, Türkçe harf sadeleştirme, alfanümerik dışı `-`, boşsa "bilinmeyen".
 - `tarih()`, `tarih_unix(unix)` (Hinnant civil-from-days), `ay()` "YYYY-AA".
 - `Kisi { id, isim, kullanici_adi, eski_adlar, puan, etiket, not, bilgiler, olaylar }` — `coz(id, metin)` dosyadan, `metin()` dosyaya; dosya `kisiler/<id>.md`. Biçim: `# İsim` / `id:` / `kullanici_adi:` / `eski_adlar:` / `puan: +3` / `etiket: a, b` / `not: ...` / `## Bildiklerin` `- ...` / `## Son olaylar` `- tarih saat: ...`.

@@ -84,7 +84,11 @@ impl Bot {
         };
         let kayit: Kayit = match serde_json::from_str(json_ayikla(&cevap)) {
             Ok(k) => k,
-            Err(e) => return log::warn!("gunlukcu: json çözülemedi: {e}"),
+            Err(e) => {
+                // modelin emeği kaybolmasın: çözülemeyen çıktı ham haliyle arşive düşer
+                hafiza::arsivle(&format!("gunlukcu-{}.md", hafiza::slug(kaynak)), &cevap);
+                return log::warn!("gunlukcu: json çözülemedi, ham döküm arşivde: {e}");
+            }
         };
 
         if !kayit.olay.is_empty() {

@@ -171,3 +171,12 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   `MesgulGuard` (RAII): panik dahil her çıkışta kanalın meşgul bayrağı bırakılır.
   `soy` char güvenli (bayt dilimi türkçe adlarda panikletebilirdi) + `kucult` İ→i̇ birleşik
   noktasını atar. Typing edit döngüsünden çıktı (hız sınırı); model çağrısından önce bir kez.
+- **2026-09-02 · Hafıza yazımları + döngü bekçisi + tarama sırası.** `hafiza::yaz` atomik
+  (geçici + rename) ve `YAZMA_KILIDI` ile tek sıradan; `ekle` artık gerçek append (oku+yaz ile
+  bütün dosya yeniden yazılmıyordu → OpenOptions append). Günlükçü JSON'u çözülemezse ham çıktı
+  `arsiv/gunlukcu-<kaynak>.md`'ye kurtarılır (modelin emeği çöpe gitmez). Döngüler
+  `dongu_bekle` ile başlar: panikte log + 5 sn sonra yeniden başlatma (panik kancası zaten
+  backtrace yazar; bekçi sessiz ölümü önler). Zarif kapanış: `KAPANIYOR` (AtomicBool) sinyali,
+  döngüler tik başında döner, bekçi yeniden başlatmaz. Süresi dolan haber sohbetleri dakika
+  tikinde temizlenir (yorum penceresi geçmiş + aktivite yoksa). Açılış taraması hafızanın
+  önüne eklenir: tarama sürerken gelen canlı mesajlar arkada kalır, kronoloji ve canlılar korunur.

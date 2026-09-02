@@ -9,7 +9,13 @@
 
 use super::*;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+// yazımlar tek sıradan ve atomik geçer: iki ajan aynı dosyaya yürüse ya da süreç
+// ortasında düşse dosya yarım/bozuk kalmaz (geçici + rename, aynı dosya sistemi atomik)
+static YAZMA_KILIDI: Mutex<()> = Mutex::new(());
 
 pub const KISI_SINIRI: usize = 1800; // kişi dosyası bunu aşınca özetlenir
 pub const KISI_HEDEF: usize = 1000; // özetlenince hedef boy
@@ -31,18 +37,35 @@ pub fn oku(parca: &str) -> String {
 }
 
 pub fn yaz(parca: &str, icerik: &str) {
+    let _kilit = YAZMA_KILIDI.lock().unwrap_or_else(|e| e.into_inner());
     let p = yol(parca);
     if let Some(ust) = p.parent() {
         let _ = fs::create_dir_all(ust);
     }
-    if let Err(e) = fs::write(&p, icerik) {
+    // geçici dosyaya yaz, sonra rename: yarım dosya hiç görünmez
+    let gecici = p.with_extension("tmp");
+    let sonuc = fs::write(&gecici, icerik).and_then(|_| fs::rename(&gecici, &p));
+    if let Err(e) = sonuc {
+        let _ = fs::remove_file(&gecici);
         log::error!("{} yazılamadı: {e}", p.display());
     }
 }
 
+// oku+yaz ile bütün dosyayı yeniden yazmak yerine gerçek append
 fn ekle(parca: &str, satir: &str) {
-    let mevcut = oku(parca);
-    yaz(parca, &format!("{mevcut}{satir}\n"));
+    let _kilit = YAZMA_KILIDI.lock().unwrap_or_else(|e| e.into_inner());
+    let p = yol(parca);
+    if let Some(ust) = p.parent() {
+        let _ = fs::create_dir_all(ust);
+    }
+    let sonuc = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)
+        .and_then(|mut f| f.write_all(format!("{satir}\n").as_bytes()));
+    if let Err(e) = sonuc {
+        log::error!("{} eklenemedi: {e}", p.display());
+    }
 }
 
 // özetlenip atılan ham parça arşive gider, hiçbir şey silinmez
@@ -580,6 +603,18 @@ mod test {
         assert_eq!(&s[10..11], " ");
         assert_eq!(&s[13..14], ":");
         assert_eq!(&s[16..17], ":");
+    }
+
+    #[test]
+    fn yaz_ekle_diskte_donup_durur() {
+        let parca = "test-gecici.md";
+        yaz(parca, "ilk\n");
+        ekle(parca, "ikinci");
+        let icerik = oku(parca);
+        let gecici_kaldi = yol(parca).with_extension("tmp").exists();
+        let _ = fs::remove_file(yol(parca));
+        assert_eq!(icerik, "ilk\nikinci\n");
+        assert!(!gecici_kaldi); // rename sonrası geçici dosya kalmamalı
     }
 
     #[test]

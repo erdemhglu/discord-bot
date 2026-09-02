@@ -75,6 +75,9 @@ const DURUM_KLASORU: &str = "durum"; // ajanların öğrendikleri buraya yazıl�
 
 type Hata = Box<dyn std::error::Error + Send + Sync>;
 
+// kapanış sinyali: döngüler tik başında bakar, yeni tur açmaz; bekçi yeniden başlatmaz
+static KAPANIYOR: AtomicBool = AtomicBool::new(false);
+
 // ---------- durum ----------
 
 #[derive(Serialize, Clone)]
@@ -397,7 +400,12 @@ fn soy(mut metin: String, bot_adi: &str) -> String {
     let onek = format!("{bot_adi}:");
     if kucult(&metin).starts_with(&kucult(&onek)) {
         let karakter = onek.chars().count();
-        metin = metin.chars().skip(karakter).collect::<String>().trim().to_string();
+        metin = metin
+            .chars()
+            .skip(karakter)
+            .collect::<String>()
+            .trim()
+            .to_string();
     }
     if metin.chars().count() > 1 && metin.starts_with('"') && metin.ends_with('"') {
         let mut c = metin.chars();
@@ -1645,6 +1653,25 @@ impl Bot {
                     kapananlar.push((kanal, s));
                 }
             }
+            // süresi dolan haber sohbetleri: kimse yorum yazmadıysa (aktivite pencere
+            // boyunca yok ya da kayıt zaten düşmüş) sessizce kapanır, harita şişmez
+            let haber_dolen: Vec<ChannelId> = d
+                .haber_bekleyen
+                .iter()
+                .filter(|(k, t)| {
+                    simdi >= **t
+                        && d.son_aktivite
+                            .get(k)
+                            .is_none_or(|a| simdi.duration_since(*a) >= YORUM_SURESI)
+                })
+                .map(|(k, _)| *k)
+                .collect();
+            for kanal in haber_dolen {
+                d.haber_bekleyen.remove(&kanal);
+                d.sohbetler.remove(&kanal);
+                d.son_aktivite.remove(&kanal);
+                log::debug!("haber [{kanal}]: yorum gelmedi, sohbet sessizce kapandı");
+            }
             kapananlar
         };
         for (kanal, s) in kapananlar {
@@ -1793,12 +1820,20 @@ async fn gecmisi_oku(bot: &Bot, ctx: &Context, guild: &Guild) {
     toplam.sort_by_key(|t| t.0);
     let atla = toplam.len().saturating_sub(HAFIZA_BOYU);
     let mut d = bot.durum();
-    for (_, isim, id, metin) in toplam.iter().skip(atla) {
+    for (_, isim, id, _) in toplam.iter().skip(atla) {
         if *id == FAVORI {
             d.favori_adi = Some(isim.clone());
         }
+        // canlı eşleme öncelikli: tarama eski bilgiyle üstüne yazmasın
         d.ad_id.entry(isim.to_lowercase()).or_insert(*id);
-        hatirla(&mut d, isim, metin);
+    }
+    // tarama sürerken canlı mesajlar da hafızaya girmiş olabilir: tarih ÖNE eklenir,
+    // arkaya boca edilirse kronoloji bozulur ve canlı mesajlar ezilir
+    for (_, isim, _, metin) in toplam.iter().skip(atla).rev() {
+        d.hafiza.push_front(format!("{isim}: {metin}"));
+    }
+    while d.hafiza.len() > HAFIZA_BOYU {
+        d.hafiza.pop_front();
     }
     log::debug!("{}: {} mesaj okundu", guild.name, toplam.len());
 }
@@ -1829,10 +1864,43 @@ fn varsayilan_kanal(bot: &Bot, ctx: &Context) -> Option<ChannelId> {
 
 // ---------- arka plan döngüleri ----------
 
+// döngüleri hayatta tutar: panikte log + 5 sn sonra yeniden başlatır
+// (panik kancası backtrace'i yazar, bekçi sessiz ölümü önler); kapanırken durur
+fn dongu_bekle<F, Fut>(ad: &'static str, kur: F)
+where
+    F: Fn() -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    tokio::spawn(async move {
+        loop {
+            if KAPANIYOR.load(Ordering::SeqCst) {
+                return;
+            }
+            let tur = tokio::spawn(kur());
+            match tur.await {
+                Ok(()) => {
+                    if KAPANIYOR.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    // döngüler sonsuzdur; dönüş kendiliğindense yine başlatılır
+                    log::warn!("döngü [{ad}]: beklenmedik şekilde döndü, yeniden başlıyor");
+                }
+                Err(e) => {
+                    log::error!("döngü [{ad}]: panik, 5 sn sonra yeniden başlıyor: {e}");
+                    sleep(Duration::from_secs(5)).await;
+                }
+            }
+        }
+    });
+}
+
 // altı saatte bir: ajanlar çalışır, sonra hacker news'ten haber atılır
 async fn haber_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(HABER_ARALIGI).await;
+        if KAPANIYOR.load(Ordering::SeqCst) {
+            return;
+        }
         if !uyku::uyanik_mi(&bot.durum()) {
             // uykuda haber atılmaz ama seçilir: uyanınca "sabah haberi" olarak stoklanır
             let stok_bos = bot.durum().stok_haber.is_none();
@@ -1983,6 +2051,9 @@ fn bos_kanal(bot: &Bot) -> Option<(ChannelId, String)> {
 async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(DURTME_ARALIGI).await;
+        if KAPANIYOR.load(Ordering::SeqCst) {
+            return;
+        }
         if !uyku::uyanik_mi(&bot.durum()) {
             continue;
         }
@@ -2035,6 +2106,9 @@ async fn durtme_dongusu(bot: Arc<Bot>, ctx: Context) {
 async fn saka_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(SAKA_ARALIGI).await;
+        if KAPANIYOR.load(Ordering::SeqCst) {
+            return;
+        }
         if !uyku::uyanik_mi(&bot.durum()) || seyahat::simdi().is_some() {
             continue;
         }
@@ -2060,6 +2134,9 @@ async fn gezgin_dongusu(bot: Arc<Bot>) {
         })
         .await;
         ilk = false;
+        if KAPANIYOR.load(Ordering::SeqCst) {
+            return;
+        }
         if uyku::uyanik_mi(&bot.durum()) {
             bot.gezgin().await;
         }
@@ -2071,6 +2148,9 @@ async fn gezgin_dongusu(bot: Arc<Bot>) {
 async fn bellek_dongusu(bot: Arc<Bot>) {
     loop {
         sleep(Duration::from_secs(10 * 60)).await;
+        if KAPANIYOR.load(Ordering::SeqCst) {
+            return;
+        }
         // uykuda mesajlar zihne işlenmeye devam eder: 2 saatte bir gece gözlemi kuyruğa düşer
         {
             let mut d = bot.durum();
@@ -2113,6 +2193,9 @@ async fn bellek_dongusu(bot: Arc<Bot>) {
 async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
     loop {
         sleep(Duration::from_secs(60)).await;
+        if KAPANIYOR.load(Ordering::SeqCst) {
+            return;
+        }
         {
             let mut d = bot.durum();
             uyku::guncelle(&mut d);
@@ -2284,14 +2367,21 @@ impl EventHandler for Handler {
             }
         }
 
-        // ready yeniden bağlanınca tekrar gelir, döngüler bir kere başlasın
+        // ready yeniden bağlanınca tekrar gelir, döngüler bir kere başlasın;
+        // bekçi panikte yeniden başlatır
         if !self.baslatildi.swap(true, Ordering::SeqCst) {
-            tokio::spawn(haber_dongusu(self.bot.clone(), ctx.clone()));
-            tokio::spawn(durtme_dongusu(self.bot.clone(), ctx.clone()));
-            tokio::spawn(saka_dongusu(self.bot.clone(), ctx.clone()));
-            tokio::spawn(gezgin_dongusu(self.bot.clone()));
-            tokio::spawn(bellek_dongusu(self.bot.clone()));
-            tokio::spawn(uyku_dongusu(self.bot.clone(), ctx));
+            let (b, c) = (self.bot.clone(), ctx.clone());
+            dongu_bekle("haber", move || haber_dongusu(b.clone(), c.clone()));
+            let (b, c) = (self.bot.clone(), ctx.clone());
+            dongu_bekle("durtme", move || durtme_dongusu(b.clone(), c.clone()));
+            let (b, c) = (self.bot.clone(), ctx.clone());
+            dongu_bekle("saka", move || saka_dongusu(b.clone(), c.clone()));
+            let b = self.bot.clone();
+            dongu_bekle("gezgin", move || gezgin_dongusu(b.clone()));
+            let b = self.bot.clone();
+            dongu_bekle("bellek", move || bellek_dongusu(b.clone()));
+            let (b, c) = (self.bot.clone(), ctx.clone());
+            dongu_bekle("uyku", move || uyku_dongusu(b.clone(), c.clone()));
         }
     }
 
@@ -2688,6 +2778,8 @@ async fn main() -> Result<(), Hata> {
     tokio::spawn(async move {
         kapanis_bekle().await;
         log::info!("kapanıyor");
+        // döngüler yeni tur açmasın, bekçi yeniden başlatmasın
+        KAPANIYOR.store(true, Ordering::SeqCst);
         yonetici.shutdown_all().await;
     });
 
