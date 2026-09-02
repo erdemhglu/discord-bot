@@ -4,6 +4,15 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 5 · hedef seçimi + sil-baştan kalktı
+- `Sohbet.son_gelenler` (isim + mesaj id, 20): bot sustuğundan beri yazanlar; bot cevap
+  verince boşalır. 2+ farklı kişi yazdıysa `hedef-sec.md` mini çağrısı (40 token) hedefi
+  seçer → yanıt o kişinin mesajına bağlanır, talimata "ona seslen" notu girer.
+- `AkisSonuc::Eski` kaldırıldı: üretim sırasında yeni mesaj gelse de akış tamamlanır,
+  mesaj silinmez; yeni mesaj sıradaki turda ele alınır.
+- Ölü alan temizliği: `Sohbet.etiketli`, `AkisBaglam.gelen` düştü.
+- Doğrulama: 34 test (hedef_ayikla JSON/düz metin/bilinmeyen ad dahil), clippy 0 uyarı.
+
 ## 2026-09-02 · Adım 4 · cevap istekliliği
 - Sabit zar (`SANS × evre`) kalktı: etiket/yanıt/ad her zaman cevaplanır, diğer mesajlar için
   mini model çağrısı (`promptlar/isteklilik.md`, ~80 token): son 12 mesaj + profil + dizin →

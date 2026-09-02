@@ -14,6 +14,8 @@ Kullanıcının bildirdiği 6 kök problemi çözer. Her adım: commit + push + 
 `kisiler/<id>.md`, `ad_id` çözümlemesi, `tarih_saat()`, `bellek_dongusu` kuyruk işleme.
 ### Adım 4 · Cevap istekliliği — TAMAMLANDI
 Mini model çağrısı (`isteklilik.md`), eşik 6 (evre ±1, seyahat +2), 2 dk rate limit, yedek zar.
+### Adım 5 · Hedef kişi seçimi + Eski sil-baştan kalktı — TAMAMLANDI
+`son_gelenler` + `hedef_sec`; akış artık yeni mesajda silinmiyor, sıradaki turda ele alınıyor.
 ### Adım 3 · Zihin id bazlı + zaman damgası + bellek döngüsü
 - `kisiler/<id>.md`: id, kullanici_adi, gorunen_ad, eski_adlar + mevcut alanlar.
   Temiz başlangıç (eski slug dosyalarına dokunulmaz).

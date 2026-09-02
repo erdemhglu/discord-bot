@@ -19,10 +19,12 @@
 ## cevapla (bir sohbet turu, stream)
 ```
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
-bekle 0,15-0,35 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── yazıyor…
+bekle 0,15-0,35 sn ── güncel geçmiş + son mesaj + bekleyenler ── arastir(link/haber/araştır) ── hedef seçimi (2+ yazan varsa) ── yazıyor…
 uret_akis(stream, bütçe: cevap_butcesi!; release'de bütçe yok) ── (hata: meşgul=0, çık)
 gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünürken (cevap başlamadı): göster="Düşünüyorum...", gizle=canlı kelime sayacı ── cevap başlayınca aynı mesaj düzenlenerek stream ── göster: thinking newline'sız tek satır, hem spoiler hem kod bloğu ── gizle: thinking mesajda yok, cevap sonunda "Düşünce Sürecini Göster" butonu (interaction_create tıklayana ephemeral kod bloğu açar, düşünce deposu 50 mesaj) ── kapalı: istek reasoning'siz ── 1900'ü aşan parça yeni mesaj ── discord yanıtı her cevapta ilk mesajda
-tekrar_mi? bir kez yeniden üret, yine tekrarsa açılanları sil ve sus; üretim sırasında yeni mesaj geldiyse açılanları sil, güncel bağlamla başa dön
+tekrar_mi? bir kez yeniden üret, yine tekrarsa açılanları sil ve sus
+üst üste 2+ farklı kişi yazdıysa HEDEF_SEC mini çağrısı hedef kişiyi seçer; yanıt o kişinin mesajına bağlanır, talimata "ona seslen" notu girer
+üretim sırasında yeni mesaj gelse de akış tamamlanır (sil-baştan yok); yeni mesaj sıradaki turda ele alınır
 stream hiçbir şey üretmediyse uret ile stream'siz yedek
 … bitti değilse: yeni mesaj yoksa çık
 kilit ── meşgul=0 ── asistan satırı ekle (yalnız cevap, thinking değil) ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak

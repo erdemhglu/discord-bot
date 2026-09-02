@@ -97,7 +97,10 @@ struct Sohbet {
     sayac: u32,
     hackli: u32, // 0 değilse hacklenmiş taklidi sürüyor, her cevapta bir azalır
     son_mesaj: Option<MessageId>, // cevaplanacak mesaj (discord yanıtı olarak)
-    gelen: u32,
+    gelen: u32,  // gelen kullanıcı mesajı sayısı; cevap yazarken yenisi geldi mi anlamak için
+    // botun son cevabından beri gelenler (isim, mesaj id); hedef seçiminde kullanılır,
+    // bot cevap verince boşalır
+    son_gelenler: VecDeque<(String, MessageId)>,
 }
 
 // düşünme gösterim kipi; !düşünme ile değişir, durum/dusunme.md'de kalır
@@ -405,6 +408,35 @@ fn isteklilik_puan(cevap: &str) -> Option<u8> {
     Some(d.puan.clamp(0, 10) as u8)
 }
 
+// hedef seçiminden kişi adını çözer: önce JSON, olmazsa ilk satır/kelime
+fn hedef_ayikla(cevap: &str, bilinenler: &[String]) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Hedef {
+        #[serde(default)]
+        hedef: String,
+    }
+    let aday = serde_json::from_str::<Hedef>(json_ayikla(cevap))
+        .map(|h| h.hedef.trim().to_string())
+        .unwrap_or_else(|_| {
+            cevap
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches('"')
+                .to_string()
+        });
+    if aday.is_empty() {
+        return None;
+    }
+    // bilinen adlardan birine benziyorsa onu kullan (model süslemiş olabilir)
+    bilinenler
+        .iter()
+        .find(|b| b.eq_ignore_ascii_case(&aday))
+        .cloned()
+        .or(Some(aday))
+}
+
 // ---------- yapay zeka ----------
 
 #[derive(Deserialize)]
@@ -593,15 +625,13 @@ impl AkisOkuyucu {
 // stream gönderiminin sonucu
 enum AkisSonuc {
     Gonderildi(String), // son metin gönderildi
-    Eski, // üretim sırasında yeni mesaj geldi; açılanlar silindi, güncel bağlamla yeniden üret
-    Bos,  // akıştan kullanılır bir şey çıkmadı
+    Bos,                // akıştan kullanılır bir şey çıkmadı
 }
 
 // gonder_akis'in cevap bağlamı; argüman yığını yerine tek yapı
 struct AkisBaglam<'a> {
     bot_adi: &'a str,
     yanit: Option<MessageId>,
-    gelen: u32,
     gecmis: &'a [Mesaj],
     talimat: &'a str,
     butce: Option<u32>,
@@ -813,6 +843,26 @@ impl Bot {
         }
     }
 
+    // üst üste farklı kişiler yazınca cevap kime dönsün? bekleyen isimler arasından seçer
+    async fn hedef_sec(&self, bekleyenler: &[String]) -> Option<String> {
+        let (baglam, bot_adi) = {
+            let d = self.durum();
+            (son_mesajlar(&d, 12), d.bot_adi.clone())
+        };
+        let talimat = HEDEF_SEC.replace("{ad}", &bot_adi);
+        let girdi = format!(
+            "SON MESAJLAR\n{baglam}\n\nBEKLEYENLER\n- {}",
+            bekleyenler.join("\n- ")
+        );
+        match self.analiz(&girdi, &talimat, 40).await {
+            Ok(c) => hedef_ayikla(&c, bekleyenler),
+            Err(e) => {
+                log::debug!("hedef_sec: çağrı başarısız: {e}");
+                None
+            }
+        }
+    }
+
     // mention'lar kapalı gider: model @everyone yazsa bile kimse pinglenmez.
     // gönderilen her şey kendi_mesajlarim'a düşer, hoca ve eleştirmen oradan okur.
     async fn gonder(
@@ -916,12 +966,8 @@ impl Bot {
             log::warn!("akis [{kanal}]: [DONE] gelmeden kapandı, yarım kalmış olabilir");
         }
 
-        // üretim sırasında yeni mesaj geldiyse eski hedefe cevap yollama
-        if yeni_mesaj_var(&self.durum(), kanal, baglam.gelen) {
-            sil_mesajlar(ctx, gonderilenler).await;
-            return Ok(AkisSonuc::Eski);
-        }
-
+        // yeni mesaj gelse de akış tamamlanır: cevap snapshot'a gider, yeni mesaj
+        // sıradaki turda ele alınır (sil-baştan yok)
         let mut cevap = soy(metin, baglam.bot_adi);
         // boş ya da önceki mesajın kırıntısı ("'cım" gibi) gitmesin
         if cevap.chars().count() < 3 || cevap.starts_with('\'') {
@@ -1243,7 +1289,7 @@ impl Bot {
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
             sleep(Duration::from_millis(150 + (rand::random::<u64>() % 200))).await;
-            let (gecmis, yanit, gelen, son_metin) = {
+            let (gecmis, mut yanit, gelen, son_metin, bekleyenler) = {
                 let d = self.durum();
                 let Some(s) = d.sohbetler.get(&kanal) else {
                     drop(d);
@@ -1263,7 +1309,13 @@ impl Bot {
                     })
                     .unwrap_or("")
                     .to_string();
-                (s.gecmis.clone(), s.son_mesaj, s.gelen, son_metin)
+                (
+                    s.gecmis.clone(),
+                    s.son_mesaj,
+                    s.gelen,
+                    son_metin,
+                    s.son_gelenler.clone(),
+                )
             };
             log::debug!(
                 "cevapla [{kanal}]: tur başı, geçmiş {} satır, gelen={gelen}",
@@ -1275,6 +1327,25 @@ impl Bot {
                 talimat = format!(
                     "{talimat}\n\nİNTERNETTEN ŞİMDİ ÇEKTİKLERİN (istendiği için baktın; kendi ağzınla anlat, liste yapma, \"kaynak\" deme):\n{bulgu}"
                 );
+            }
+            // üst üste farklı kişiler yazdıysa hedefi model seçer; cevap o mesaja bağlanır
+            let konusanlar: std::collections::HashSet<&str> =
+                bekleyenler.iter().map(|(i, _)| i.as_str()).collect();
+            if konusanlar.len() >= 2 {
+                let satirlar: Vec<String> = bekleyenler.iter().map(|(i, _)| i.clone()).collect();
+                if let Some(hedef) = self.hedef_sec(&satirlar).await {
+                    if let Some((_, id)) = bekleyenler
+                        .iter()
+                        .rev()
+                        .find(|(i, _)| i.eq_ignore_ascii_case(&hedef))
+                    {
+                        yanit = Some(*id);
+                        talimat = format!(
+                            "{talimat}\n\nBirden çok kişi yazdı; sen {hedef} adlı kişiye dönmeyi seçtin. Cevabın doğrudan ona seslensin."
+                        );
+                        log::debug!("cevapla [{kanal}]: hedef seçildi: {hedef}");
+                    }
+                }
             }
             // Model çağrısı sürerken yazıyor göstergesi görünsün; stream mesajı ilk delta ile açılır.
             let _ = kanal.broadcast_typing(&ctx.http).await;
@@ -1295,7 +1366,6 @@ impl Bot {
                     AkisBaglam {
                         bot_adi: &bot_adi,
                         yanit,
-                        gelen,
                         gecmis: &gecmis,
                         talimat: &talimat,
                         butce,
@@ -1304,12 +1374,8 @@ impl Bot {
                 .await
             {
                 Ok(AkisSonuc::Gonderildi(c)) => c,
-                Ok(AkisSonuc::Eski) => {
-                    self.durum().mesgul.remove(&kanal);
-                    continue;
-                }
                 Ok(AkisSonuc::Bos) => {
-                    // akıştan kullanılır bir şey çıkmadı; bir kez stream'siz dene
+                    // akıştan kullanılır bir şey çıkmadı; yeni mesaj geldiyse onu ele al
                     if yeni_mesaj_var(&self.durum(), kanal, gelen) {
                         self.durum().mesgul.remove(&kanal);
                         continue;
@@ -1348,6 +1414,8 @@ impl Bot {
                     s.gecmis.push(asistan(cevap));
                     s.sayac += 1;
                     s.hackli = s.hackli.saturating_sub(1);
+                    // cevap gitti: hedef seçimi sıfırdan başlar
+                    s.son_gelenler.clear();
                 }
                 d.son_aktivite.insert(kanal, Instant::now());
             }
@@ -2188,6 +2256,10 @@ impl EventHandler for Handler {
                 s.gecmis.push(kullanici(format!("{isim}: {metin}")));
                 s.son_mesaj = Some(msg.id);
                 s.gelen += 1;
+                s.son_gelenler.push_back((isim.clone(), msg.id));
+                if s.son_gelenler.len() > 20 {
+                    s.son_gelenler.pop_front();
+                }
                 if s.gecmis.len() > SOHBET_BOYU {
                     s.gecmis.drain(..s.gecmis.len() - SOHBET_BOYU);
                 }
@@ -2526,6 +2598,23 @@ mod test {
         assert_eq!(isteklilik_puan(r#"{"puan": 25}"#), Some(10)); // clamp
         assert_eq!(isteklilik_puan(r#"{"puan": -4}"#), Some(0));
         assert_eq!(isteklilik_puan("puan veremem"), None);
+    }
+
+    #[test]
+    fn hedef_ayiklanir() {
+        let bilinenler = vec!["Emin".to_string(), "Zeynep".to_string()];
+        assert_eq!(
+            hedef_ayikla(r#"{"hedef": "Zeynep"}"#, &bilinenler),
+            Some("Zeynep".into())
+        );
+        // düz metin de olur, bilinen adla eşleşir
+        assert_eq!(hedef_ayikla("emin", &bilinenler), Some("Emin".into()));
+        // bilinmeyen ad olduğu gibi döner
+        assert_eq!(
+            hedef_ayikla(r#"{"hedef": "Misafir"}"#, &bilinenler),
+            Some("Misafir".into())
+        );
+        assert_eq!(hedef_ayikla("", &bilinenler), None);
     }
 
     #[test]

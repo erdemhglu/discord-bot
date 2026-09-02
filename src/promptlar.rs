@@ -8,6 +8,7 @@ pub const DURUP_DURURKEN: &str = include_str!("../promptlar/durup-dururken.md");
 pub const HABER_TANIT: &str = include_str!("../promptlar/haber-tanit.md");
 pub const ANALIST: &str = include_str!("../promptlar/analist.md");
 pub const ISTEKLILIK: &str = include_str!("../promptlar/isteklilik.md");
+pub const HEDEF_SEC: &str = include_str!("../promptlar/hedef-sec.md");
 pub const PROFIL_CIKAR: &str = include_str!("../promptlar/profil-cikar.md");
 pub const HABER_SEC: &str = include_str!("../promptlar/haber-sec.md");
 pub const HOCA: &str = include_str!("../promptlar/hoca.md");

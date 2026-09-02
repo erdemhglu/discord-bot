@@ -121,6 +121,12 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   son mesajdan 30 dk sonra (`SOHBET_ZAMAN_ASIMI`) sessizce kapanır, dökümü yine günlükçüye ve
   eleştirmene gider. `Durum.son_aktivite` haritası tazelenir (kullanıcı mesajı, sohbet açılışı,
   bot cevabı).
+- **2026-09-02 · Hedef seçimi + sil-baştan kalktı.** Kullanıcı bildirimi: üst üste farklı kişiler
+  yazınca bot önceki mesajları unutup karmançorman cevap veriyordu. Çözüm: (1) `Sohbet.son_gelenler`
+  bot sustuğundan beri yazanları (isim+mesaj id) tutar; 2+ farklı kişi varsa `hedef-sec.md` mini
+  çağrısı kime dönüleceğini seçer, yanıt o mesaja bağlanır, talimata "ona seslen" notu girer;
+  cevap sonrası liste boşalır. (2) `AkisSonuc::Eski` sil-baştan mekanizması kaldırıldı: üretim
+  sırasında yeni mesaj gelse de akış tamamlanır, yeni mesaj sıradaki turda ele alınır.
 - **2026-09-02 · Cevap istekliliği model değerlendirmesi.** Kullanıcı bildirimi: bot her mesaja
   cevap zorunluluğu hissediyordu. Sabit zar (`SANS × evre`) kalktı; etiket/yanıt/ad hâlâ her
   zaman cevaplanır, diğer mesajlar için mini model çağrısı (`isteklilik.md`, ~80 token,
