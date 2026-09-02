@@ -4,6 +4,103 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · İlk canlı loglar: iki gerçek üretim hatası
+Kullanıcı canlı bottan (`z-ai/glm-5.3-flash`, openrouter) gerçek log yapıştırdı. İki ayrı hata:
+
+- **400 "Reasoning is mandatory ... cannot be disabled"**: `düşünme kapat` kipinde gönderilen
+  `reasoning:{enabled:false}` bu GLM varyantında reddediliyordu, sohbet o kanalda hiç cevap
+  veremiyordu. `reasoning_kapat` artık alanları eklediyse `true` döner; `sor_ham`/`sor_ham_akis`
+  bu spesifik hatayı (`reasoning_zorunlu_hatasi`) tanıyıp alanları kaldırıp bir kez daha dener.
+  Not: aynı modelin küçük `max_tokens`'lı mini-çağrılarda (haber_sec=10, hedef_sec/ruh_hali=40,
+  isteklilik=80) gizli reasoning'in bütçeyi yiyip boş cevap üretme ihtimali var (profilci
+  logunda "boş yanıt" da görüldü) — bu kod tarafında tam çözülebilecek bir şey değil, reasoning
+  zorunlu modeller bu mimariyle (küçük bütçeli çok sayıda mini-çağrı) temelde gerilimli.
+- **"her mesaja cevap veriyor" (asıl disküsyon şikayeti)**: kod incelenince `acik` (sohbet bu
+  kanalda açık mı) tek başına "değerlendirmeye gerek yok, direkt cevapla" anlamına geldiği
+  görüldü — sohbet bir kez açılınca kanaldaki HERKESİN mesajı, kime yazdığına bakılmaksızın
+  doğrudan cevaplanıyordu (bu, önceki turda düzelttiğim reply-to/etiket meselesinden tamamen
+  ayrı bir mekanizma). `devam_eden_diyalog` eklendi: sohbetteki son user mesajının sahibi bu
+  mesajı atanla aynıysa (gerçekten kendisiyle konuşuyor) otomatik devam eder; farklı biri
+  yazdıysa yine isteklilik değerlendirmesinden geçer (aynı 2 dk rate limit, ek maliyet yok).
+- Doğrulama: 43 test, clippy 0 uyarı, `cargo fmt`, release build. `message` handler'daki yeni
+  mantık (inline, pure fonksiyon değil) birim testle doğrulanamadı — canlıda izlenmeli.
+
+---
+
+## 2026-09-02 · Ruh hali ajanı + ikinci dayanıklılık turu
+Önceki tur devamı: "ikisine de başla" (ruh hali ajanı + backlog).
+
+- **Ruh hali ajanı**: `promptlar/ruh-hali.md`, `Bot::ruh_hali_belirle`, `Sohbet.ruh_hali`. Sohbet
+  açılınca ve her 4 turda bir (her mesajda değil) ucuz mini çağrı; taksonomiden tek durum+yoğunluk
+  seçer, yoğunluk <3 nötr sayılır. Talimata "ŞU ANKİ RUH HALİN" diye eklenir; kişilik promptunda
+  "ilan etme, üsluba yedir" kuralı.
+- **`hafiza::yaz` atomik** (geçici dosya + rename) — crash/kill'de yarım dosya kalmaz.
+- **`dongu_bekci`**: 6 arka plan döngüsü artık paniklerse loglayıp 5 sn sonra yeniden başlıyor
+  (eskiden sessizce bir daha hiç çalışmıyordu).
+- **`soy` char-güvenli**: `onek.len()` (bayt, lowercase'den) yerine `.chars().skip(n)`; Türkçe
+  büyük İ gibi harflerde panik riski vardı (lowercase bayt uzunluğunu değiştirir).
+- **`durum/huy.md` uyku teması temizlendi + `hoca.md` düzeltildi**: kullanıcı şikayeti "!uyan
+  attım ama hâlâ yorgun/uykum var diyor" — huy.md'de hoca'nın test sırasındaki sık `!uyan`
+  muhabbetini kalıcı TAVIR sanıp yazdığı satırlar ("uykulu", "uyudum amk", "uyandırılmaktan
+  bıktım") botun gerçek uyku sistemiyle hiç ilgisiz, salt kelime çakışması kafa karıştırıyordu.
+  Ayrıca DOĞALLIK bölümü ters çalışıp ("bırakılacak kalıp" yerine) sabit replik dayatıyordu
+  (KALIPLAR icadı). Prompt düzeltildi, mevcut dosya elle temizlendi — ama bu depodaki
+  `durum/huy.md` kullanıcının CANLI botunun kullandığı dosya olmayabilir; öyleyse aynı düzeltmeyi
+  (dosyayı silip yeniden başlatma ya da elle satır silme) orada da yapması gerekir.
+- TOON değerlendirmesi kullanıcıya tekrar soruldu, aynı sonuç: genel taşıma değmez, tek aday
+  dizin (INDEX.md), henüz uygulanmadı.
+- Doğrulama: bu turun sonunda tek seferlik fmt+clippy+test+release (kullanıcı isteği: "compile
+  check'i en sona bırak", ara ara derlemek yerine).
+
+**Kalan (bilerek ertelendi)**: reasoning_kapat hedef adrese göre koşullu (düşük öncelik, Mistral'in
+bilinmeyen üst alanı reddettiği doğrulanmadı) · ajan yazımları tek sıra · günlükçü JSON hatası ham
+döküm kurtarma · arsivle append · zarif kapanış (watch) · uyanış kanal bazlı · süresi dolan haber
+sohbeti temizliği · tarama sırası · typing'i edit döngüsünden çıkarma · hata sınıflandırma+retry.
+
+---
+
+## 2026-09-02 · Token optimizasyonu + prod-hazırlık taraması
+Kullanıcı isteği: "proje çok fazla token harcıyor, bir optimizasyon motoru sağlamalıyız" +
+sonrasında prod-hazırlık, çok-sağlayıcılı genellik, disküsyon/reply-to davranışı, kanal
+geçmişi tarama hatası ve kapsam daraltma istekleri aynı oturumda geldi. Hepsi tek pakette:
+
+- **isteklilik/hedef_sec cache'e taşındı**: eskiden `analiz()` her mini çağrıda profil+dizin'i
+  user mesajına gömüp tam fiyatına yeniden yolluyordu (kanal başına en sık tetiklenen çağrı).
+  Artık `sor_bolumlu` doğrudan çağrılır, profil+dizin/talimat sabit (cache_control'lü) blokta.
+- **Sohbet cevabına release'de de token tavanı**: `CEVAP_TAVANI=3000` (eskiden `None`, bütçesiz).
+- **Token metriği çağrı-tipi kırılımlı**: `Metrik.kategoriler`, `!durum` en çok yakan kalemleri
+  döker; `Kullanim.prompt_tokens_details.cached_tokens` okunuyor (önbellek isabetini görmek için).
+- **cache_control artık hedef adrese göre koşullu** (`onbellek_destekler`): ilk halde model adına
+  bakıyordu (claude/anthropic/gemini), kullanıcı "GLM'i niye desteklemiyorsun" diye sorunca yanlış
+  soru olduğu anlaşıldı — OpenRouter'a giden istekte hangi model olursa olsun güvenle eklenebilir
+  (OpenRouter kendi şemasının parçası, desteklemeyen modelde yok sayar); asıl risk Mistral native
+  API'si ya da özel `API_ADRES` router'ı. Artık yalnız `openrouter.ai` adresine bakıyor.
+- **Reply-to yeniden koşullu hale geldi**: `Sohbet.son_etiketlendi` eklendi; taban `yanit` yalnız
+  etiketliyse ya da `bekleyenler.len() > 1` ise `son_mesaj`, aksi halde `None` (düz mesaj). Önceki
+  "her cevap yanıt olsun" kararını geri alır (kararlar.md'de iki karar da duruyor, gerekçesiyle).
+- **`durum/taranan.md` kalıcı**: "her bağlandığında mesajları en baştan çekiyor" şikayeti — `taranan`
+  bellek-içiydi, her süreç yeniden başlayışında 14 günlük tarama tekrarlanıyordu.
+- **GUILD_ID/KANALLAR (.env, isteğe bağlı)**: bot'u tek sunucuya/kanal listesine kilitler; boşsa
+  eski davranış (her erişilen yerde çalışır) aynen sürer.
+- **HTTP client timeout ayrıldı (P0 kapandı)**: `connect_timeout(10sn)` + `timeout(180sn)`,
+  eskiden tek `.timeout(60sn)` uzun stream'i ortasında kesebiliyordu.
+- **`mesgul` bayrağı RAII (`MesgulKilit`)**: 7 elle `remove` çağrısı yerine `Drop`; aradaki bir
+  panik artık kanalı sonsuza dek kilitli bırakmıyor.
+- Doğrulama: 40 test, clippy 0 uyarı, `cargo fmt`, release build tamam. Canlı Discord'ta hiçbiri
+  görülmedi (token yok, proje genelinde geçerli kısıt).
+- Ertelendi (kullanıcıya soruldu/önerildi, henüz kodlanmadı): `durum/` dosyalarını TOON'a çevirme
+  (riskli/düşük getiri değerlendirmesi yapıldı, aşağıda), kişilik promptuna insan ruh hali taklidi
+  taksonomisi eklenmesi, geniş prod-hazırlık backlog'unun geri kalanı (dev/yol-haritasi.md).
+
+**TOON değerlendirmesi**: `durum/` çoğunlukla serbest metin/nesir (kisilik, huy, profil notları) —
+TOON'un asıl kazandığı yer tekdüze tablo/array veri, burada büyük fayda yok; kişi/konu/olay
+dosyaları model tarafından promptlarla (15 dosya) doğrudan okunup yazılıyor, TOON'a geçmek hepsini
+yeniden yazmak + küçük modellerin (gpt-4o-mini, GLM) nadir görülen bir formatı güvenilir üretip
+üretemeyeceği riskini taşımak demek. Tek gerçek aday `INDEX.md` (dizin): tekdüze, her cevapta
+gidiyor. Henüz uygulanmadı, kullanıcıya soruldu.
+
+---
+
 ## 2026-09-02 · Adım 8 · Modal'lar + /zihin kodlandı
 - Yeni `src/modal.rs`: slash komutlar (`/durum` `/yardim` `/zihin`) modal açar, `!` komutları
   paralel düz metin kalır; zihin modalı herkese açık, 5 slot (bot özeti / kişiler iki yarıda /

@@ -19,7 +19,7 @@
 | SOHBET_BOYU | 20 | modele giden sohbet geçmişi |
 | MESAJ_SINIRI | 1900 | Discord 2000 sınırına pay |
 | AKIS_DUZENLEME | 1200 ms | stream'de iki düzenleme arası asgari süre (Discord edit sınırı) |
-| `cevap_butcesi!()` (makro) | release `None` / debug `Some(2000)` | sohbet cevabı token bütçesi derleme durumuna göre; release'de max_tokens gitmez |
+| `cevap_butcesi!()` (makro) / CEVAP_TAVANI | debug `Some(2000)` / release `Some(3000)` | sohbet cevabı token bütçesi; ikisinde de üst sınır var, release'de yalnız tekrar/döngü gibi kaçak durumları keser |
 | FAVORI | 259669117248864257 | her zaman sevilen kullanıcı id |
 | GEZGIN_ARALIGI | 4 saat | gündem gezintisi |
 | RESIM_KLASORU / DURUM_KLASORU | resimler / durum | klasörler (çalışma dizinine göre) |
@@ -44,13 +44,20 @@ bayramı 2026: 19 Mar 4g / 2027: 8 Mar, 23 Nisan 3g, 19 Mayıs 3g, kurban 2026: 
 `gonder` kendi mesaj tamponu 50 · `bekleyen_etiketler` 20 · `getir` kişi ≤4/1200, konu ≤2/800,
 olay 8, ham satır 12/200, anahtar ≤40, ≥2 eşleşme · `gecmisi_oku` sayfa 100 · haberci HN 12 +
 RSS 12 · gezgin rss 20, sayfa ≤3 · yoldan mesaj günde 1, %25 · hoca son 200 satır · profilci 600 ·
-gözlem 300 · hack giriş max_tokens 150
+gözlem 300 · hack giriş max_tokens 150 · http client connect_timeout 10sn / timeout 180sn
+
+## `durum/taranan.md`
+`gecmisi_oku` (14 günlük geçmiş taraması) daha önce taranmış sunucu id'lerini burada tutar;
+her yeniden başlangıçta `Durum::yukle` okur, `guild_create`'te güncellenir. Yoksa her süreç
+yeniden başlayışında her sunucunun tüm kanalları baştan taranırdı (API'ye ve zamana yazık).
 
 ## Ortam değişkenleri (.env)
 DISCORD_TOKEN (zorunlu) · OPENROUTER_KEY veya MISTRAL_KEY (biri zorunlu; ikisi de varsa openrouter) ·
 SAGLAYICI=mistral (zorlama) · MODEL (model kimliği, sağlayıcının varsayılanını ezer) ·
 API_ADRES (openai uyumlu chat/completions adresi; seçilen sağlayıcının adresini ezer) ·
 FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı) ·
+GUILD_ID (tek sunucu id; ayarlıysa bot yalnız bu sunucuda çalışır) ·
+KANALLAR (virgüllü kanal id listesi; ayarlıysa bot yalnız bu kanallarda çalışır) ·
 LOG_SEVIYE (error/warn/info/debug/trace, varsayılan info) · LOG_RENK (on/off; varsayılan: terminalde açık, dosyada kapalı)
 
 ## src/gelisim.rs

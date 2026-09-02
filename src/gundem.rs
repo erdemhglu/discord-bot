@@ -224,7 +224,7 @@ impl Bot {
                 .replace("{huy}", &d.huy)
                 .replace("{profil}", &d.profil)
         };
-        let secim = match self.analiz(&liste, &talimat, 20).await {
+        let secim = match self.analiz(&liste, &talimat, 20, "gezgin_sec").await {
             Ok(s) => s,
             Err(e) => return log::warn!("gezgin: seçim: {e}"),
         };
@@ -248,7 +248,10 @@ impl Bot {
             okunan += &format!("## {}\n{}\n{}\n\n", h.baslik, h.link, icerik);
         }
 
-        let not = match self.uret(&[kullanici(okunan)], GEZGIN_NOT, Some(350)).await {
+        let not = match self
+            .uret(&[kullanici(okunan)], GEZGIN_NOT, Some(350), "gezgin_not")
+            .await
+        {
             Ok(n) => n,
             Err(e) => return log::warn!("gezgin: not: {e}"),
         };

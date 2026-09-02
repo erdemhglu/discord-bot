@@ -31,3 +31,4 @@ pub const GIDIYORUM: &str = include_str!("../promptlar/gidiyorum.md");
 pub const ISIM_SEC: &str = include_str!("../promptlar/isim-sec.md");
 pub const ISIM_DUYURU: &str = include_str!("../promptlar/isim-duyuru.md");
 pub const SORUN: &str = include_str!("../promptlar/sorun.md");
+pub const RUH_HALI: &str = include_str!("../promptlar/ruh-hali.md");
