@@ -116,3 +116,5 @@ Bekleyen uçlar:
 - Bellek kuyruğu bellek içinde; süreç çökerse işlenmemiş kuyruk kaybolur (kabul).
 - Uyanış ajanı yanlış kişiyi seçebilir → fallback: son mesaj / etiketli.
 - `.env`, `durum/`, `bot.log` git dışı (kişisel veri). `resimler/` yalnız `.gitkeep`.
+- **Zihin görseli:** gerçek glif ölçümü (skrifa ile advance), test tahmini kendine karşı doğruluyor; `konu_sayisi` 30 tavanı, olay sayısı yalnız son 3 ay (etiket dürüstleştirilebilir).
+- **Reasoning:** glm-5.3-flash ile canlı doğrulama (`!zihin test`), effort=low'un gerçekten düşünceyi kısıp kısmadığı.

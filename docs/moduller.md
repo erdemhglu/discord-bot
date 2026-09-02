@@ -241,3 +241,14 @@ select menü ≤25 seçenek (etiket ≤45, açıklama ≤100).
 
 ## src/promptlar.rs
 Yalnız `pub const X: &str = include_str!("../promptlar/x.md");` satırları. Bkz docs/promptlar.md.
+
+## Bugün eklenenler (2026-09-02, sürüm/debug/ayarlar/reasoning)
+- `yanit_icerigi(&Icerik, kategori)`, `dusunce_uzunlugu`, `JSON_KATEGORILER`, `Bot::butce_buyut`,
+  `Bot::reasoning_dusuk_efor` — reasoning zorunlu modelde ajan çağrısı dayanıklılığı (`sor_ham`).
+- `ajanlar::GunlukcuOzet`; `gunlukcu` sonuç döner; `!zihin test` (komut.rs).
+- `Durum.debug`, `Bot.debug_kanali`, `Bot::debug_not`, `Bot::debug_izle`, `Bot::debug_ayarla`,
+  `isteklilik_coz` (puan+sebep; `isteklilik` artık `Option<(u8, String)>`).
+- `modal::ayarlar_embed/ayarlar_bilesenleri/ayarlar_mesaji`, `AYAR_*` kimlikleri, `Handler::ayar_dugmesi`,
+  `Bot::uyandir/uyut` (komutlarla paylaşılan uyku yolları).
+- `Bot::gonder_ekli` (bellekteki baytı ek olarak yollar; `!zihin` PNG artık diske yazılmıyor).
+- `zihin_gorsel`: `harf_orani` kovaları ölçülen tavana çekildi, ruh hali en son canlanan sohbetten.

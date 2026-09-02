@@ -26,6 +26,7 @@
 | BAGLANTI_ZAMAN_ASIMI / OKUMA_ZAMAN_ASIMI | 15 sn / 120 sn | http: el sıkışma / iki veri arası (ilk tokeni kapsar). Toplam süre sınırı yok, uzun düşünme akışı kesilmez |
 | AI_YENIDEN_DENEME | 2 | ağ hatası / 429 / 5xx'te ek deneme sayısı (toplam bu + 1) |
 | `cevap_butcesi!()` (makro) / CEVAP_TAVANI | debug `Some(2000)` / release `Some(4096)` | sohbet cevabı token bütçesi; ikisinde de üst sınır var, release'de yalnız tekrar/döngü gibi kaçak durumları keser |
+| REASONING_BUTCE_TABANI | 1500 | stream'siz ajan çağrısında reasoning kapatılamayınca yeniden deneme bütçesi: max(2×mevcut, bu) |
 | FAVORI | 259669117248864257 | her zaman sevilen kullanıcı id |
 | GEZGIN_ARALIGI | 4 saat | gündem gezintisi |
 | RESIM_KLASORU / DURUM_KLASORU | resimler / durum | klasörler (çalışma dizinine göre) |
@@ -65,6 +66,7 @@ API_ADRES (openai uyumlu chat/completions adresi; seçilen sağlayıcının adre
 FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı) ·
 GUILD_ID (tek sunucu id; ayarlıysa bot yalnız bu sunucuda çalışır) ·
 KANALLAR (virgüllü kanal id listesi; ayarlıysa bot yalnız bu kanallarda çalışır) ·
+DEBUG_KANALI (kanal id; `!debug` açıkken karar izleri buraya, yoksa mesajın kanalına) ·
 LOG_SEVIYE (error/warn/info/debug/trace, varsayılan info) · LOG_RENK (on/off; varsayılan: terminalde açık, dosyada kapalı)
 
 ## src/gelisim.rs

@@ -4,6 +4,19 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Reasoning dayanıklılığı, !zihin test, debug modu, ayar paneli, zihin görseli düzeltmeleri
+- `sor_ham`: mandatory-reasoning yeniden denemesinde bütçe max(2×, 1500) + openrouter `reasoning.effort=low`;
+  content boşsa JSON bekleyen kategorilerde düşünce alanındaki JSON içerik (`yanit_icerigi`); hata mesajı
+  kategori/model/bütçe/düşünce uzunluğu. `gunlukcu` → `Result<GunlukcuOzet>`, zihin zinciri info logları.
+- `!zihin test`: son 30 satırı hemen günlükçüye verir, sonucu yazar.
+- `!debug [aç|kapat]` + `Durum.debug` (debug.md) + `debug_not`: isteklilik puan/sebep (`isteklilik_coz`),
+  hedef, ruh hali, soru tavanı, sus/tepki/satır, kapanış izleri; DEBUG_KANALI.
+- `!ayarlar` / `/ayarlar`: butonlu panel (düşünme kipi, debug, uyandır/uyut), `ayar_dugmesi` yerinde yeniler;
+  `uyandir/uyut` komutlarla ortak.
+- Zihin görseli inceleme düzeltmeleri: harf kovaları tavana, PNG bellekten ek (`gonder_ekli`), ruh hali
+  deterministik.
+- Doğrulama: 79 test, clippy 0 uyarı, release build.
+
 ## 2026-09-02 · Sürüm bilgisi: !durum + açılış duyurusu
 - `build.rs` (yeni): `SURUM_COMMIT` (git rev-parse --short HEAD, kirliyse `+`) ve `SURUM_TARIH`
   env'leri; `surum_metni()` main.rs'de. `!durum`/`/durum` "sürüm: v0.2.0 (69e2851, 2026-09-02)".

@@ -171,3 +171,28 @@ satırı (saniyeli), kişi dosyaları id bazlı (isim `ad_id` ile çevrilir; pua
 etiket, olay), konu dosyaları, `kendim.md`, `INDEX.md` → `ozetleyici` sınır aşanları küçültür
 (arşivle) → biten sohbette ayrıca `elestirmen` → `duzeltmeler.md`. 6 saatlik turun gözlemi de
 aynı kuyruktan geçer.
+
+## Zihin zinciri (sohbet → günlükçü) ve teşhis
+`zaman_asimi_kapat` → info log `zihin: sohbet kapandı [kanal] (30 dk sessiz) → kuyruk (n), günlükçü 10 dk içinde`
+→ `bellek_dongusu` (10 dk) → `gunlukcu` → info `zihin: günlükçü [kaynak]: k kişi, m konu, o olay yazıldı`
+ya da warn `zihin: günlükçü başarısız [kaynak]: <sebep>`. `gunlukcu` artık `Result<GunlukcuOzet, Hata>` döner.
+`!zihin test`: kanalın son 30 satırını hemen günlükçüye verir, sonucu tek mesajla yazar (40 dk beklemeden).
+Reasoning zorunlu modelde (glm-5.3-flash) `sor_ham`: 400 "mandatory" → alanlar kaldırılır + openrouter'da
+`reasoning.effort=low` + bütçe max(2×, 1500); 200 ama content boş → JSON bekleyen kategorilerde
+(gunlukcu, isteklilik, hedef_sec, ruh_hali, uyanis) düşünce alanındaki `{…}` içerik sayılır (warn log),
+düzyazı çağrısında sayılmaz; yine boşsa bütçe büyütülüp bir kez daha denenir; hata mesajı kategori/model/
+bütçe/düşünce uzunluğunu içerir.
+
+## Debug modu (`!debug`, ayar paneli)
+`Durum.debug` açıkken `debug_not` tek satır (⚙ …, ≤300 kr) DEBUG_KANALI'na, yoksa mesajın kanalına yazar
+ve info loglar; hafızaya/kanal notuna girmez. İzler: mesaj kararı (`etiket` / `diyalog sürüyor` /
+`isteklilik p/eşik · sebep: … → cevap|sus` / `2 dk sınırı` / `yedek zar`), cevapla turu (`ruh hali`,
+`hedef`, `soru tavanı`, `n satır gönderildi · tepki X` / `sus (-)` / `akış boş → yedek uret`),
+`sohbet kapandı (30 dk sessiz)`.
+
+## Ayar paneli (`!ayarlar`, `/ayarlar`)
+Embed (sürüm, model, düşünme, debug, uyku, seyahat) + butonlar: düşünme göster/gizle/sessiz/kapat
+(etkin olan Primary), debug aç/kapat, uyandır / uyut (8 saat). Buton → `interaction_create(Component)`
+`ayar_*` → `Handler::ayar_dugmesi`: komutlarla aynı yollar (`DusunmeKip` + dusunme.md, `debug_ayarla`,
+`uyandir`/`uyut` + `uyku_gecisi`) → `UpdateMessage` ile panel yerinde yenilenir. `/ayarlar` ephemeral,
+`!ayarlar` kanalda herkese görünür.

@@ -17,11 +17,11 @@ arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Pr
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 77 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli, zihin görseli)
+cargo test             # 79 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli, zihin görseli, yanıt çözümü)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
 cargo run -- zihin     # discord'suz zihin panelini durum/zihin.png'ye yazar (tasarimi gormek/test icin)
-cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR isteğe bağlı
+cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR, DEBUG_KANALI isteğe bağlı
 cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, yalnız model anahtarı); çıktı protokolünü denemek için
 ```
 
@@ -106,3 +106,5 @@ cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, y
   ölçülmedi, kabaca seçildi; canlıda ayarlanmak isteyebilir.
 - CLI sohbet modu (`cargo run -- sohbet`) gerçek model anahtarıyla denenmedi (bu makinede
   anahtar yok): anahtarsız hata yolu ve birim testleri dışında **doğrulanmadı**.
+- Reasoning zorunlu model (glm-5.3-flash) için ajan dayanıklılığı (bütçe ×2, effort=low, düşünceden JSON) canlıda
+  doğrulanmadı; `!zihin test` ile denenir. Debug modu ve ayar paneli butonları canlı Discord'da görülmedi.

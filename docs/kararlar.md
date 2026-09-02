@@ -467,3 +467,25 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   Gömme bozulursa `load_system_fonts`'a düşülüyor ve `warn` basılıyor.
 - **2026-09-02 · Emoji çizilmiyor, atılıyor.** Inter'de emoji glifi yok; atılmazsa panelde tofu kutu
   çıkıyor. `temizle` U+2190 üstü sembolleri ve kontrol karakterlerini eliyor.
+- **2026-09-02 · Reasoning zorunlu modelde ajan çağrıları dayanıklı.** Emin canlıdan: "zihin sistemi
+  çalışmıyor, reasoning'ten kaynaklı sanırım" (glm-5.3-flash, kişiler/konular/olaylar 0). Kodda görülen
+  boşluk: 400 "mandatory" yeniden denemesi bütçeyi yalnız 500'e çekiyordu, 1200'lük günlükçü çağrısına
+  dokunmuyordu; düşünce bütçenin tamamını yiyince `content` boş kalıyor, JSON çözülemiyor, zihne hiçbir
+  şey yazılmıyordu. Üç katman: (1) yeniden denemede bütçe max(2×, 1500) ve openrouter'da
+  `reasoning.effort=low`; (2) content boşsa JSON bekleyen kategorilerde düşünce alanındaki JSON içerik
+  sayılır — düzyazı çağrısında asla (hoca düşünce dökümünü huy sanmasın); (3) hata mesajı ve info
+  logları zinciri görünür kılar, `!zihin test` 40 dk beklemeden dener. Canlı glm ile doğrulanmadı.
+- **2026-09-02 · Debug modu.** Emin: "her mesaja atlamasın diye alakayı puanlıyor; onun bir debug'ı
+  olsun". `!debug` kararların gerekçesini (isteklilik puan/eşik/sebep, hedef, ruh hali, soru tavanı,
+  sus/tepki/satır sayısı, kapanış) tek satır olarak kanala düşürür. Hafızaya girmez (bot kendi lafı
+  sanmasın), bot mesajı olduğu için işleyiciye girmez; kapalıyken format! bile kurulmaz. DEBUG_KANALI
+  ayrı kanal ister; yoksa aynı kanal — kurulumsuz çalışsın.
+- **2026-09-02 · Ayar paneli butonlu.** Emin: "ayarlar kısmını butonlara basarak yönetek". Komutlar
+  duruyor; panel aynı yolları çağırır (tek gerçek: `DusunmeKip`, `debug_ayarla`, `uyandir/uyut`), buton
+  sonrası `UpdateMessage` ile yerinde yenilenir. Model değişimi panelde yok (favori yetkisi, liste
+  doğrulaması komutta kalır).
+- **2026-09-02 · Zihin görseli: inceleme düzeltmeleri.** Harf genişliği kovaları Inter hmtx ölçümünün
+  tavanına çekildi (büyük harfli adlar @kullanıcı adına biniyordu); PNG diske yazılıp geri okunmuyor,
+  bayt bellekten ek olarak gidiyor (iki kanalda aynı anda `!zihin` aynı dosyaya yarışıyordu); ruh hali
+  chip'i HashMap sırasına değil en son canlanan sohbete bakıyor. Gerçek glif ölçümü (skrifa) yapılmadı,
+  bekleyen listesinde.
