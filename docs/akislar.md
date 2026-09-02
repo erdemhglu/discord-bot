@@ -112,8 +112,6 @@ döngüler bu kipte hiç çalışmaz. (Tek istisna: `Bot::kur()` canlı yolla or
 `durum/{kisiler,konular,olaylar,arsiv,kanallar}` ve `resimler/` klasörlerini oluşturur.) **Doğrulanmadı:** gerçek model anahtarı bu makinede yok, canlı
 cevap alışverişi görülmedi (bkz. AGENTS.md "Bilinen açıklar").
 
-## Modal'lar (slash komutlar)
-
 ## Komut arayüzü (slash → embed kart → detay modalı)
 `ready` → her sunucuya `/durum` `/yardim` `/zihin` kaydı (idempotent) → kullanıcı slash çalıştırır →
 `interaction_create(Command)` → ephemeral **embed kart** (`durum_mesaji`/`yardim_mesaji`/`zihin_mesaji`),

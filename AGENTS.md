@@ -17,7 +17,7 @@ arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Pr
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 70 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli)
+cargo test             # 71 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
 cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR isteğe bağlı
