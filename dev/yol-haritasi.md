@@ -22,48 +22,21 @@ etiket listesi hata kaybına karşı geri konur, üniversite haber önceliği.
 ### Adım 7 · Final — TAMAMLANDI
 Tüm adımlar bitti; docs + doğrulama + push tamam. Açık kalanlar aşağıdaki "Bekleyen" listesinde.
 
-## Etkin plan — Adım 8: Modal'lar + /zihin (PLANLANDI, henüz kodlanmadı)
+## Adım 8: Modal'lar + /zihin — TAMAMLANDI
+Yeni `src/modal.rs`: `zihin_bolumleri` 5 slot (özet / kişiler iki yarıda / konular /
+olaylar+gündem), `sigdir` 4000 sınırında son satır/boşluk hizasında keser + not,
+`modal_zihin/durum/yardim`, `komutlari_kayit` (guild komutları, ready'de idempotent).
+`interaction_create` yeniden yazıldı: `Command` → modal, `Modal` → ephemeral onay,
+`Component` → `dusunce_dugmesi` (ayrı impl). `!zihin` dizin dökümü + `/zihin` yönlendirmesi;
+`!durum` artık `modal::durum_metni` ortak metni. 4 yeni test.
 
-Kararlar (kullanıcı onaylı): modal'lar slash komutlarla açılır, `!` mesaj komutları paralel
-düz metin olarak kalır (ikisi birden) · zihin modalı herkese açık · 5 slot önerilen dağılımda.
+Doğrulanmış serenity 0.12.5 API notları:
+- `CreateModal::new(custom_id, title)` — sıra: önce custom_id, sonra title.
+- `CreateInputText::new(style, label, custom_id)` + `.value().required(false)`.
+- `GuildId::set_commands(http, Vec<CreateCommand>)`; `CreateCommand::new(ad).description(...)`.
+- Interaction varyantı `Interaction::Modal` (ModalSubmit değil).
 
-Discord kısıtları (tasarımı belirler):
-- Modal yalnız bir interaction'a (slash/buton) yanıt olarak gönderilebilir; mesaj komutuyla açılamaz.
-- Modal en fazla 5 bileşen (her biri TextInput, değer ≤4000 karakter), başlık ≤45, etiket ≤45.
-
-### Yapılacaklar
-1. Yeni modül `src/modal.rs`:
-   - `zihin_bolumleri(&Durum) -> Vec<(başlık, içerik)>` — 5 slot, her değer ≤4000 (taşanı kes + not):
-     1) Bot özeti: evre/gün, sohbet+mesaj sayacı, model, token metriği, uyku, seyahat, düşünme kipi, kendim.md özeti
-     2-3) Kişiler (iki slotta): ad, puan, etiketler, not, bildikler (`kisiler/<id>.md`, mtime sırası)
-     4) Konular: adlar + son notlar
-     5) Olaylar (bu ay) + son gündem girişleri
-   - `modal_durum`, `modal_yardim` (tek slotluk dar modal'lar)
-   - `modal_olustur(baslik, custom_id, bolumler)`: `CreateModal` + ≤5 `CreateActionRow` →
-     `InputText(paragraph, required=false)`; boş bölüm "(henüz boş)".
-2. Slash kayıt (`ready`): her sunucuya guild komutu `/durum`, `/yardim`, `/zihin`
-   (guild komutu anında görünür; her ready'de idempotent; adlar ASCII).
-3. `interaction_create` genişletmesi (main.rs):
-   - `Interaction::Command` → ada göre modal (`CreateInteractionResponse::Modal`)
-   - `Interaction::ModalSubmit` → kısa ephemeral onay (modal gösterimlik, girdi toplamıyoruz)
-   - Mevcut Düşünce butonu akışına dokunulmaz.
-4. `komut.rs`: yeni `!zihin` → INDEX.md düz metin + "ayrıntı için /zihin" yönlendirmesi
-   (5×4000 karakteri kanala dökmek spam); YARDIM metnine slash notu.
-5. Test: `zihin_bolumleri` slot ≤5 ve içerik ≤4000, kesme davranışı.
-6. Docs: moduller (modal.rs), akislar (interaction akışı), README (komutlar + slash), kararlar.
-7. Doğrulama + commit + push.
-
-### Doğrulanmış API notları (serenity 0.12.5 kaynağından)
-- `CreateModal::new(custom_id, title)` — ARGÜMAN SIRASI: önce custom_id, sonra title!
-  (`src/builder/create_interaction_response.rs:441`), `.components(Vec<CreateActionRow>)`.
-- `CreateInputText` aynı dosyada (`create_components.rs:357`); API'si teyit edilecek
-  (new/style/value/required).
-- Slash kayıt yöntemi teyit edilecek: `GuildId::set_guild_commands` ya da eşdeğeri
-  (kayıtlı komut adları: durum/yardim/zihin, description zorunlu).
-
-### Notlar / riskler
-- Zihin büyürse 2 kişi slotu yetmeyebilir → taşan kırpılır; ileride sayfalama düşünülebilir.
-- Modal canlı davranışı Discord'ta doğrulanmalı (birim testleri boyut mantığını korur).
+Kalan risk: modal canlı davranışı Discord'ta görülecek (birim testleri boyut mantığını korur).
 
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
 - **Ajan 2 (HTTP):** global `.timeout(60sn)` stream'i kesebilir → `connect_timeout`+`read_timeout`+ilk-token sınırı (P0); hata sınıflandırma+retry; `reasoning_kapat` sağlayıcıya göre koşullu.

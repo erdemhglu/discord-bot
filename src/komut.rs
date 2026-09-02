@@ -3,7 +3,7 @@
 
 use super::*;
 
-const YARDIM: &str = "\
+pub const YARDIM: &str = "\
 komutlar:
 `!sifirla [hepsi]` kanal yasağını ve açık sohbeti sıfırlar
 `!haber` şimdi haber atar · `!sorun` kod derdi sorar · `!gez` gündem gezintisi yapar
@@ -11,8 +11,10 @@ komutlar:
 `!ajanlar` profilci ve hocayı şimdi çalıştırır
 `!uyan` uykuyu keser · `!uyu [saat]` test için uyutur
 `!durum` evre, sayaçlar, model, düşünme, uyku, seyahat
+`!zihin` ne bildiğimin özeti (ayrıntı: `/zihin` modalı)
 `!düşünme göster|gizle|kapat` düşünme kipi (göster: cevapla spoiler'da · gizle: düşünürken \"Düşünüyorum...\", cevap sonra · kapat: istekler reasoning'siz)
-`!model [id]` modeli gösterir/değiştirir (yalnız favori)";
+`!model [id]` modeli gösterir/değiştirir (yalnız favori)
+slash: `/durum` `/yardim` `/zihin` aynı şeyleri modal'da açar";
 
 impl Bot {
     // tanınan komutsa true döner
@@ -100,26 +102,15 @@ impl Bot {
                 self.uyku_gecisi(ctx).await;
             }
             "durum" => {
-                let metin = {
-                    let d = self.durum();
-                    let g = &d.gelisim;
-                    let m = &d.metrik;
-                    format!(
-                        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {} · token: {} çağrı, {} giriş + {} çıkış",
-                        gelisim::evre(g).ad,
-                        gelisim::gun(g) + 1,
-                        g.sohbet,
-                        g.mesaj,
-                        d.model,
-                        if uyku::uyanik_mi(&d) { "uyanık" } else { "uyuyor" },
-                        d.dusunme.ad(),
-                        seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
-                        m.cagri,
-                        m.giris_token,
-                        m.cikis_token,
-                    )
-                };
+                let metin = modal::durum_metni(&self.durum());
                 soyle(metin).await;
+            }
+            "zihin" => {
+                let dizin = hafiza::dizin_yenile();
+                let metin = format!("{}\nayrıntı için `/zihin`", dizin.trim());
+                for p in bol(&metin, MESAJ_SINIRI) {
+                    soyle(p).await;
+                }
             }
             "düşünme" | "dusunme" => {
                 let arg = arg.trim().to_lowercase();

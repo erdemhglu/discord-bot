@@ -229,6 +229,50 @@ pub fn olay_ekle(kanal: &str, olay: &str) {
     );
 }
 
+// modal gösterimi için dökümler (mtime sırası, en son değişen önce)
+
+pub fn kisi_dokumleri() -> Vec<Kisi> {
+    let mut v = Vec::new();
+    for p in dosyalar("kisiler") {
+        // id bazlı dosya adı; eski slug dosyaları (id çözülemez) atlanır
+        let Some(id) = p
+            .file_stem()
+            .and_then(|f| f.to_str())
+            .and_then(|f| f.parse::<u64>().ok())
+        else {
+            continue;
+        };
+        let k = Kisi::coz(id, &fs::read_to_string(&p).unwrap_or_default());
+        if k.isim.is_empty() {
+            continue;
+        }
+        v.push(k);
+    }
+    v
+}
+
+// (konu adı, son not)
+pub fn konu_dokumleri() -> Vec<(String, String)> {
+    dosyalar("konular")
+        .into_iter()
+        .take(30)
+        .map(|p| {
+            let icerik = fs::read_to_string(&p).unwrap_or_default();
+            let son = icerik
+                .lines()
+                .rev()
+                .find(|l| l.starts_with("- "))
+                .map(|l| l.trim_start_matches("- ").to_string())
+                .unwrap_or_default();
+            (ilk_satir(&p), son)
+        })
+        .collect()
+}
+
+pub fn olay_dokumu() -> String {
+    oku(&format!("olaylar/{}.md", ay()))
+}
+
 // ---------- kanal geçmişi ----------
 
 // durum/kanallar/<id>.md dosyalarını okur: (kanal id, son satırlar)

@@ -4,6 +4,20 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 8 · Modal'lar + /zihin kodlandı
+- Yeni `src/modal.rs`: slash komutlar (`/durum` `/yardim` `/zihin`) modal açar, `!` komutları
+  paralel düz metin kalır; zihin modalı herkese açık, 5 slot (bot özeti / kişiler iki yarıda /
+  konular / olaylar+gündem). `sigdir` 4000 sınırında taşanı son satır/boşluk hizasında keser + not.
+- `hafiza.rs` üç yeni döküm yardımcısı: `kisi_dokumleri` (mtime sırası), `konu_dokumleri`,
+  `olay_dokumu`. `interaction_create` dallandı: Command→modal, Modal→ephemeral onay,
+  Component→`dusunce_dugmesi` (ayrı impl Handler bloğu). ready'de guild slash kaydı (idempotent).
+- `komut.rs`: `!zihin` (dizin dökümü + `/zihin` yönlendirmesi), `!durum` artık ortak
+  `modal::durum_metni`; YARDIM metnine slash notu.
+- serenity 0.12.5 teyitleri: `CreateModal::new(custom_id, title)` sıra, `CreateInputText::new(style,
+  label, custom_id)`, `GuildId::set_commands`, interaction varyantı `Interaction::Modal`.
+- Doğrulama: 38 test (4 yeni: slot sınırı/kırpma, kısa metin, kişi bölme, durum_metni),
+  clippy 0 uyarı, fmt temiz. Kalan risk: canlı Discord'ta modal davranışı henüz görülmedi.
+
 ## 2026-09-02 · Adım 8 planlandı: Modal'lar + /zihin (kod henüz yazılmadı)
 - Kararlar: slash komutlar modal açar + `!` komutları düz metin paralel kalır; zihin modalı
   herkese açık; 5 slot: Bot özeti / Kişiler I-II / Konular / Olaylar+Gündem.

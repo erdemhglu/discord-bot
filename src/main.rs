@@ -4,6 +4,7 @@ mod gundem;
 mod hafiza;
 mod komut;
 mod loglama;
+mod modal;
 mod promptlar;
 mod seyahat;
 mod uyku;
@@ -2186,6 +2187,13 @@ impl EventHandler for Handler {
         }
         log::info!("giriş yapıldı: {}", hazir.user.name);
 
+        // slash komutlar (/durum /yardim /zihin): her sunucuya kayıt, idempotent
+        for guild in ctx.cache.guilds() {
+            if let Err(e) = modal::komutlari_kayit(&ctx.http, guild).await {
+                log::warn!("slash komutları kaydedilemedi [{guild}]: {e}");
+            }
+        }
+
         // ready yeniden bağlanınca tekrar gelir, döngüler bir kere başlasın
         if !self.baslatildi.swap(true, Ordering::SeqCst) {
             tokio::spawn(haber_dongusu(self.bot.clone(), ctx.clone()));
@@ -2409,12 +2417,48 @@ impl EventHandler for Handler {
         }
     }
 
+    // slash komutlar modal açar (/durum /yardim /zihin), modal gönderimleri
+    // kısa onay alır (gösterimlik, girdi toplanmaz), düşünce butonu eski akışında
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        match interaction {
+            Interaction::Command(c) => {
+                let m = {
+                    let d = self.bot.durum();
+                    match c.data.name.as_str() {
+                        "durum" => modal::modal_durum(&d),
+                        "zihin" => modal::modal_zihin(&d),
+                        _ => modal::modal_yardim(), // "yardim" ya da bilinmeyen
+                    }
+                };
+                if let Err(e) = c
+                    .create_response(&ctx.http, CreateInteractionResponse::Modal(m))
+                    .await
+                {
+                    log::warn!("modal gönderilemedi [{}]: {e}", c.data.name);
+                }
+            }
+            Interaction::Modal(m) => {
+                let _ = m
+                    .create_response(
+                        &ctx.http,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .ephemeral(true)
+                                .content("gördün :) buradan bir şey toplamıyorum"),
+                        ),
+                    )
+                    .await;
+            }
+            Interaction::Component(c) => self.dusunce_dugmesi(&ctx, c).await,
+            _ => {}
+        }
+    }
+}
+
+impl Handler {
     // gizle kipindeki "Düşünce Sürecini Göster" butonu: düşünenin deposundan
     // bulur, yalnız tıklayana görünen ephemeral kod bloğu olarak açar
-    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        let Interaction::Component(c) = interaction else {
-            return;
-        };
+    async fn dusunce_dugmesi(&self, ctx: &Context, c: ComponentInteraction) {
         if c.data.custom_id != DUSUNCE_DUGMESI {
             return;
         }

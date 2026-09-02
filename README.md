@@ -99,8 +99,14 @@ discord developer portal'da **Message Content** ve **Server Members** intent'ler
 - konuşmalar `durum/kanallar/<id>.md`'de kalır; sohbet bitse ya da bot yeniden başlasa da son 10 satırla devam eder
 - `!uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `!uyu [saat]` — test için uyutur (varsayılan 8 saat).
 - `!durum` — evre, sayaçlar, model, uyku, düşünme kipi, seyahat.
+- `!zihin` — ne bildiğinin özeti (dizin); ayrıntı `/zihin` modalında.
 - `!düşünme` — düşünme kipi. `göster`: düşünürken "Düşünüyorum...", cevapla birlikte thinking hem spoiler hem kod bloğunda. `gizle`: düşünürken canlı kelime sayacı ("Şu ana kadar N kelime düşündüm"), thinking mesajda görünmez, cevap sonunda "Düşünce Sürecini Göster" butonu — tıklayana yalnız ona görünen kod bloğu açılır. `kapat`: istekler reasoning'siz atılır. Seçim `durum/dusunme.md`'de kalır; `aç` = göster.
 - `!yardım` / `!help` — komut listesi.
+
+slash komutlar aynı şeyleri modal'da açar: `/durum` (tek bölmeli), `/yardim`, `/zihin`
+(5 bölmeli: bot özeti, kişiler iki yarıda, konular, olaylar+gündem). modallar herkese
+açık ve gösterimliktir; içlerinden veri toplanmaz. her bölme en çok 4000 karakter,
+taşanı kırpılır ve not düşülür.
 - `!model` — şu anki model. `!model <id>` değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
 
 ## ayarlar

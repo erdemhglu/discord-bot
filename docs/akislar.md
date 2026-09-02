@@ -44,6 +44,13 @@ Talimat önceliği: hack devam > hack çıkış > boş.
 4. `sor` → `temizle` (ad öneki, tırnak, 1900).
 Sohbet cevapları bunu kullanmaz; `uret_akis` aynı sistemi kurup stream açar (`gonder_akis` yazar), kırpma yoktur.
 
+## Modal'lar (slash komutlar)
+`ready` → her sunucuya `/durum` `/yardim` `/zihin` kaydı (idempotent) → kullanıcı slash çalıştırır →
+`interaction_create(Command)` → `modal_durum`/`modal_yardim`/`modal_zihin` → modal açılır (herkese açık).
+`/zihin`: dizin + durum dosyalarından 5 bölmelik içerik (her bölme ≤4000, taşanı kırpılır).
+Kullanıcı modal'ı gönderirse → `interaction_create(Modal)` → kısa ephemeral onay; girdi toplanmaz.
+Paralel düz metin: `!durum`, `!zihin` (dizin dökümü + yönlendirme), `!yardım` aynen durur.
+
 ## Sunucuya bağlanınca
 `guild_create` (sunucu başına bir kez) → arka planda: 14 gün geriye tarama (izinli kanallar, 100'lük sayfalar) → ham hafıza son 2000 → profilci → hoca (huy boşsa). Yeniden bağlanmada tekrar taranmaz.
 

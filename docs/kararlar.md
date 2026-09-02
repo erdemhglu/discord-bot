@@ -153,3 +153,11 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   Temiz başlangıç: eski slug dosyaları okunmaz. Tüm kayıtlar `tarih_saat()` ile saniyeli.
   Ajanlar artık inline değil: kapanan sohbetin dökümü ve 6 saatlik gözlem `bellek_kuyruk`'a düşer,
   `bellek_dongusu` (10 dk, uyku kontrolüne takılmaz) işler; kuyruk 50'yi aşarsa en eski atılır.
+- **2026-09-02 · Modal'lar + /zihin.** Slash komutlar (/durum /yardim /zihin) modal açar,
+  `!` mesaj komutları paralel düz metin olarak kalır (ikisi birden, kullanıcı kararı). Zihin
+  modalı herkese açık. Discord kısıtları tasarımı belirler: modal en çok 5 bileşen, her
+  TextInput value ≤4000 karakter → `sigdir` taşanı son satır/boşluk hizasında keser + not
+  düşer; başlık/etiket ≤45. Zihin 5 slotu: bot özeti / kişiler iki yarıda (mtime sırası) /
+  konular / olaylar+gündem. `!zihin` 5×4000'i kanala dökmek yerine dizin özeti + `/zihin`
+  yönlendirmesi verir. Modal gönderimleri toplanmaz, kısa ephemeral onay döner. Sunucu
+  komutları her ready'de idempotent kaydedilir (anında görünürler, global gecikmeli değil).
