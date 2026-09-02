@@ -4,7 +4,8 @@
 
 Sunucuda takılan, insanları tanıyan, zamanla kişilik kazanan bir discord botu.
 Rust ile yazıldı, cevapları openrouter (ya da mistral) üzerinden alıyor; openrouter üzerinden
-GLM, Grok, Gemini, Claude gibi herhangi bir model kullanılabilir.
+GLM, Grok, Gemini, Claude gibi herhangi bir model kullanılabilir. `z-ai/glm-5.3-flash` (reasoning
+zorunlu) ile performanslı çalıştığı görüldü.
 
 ## ne yapar
 
@@ -30,7 +31,7 @@ GLM, Grok, Gemini, Claude gibi herhangi bir model kullanılabilir.
   sonra kendine gelir; link atmaz, kimseden bir şey istemez)
 - gelişim evreleri: yeni → ısınma → yerleşik → eski toprak (gün ve sohbet sayısına göre); evre üslubu ve cesareti değiştirir
 - yerleşik evresine girince kendine isim seçer, takma adını değiştirir, gruba söyler
-- `!zihin` yazınca zihnini **modern bir web paneli görünümünde PNG ekran görüntüsü** olarak atar: kişiler (puan rozeti, etiketler, favori yıldızı), olaylar, konular, gündem, kendim, huyum. Görsel botun içinde çiziliyor (SVG → `resvg` → PNG); sunucu, link, tarayıcı yok
+- `/zihin` zihnini üç sütunlu bir **embed kart** olarak gösterir (Kişiler/Konular/Olaylar); üstte kişi seçme menüsü, altta Konular/Olaylar/Bot özeti butonları — menü ya da buton ilgili detay **modalını** açar (yalnız çağırana görünür)
 - `FAVORI` id'li kişi istisnadır, ne olursa olsun sever
 
 ## kişiliği kim yönetiyor
@@ -100,12 +101,6 @@ cp .env.example .env   # DISCORD_TOKEN + OPENROUTER_KEY ya da MISTRAL_KEY (MODEL
 cargo run --release
 ```
 
-Zihin panelini Discord'suz görmek için (durum/ klasöründen okur, `durum/zihin.png` yazar):
-
-```
-cargo run -- zihin
-```
-
 discord developer portal'da **Message Content** ve **Server Members** intent'leri açık olmalı.
 Şakalarda atılacak görselleri `resimler/` içine koy (png, jpg, gif, webp); klasör git'e girmez.
 
@@ -125,36 +120,33 @@ oluşturur; dosya içeriği yazılmaz). Çıktı protokolü olduğu gibi görün
 
 ## komutlar
 
-`!` ya da `/` ile başlar (`/model` de olur).
+Bot yalnız **slash (`/`) komutlarla** yönetilir, `!`/metin komut yok (mesajlar yalnız
+sohbet/hafıza akışına girer). Her komut yalnız çağırana görünen bir **embed kart** döner.
 
-- `!sifirla` — o kanaldaki açık sohbeti sıfırlar. `!sifirla hepsi` tüm kanallar.
-- `!haber` — şimdi haber seç ve at (HN + gündem).
-- `!sorun` — yazılım derdi atıp "nasıl çözerim" diye sorar (kendiliğinden de laf atma turlarının %25'inde, haber kanalına).
-- `!gez` — gündem gezintisini şimdi yap (gundem.md güncellenir).
-- `!saka` / `!hack` — görsel şakası / hacklenmiş taklidi şimdi.
-- `!ajanlar` — profilci ve hocayı şimdi çalıştır.
+- `/sifirla [hepsi]` — kanal yasağını ve açık sohbeti sıfırlar; `hepsi` tüm kanallar.
+- `/haber` — şimdi haber seç ve at (HN + gündem).
+- `/sorun` — yazılım derdi atıp "nasıl çözerim" diye sorar (kendiliğinden de laf atma turlarının %25'inde, haber kanalına).
+- `/gez` — gündem gezintisini şimdi yap (gundem.md güncellenir).
+- `/saka` / `/hack` — görsel şakası / hacklenmiş taklidi şimdi.
+- `/ajanlar` — profilci ve hocayı şimdi çalıştırır.
 - konuşmalar `durum/kanallar/<id>.md`'de kalır; sohbet bitse ya da bot yeniden başlasa da son 10 satırla devam eder
-- `!uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `!uyu [saat]` — test için uyutur (varsayılan 8 saat).
-- `!durum` (sürüm dahil) — evre, sayaçlar, model, uyku, düşünme kipi, seyahat, token metriği (kaç çağrı, giriş/önbellek/çıkış, çağrı tipine göre en çok yakanlar).
-- `!zihin test` — kanalın son 30 satırını hemen günlükçüye verir, kaç kişi/konu/olay yazıldığını söyler (zihin zinciri teşhisi).
-- `!debug [aç|kapat]` — karar izleri (isteklilik puanı/sebebi, hedef, ruh hali, sus/tepki) kanala düşer; `DEBUG_KANALI` ayrı kanal.
-- `!ayarlar` / `/ayarlar` — butonlu ayar paneli: düşünme kipi, debug, uyku.
-- `!zihin` — zihnini panel görseli (PNG) olarak kanala atar: sayaç şeridi, kişiler, olaylar, konular, gündem, kendim, huyum. Görsel üretilemezse eski embed karta düşer. Etkileşimli detay `/zihin`'de.
-- `!düşünme` — düşünme kipi. `göster`: düşünürken "Düşünüyorum...", cevapla birlikte thinking hem spoiler hem kod bloğunda. `gizle`: düşünürken canlı kelime sayacı ("Şu ana kadar N kelime düşündüm"), thinking mesajda görünmez, cevap sonunda "Düşünce Sürecini Göster" butonu — tıklayana yalnız ona görünen kod bloğu açılır. `kapat`: istekler reasoning'siz atılır. Seçim `durum/dusunme.md`'de kalır; `aç` = göster.
-- `!yardım` / `!help` — komut listesi.
+- `/uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `/uyu [saat]` — test için uyutur (varsayılan 8 saat).
+- `/durum` — evre, sayaçlar, model, uyku, düşünme kipi, seyahat, token metriği (kaç çağrı, giriş/önbellek/çıkış, çağrı tipine göre en çok yakanlar), sürüm dahil.
+- `/zihin [test]` — zihnini üç sütunlu kart olarak gösterir (Kişiler/Konular/Olaylar), üstte kişi seçme menüsü, altta Konular/Olaylar/Bot özeti butonları. Menü ya da buton ilgili **detay modalını** açar — kişi kartı Kimlik/İzlenim/Etiketler/Bildikleri/Son olaylar diye ayrı alanlara bölünür, hiçbir şey tek metin kutusuna boca edilmez; modallar gösterimliktir, içlerinden veri toplanmaz, taşan alan 4000 karakterde son satır/boşluk hizasında kırpılır. `test:true` kanalın son 30 satırını hemen günlükçüye verir, kaç kişi/konu/olay yazıldığını söyler (zihin zinciri teşhisi), 40 dk beklemeden.
+- `/debug [durum]` — karar izleri (isteklilik puanı/sebebi, hedef, ruh hali, sus/tepki, sohbet kapanışı) kanala düşer; `DEBUG_KANALI` ayrı kanal.
+- `/ayarlar` — butonlu ayar paneli: düşünme kipi, debug, uyku.
+- `/dusunme [kip]` — düşünme kipi. `göster`: düşünürken "Düşünüyorum...", cevapla birlikte thinking hem spoiler hem kod bloğunda. `gizle`: düşünürken canlı kelime sayacı ("Şu ana kadar N kelime düşündüm"), thinking mesajda görünmez, cevap sonunda "Düşünce Sürecini Göster" butonu — tıklayana yalnız ona görünen kod bloğu açılır. `sessiz`: arka planda düşünür, hiç iz göstermez. `kapat`: istekler reasoning'siz atılır. Seçim `durum/dusunme.md`'de kalır.
+- `/model [id]` — şu anki model; `id` verilince değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
+- `/yardim` — komut listesini kart olarak gösterir.
 
-slash komutlar yalnız çağırana görünen şık **embed kartlar** açar: `/durum` ve `/yardim` tek
-kart, `/zihin` üç sütunlu kart (Kişiler/Konular/Olaylar) + üstte kişi seçme menüsü + altta
-Konular/Olaylar/Bot özeti butonları. Menü ya da buton, ilgili **detay modalını** açar — kişi
-kartı Kimlik/İzlenim/Etiketler/Bildikleri/Son olaylar diye ayrı alanlara bölünür, hiçbir şey
-tek metin kutusuna boca edilmez. modallar gösterimliktir; içlerinden veri toplanmaz. taşan
-alan 4000 karakterde son satır/boşluk hizasında kırpılır ve not düşülür.
-- `!model` — şu anki model. `!model <id>` değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
+Yerel/hızlı komutlar (`durum, yardim, ayarlar, zihin, sifirla, dusunme, model, debug`) doğrudan
+cevap verir; ağ/model çağrısı yapan komutlar (`haber, sorun, gez, saka, hack, ajanlar, uyan, uyu`)
+3 sn sınırını aşabileceğinden önce erteler, sonra sonucu düzenler.
 
 ## ayarlar
 
-`src/main.rs` başındaki sabitler: mesaj sınırı, cevap token tavanı, araya girme şansı, bekleme
-süreleri, şaka sıklığı, favori kişi. Tüm sabitlerin listesi: `docs/sabitler.md`.
+`src/bot/tipler_ayarlar.rs` başındaki sabitler: mesaj sınırı, cevap token tavanı, araya girme
+şansı, bekleme süreleri, şaka sıklığı, favori kişi. Tüm sabitlerin listesi: `docs/sabitler.md`.
 
 ## güvenlik
 
