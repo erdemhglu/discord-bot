@@ -8,6 +8,7 @@ mod modal;
 mod promptlar;
 mod seyahat;
 mod uyku;
+mod zihin_gorsel;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
