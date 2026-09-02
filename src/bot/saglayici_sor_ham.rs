@@ -4,7 +4,20 @@ impl Bot {
         mut govde: serde_json::Value,
         kategori: &'static str,
     ) -> Result<String, Hata> {
-        let mut kapatildi = self.reasoning_kapat(&mut govde, true);
+        let model = govde
+            .get("model")
+            .and_then(|m| m.as_str())
+            .unwrap_or_default()
+            .to_string();
+        // zaten reasoning'i kapatmayı reddettiği bilinen modelde denemeye hiç girişilmez —
+        // her çağrıda aynı 400'ü alıp bir tur boşa harcamak yerine doğrudan düşük eforla açılır
+        let mut kapatildi = if self.reasoning_zorunlu_biliniyor(&model) {
+            self.reasoning_dusuk_efor(&mut govde);
+            Self::butce_buyut(&mut govde, REASONING_BUTCE_TABANI);
+            false
+        } else {
+            self.reasoning_kapat(&mut govde, true)
+        };
         let mut son_hata: Hata = "istek hiç yapılamadı".into();
         for deneme in 0..=AI_YENIDEN_DENEME {
             if deneme > 0 {
@@ -38,6 +51,7 @@ impl Bot {
                     log::warn!(
                         "ai [sor_ham] [{kategori}]: model reasoning kapatılmasına izin vermiyor, düşük eforla açık yeniden deneniyor"
                     );
+                    self.reasoning_zorunlu_isaretle(model);
                     Self::reasoning_alanlarini_kaldir(&mut govde);
                     self.reasoning_dusuk_efor(&mut govde);
                     kapatildi = false;

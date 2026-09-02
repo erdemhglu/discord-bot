@@ -100,6 +100,7 @@ impl Bot {
                 .and_then(|v| v.trim().parse::<u64>().ok())
                 .map(ChannelId::new),
             resim_analizi,
+            reasoning_zorunlu_modeller: Mutex::new(HashSet::new()),
         }))
     }
 

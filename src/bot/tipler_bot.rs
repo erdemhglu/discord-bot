@@ -26,6 +26,10 @@ struct Bot {
     // .env RESIM_ANALIZI; yalnız açılışta okunur, hiçbir komut/buton bunu değiştiremez
     // (kasıtlı: kapatmak isteyen operatör süreci yeniden başlatmadan açtırılamasın)
     resim_analizi: bool,
+    // reasoning'i kapatmayı reddettiği öğrenilen modeller (bkz reasoning_zorunlu_hatasi):
+    // bir kez öğrenilince o model için "kapat" denemesi hiç yapılmaz, doğrudan düşük eforla
+    // açık gidilir — her çağrıda aynı 400'ü alıp bir tur boşa harcamasın
+    reasoning_zorunlu_modeller: Mutex<HashSet<String>>,
 }
 
 impl Bot {
@@ -48,5 +52,25 @@ impl Bot {
         d.metrik.cikis_token += k.completion_tokens;
         d.metrik.son_cagri_sn = simdi_unix();
         d.metrik.kategoriler.entry(kategori).or_default().topla(k);
+    }
+
+    // model reasoning'i kapatmayı reddetti mi, önceden biliniyor mu
+    fn reasoning_zorunlu_biliniyor(&self, model: &str) -> bool {
+        self.reasoning_zorunlu_modeller
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(model)
+    }
+
+    // ilk 400 "mandatory" hatasında çağrılır; bir daha bu modelde "kapat" denenmez
+    fn reasoning_zorunlu_isaretle(&self, model: &str) {
+        let yeni = self
+            .reasoning_zorunlu_modeller
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(model.to_string());
+        if yeni {
+            log::info!("reasoning: {model} kapatmaya izin vermiyor, bundan sonra denenmeyecek");
+        }
     }
 }

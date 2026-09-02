@@ -59,7 +59,12 @@ impl Bot {
         if let Some(t) = butce {
             govde["max_tokens"] = serde_json::json!(t);
         }
-        let mut kapatildi = self.reasoning_kapat(&mut govde, false);
+        let mut kapatildi = if self.reasoning_zorunlu_biliniyor(&model) {
+            Self::butce_tabanini_uygula(&mut govde, REASONING_ZORUNLU_TABAN);
+            false
+        } else {
+            self.reasoning_kapat(&mut govde, false)
+        };
         // yeniden deneme yalnız akış açılmadan önce: parça gelmeye başladıysa okuyucu dönmüş
         // olur, sonrası gonder_akis'in yarım-kaldı yoludur
         let mut son_hata: Hata = "istek hiç yapılamadı".into();
@@ -94,6 +99,7 @@ impl Bot {
                     log::warn!(
                         "ai [sor_ham_akis]: model reasoning kapatılmasına izin vermiyor, açık yeniden deneniyor"
                     );
+                    self.reasoning_zorunlu_isaretle(model);
                     Self::reasoning_alanlarini_kaldir(&mut govde);
                     kapatildi = false;
                     if Self::butce_tabanini_uygula(&mut govde, REASONING_ZORUNLU_TABAN) {
