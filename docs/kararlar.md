@@ -435,3 +435,14 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   aynı `uret` + `cevap_parcala` yolundan geçiriyor. `Bot::kur()` bu yüzden `main`'den ayrıldı:
   iki yol da aynı kurulumu görsün. Diske yazmaz (`kanal_not` yerine bellek içi `gecmise_ekle`),
   ama `durum/` dosyalarını okur — kişilik gerçekçi olmadan tezgâhın anlamı olmaz.
+
+- **2026-09-02 · Komut arayüzü: embed kart + detay modalları (web sayfası gibi).** Kullanıcı
+  şikayeti: eski 5 bölmeli zihin modalı içerik boş/kötü gösteriyordu, her şey tek metin
+  kutusuna boca edilmiş gibiydi. Yeni tasarım: `/durum` `/yardim` `/zihin` yalnız çağırana
+  görünen **embed kart** döndürür (bölümlü, renkli, footer'lı); `/zihin` kartında kişi select
+  menüsü (≤25, değer=id) + Konular/Olaylar/Bot özeti butonları. Menü/buton **detay modalını**
+  açar: kişi = Kimlik/İzlenim/Etiketler/Bildikleri/Son olaylar ayrı etiketli alanlar; olaylar
+  ay başına alan (son 3 ay — eski "yalnız bu ay" boşluğu kapandı); konular son değişenler +
+  diğerleri; bot özeti Durum/Token/Kendim/Gündem. Boş bölümler modalda atlanır. `!zihin` artık
+  aynı kartı kanala yollar (ham INDEX dökümü kalktı); kanal mesajında modal açılamadığı için
+  detay `/zihin`'e yönlendirir. Eski `modal_zihin`/`bolumler`/5 slot kaldırıldı.

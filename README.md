@@ -129,14 +129,16 @@ oluşturur; dosya içeriği yazılmaz). Çıktı protokolü olduğu gibi görün
 - konuşmalar `durum/kanallar/<id>.md`'de kalır; sohbet bitse ya da bot yeniden başlasa da son 10 satırla devam eder
 - `!uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `!uyu [saat]` — test için uyutur (varsayılan 8 saat).
 - `!durum` — evre, sayaçlar, model, uyku, düşünme kipi, seyahat, token metriği (kaç çağrı, giriş/önbellek/çıkış, çağrı tipine göre en çok yakanlar).
-- `!zihin` — ne bildiğinin özeti (dizin); ayrıntı `/zihin` modalında.
+- `!zihin` — zihin kartını (kişiler/konular/olaylar) kanala yollar; interaktif detay `/zihin`'de.
 - `!düşünme` — düşünme kipi. `göster`: düşünürken "Düşünüyorum...", cevapla birlikte thinking hem spoiler hem kod bloğunda. `gizle`: düşünürken canlı kelime sayacı ("Şu ana kadar N kelime düşündüm"), thinking mesajda görünmez, cevap sonunda "Düşünce Sürecini Göster" butonu — tıklayana yalnız ona görünen kod bloğu açılır. `kapat`: istekler reasoning'siz atılır. Seçim `durum/dusunme.md`'de kalır; `aç` = göster.
 - `!yardım` / `!help` — komut listesi.
 
-slash komutlar aynı şeyleri modal'da açar: `/durum` (tek bölmeli), `/yardim`, `/zihin`
-(5 bölmeli: bot özeti, kişiler iki yarıda, konular, olaylar+gündem). modallar herkese
-açık ve gösterimliktir; içlerinden veri toplanmaz. her bölme en çok 4000 karakter,
-taşanı kırpılır ve not düşülür.
+slash komutlar yalnız çağırana görünen şık **embed kartlar** açar: `/durum` ve `/yardim` tek
+kart, `/zihin` üç sütunlu kart (Kişiler/Konular/Olaylar) + üstte kişi seçme menüsü + altta
+Konular/Olaylar/Bot özeti butonları. Menü ya da buton, ilgili **detay modalını** açar — kişi
+kartı Kimlik/İzlenim/Etiketler/Bildikleri/Son olaylar diye ayrı alanlara bölünür, hiçbir şey
+tek metin kutusuna boca edilmez. modallar gösterimliktir; içlerinden veri toplanmaz. taşan
+alan 4000 karakterde son satır/boşluk hizasında kırpılır ve not düşülür.
 - `!model` — şu anki model. `!model <id>` değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
 
 ## ayarlar

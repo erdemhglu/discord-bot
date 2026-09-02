@@ -105,7 +105,7 @@ döngüler tik başında bakar ve döner, bekçi yeniden başlatmaz; `main`'in k
 
 ### Discord olayları (Handler)
 - `ready` — bot adını yazar; her gelişte sunuculara slash komutları kaydeder (`modal::komutlari_kayit`, idempotent); `baslatildi` ilk kez ise beş döngüyü başlatır.
-- `interaction_create` — `Command` → adına göre modal (`modal_durum`/`modal_zihin`/`modal_yardim`); `Modal` → kısa ephemeral onay (girdi toplanmaz); `Component` → `dusunce_dugmesi` (eski düşünce butonu akışı).
+- `interaction_create` — `Command` → adına göre ephemeral embed kart (`durum_mesaji`/`zihin_mesaji`/`yardim_mesaji`); `Modal` → kısa ephemeral onay (girdi toplanmaz); `Component` → düşünce butonu (`dusunce_dugmesi`) ya da zihin detay katmanı (`ZIHIN_KONULAR/OLAYLAR/OZET` butonları bölüm modalı, `ZIHIN_KISI_SEC` menüsü kişi modalı açar).
 - `guild_create` — `taranan`'a ilk kez giriyorsa arka planda `gecmisi_oku → profilci → hoca (huy boşsa)`.
 - `guild_member_addition` — kanal: sunucu sistem kanalı → varsayılan; favori ise adını kaydet; sohbet açık/yasaklıysa çık; `uret(HOS_GELDIN)` → mention'lı gönder (ping açık) → sohbet başlat.
 - `message` — bot/webhook/DM ise çık; `GUILD_ID`/`KANALLAR` dışıysa çık; `content_safe`; **ek görsel:** `attachments` içinde `content_type`'ı `image/` ile başlayan ilk ekin URL'i alınır, erken çıkış "metin de ek de boş" hâline gelir (sırf resim atılmış mesaj işlenir); metin `[resim] <metin>` ya da `[resim attı]` olarak işaretlenir ve bu işaretli metin hafızaya, kanal notuna ve sohbet satırına aynen gider — URL yalnız sohbet geçmişindeki `Mesaj.resim`'e konur ve yeni kullanıcı satırı eklenirken önceki girdilerin `resim`'i `None` yapılır (yalnız en son görsel modele gider). **1. faz (kilit):** etiketlendi mi (mention listesi, yanıtlanan mesaj botun mu, metinde bot adı geçiyor mu) → `hatirla`, `ad_id`/`kullanici_adlari`, `son_kanal`, favori adı; haber bekleme süresi dolduysa sohbeti kapat; **uyuyorsa**: etiketlendiyse `bekleyen_etiketler`'e (20) ekle, çık; `devam_eden_diyalog` — sohbet açık VE sohbetteki son user mesajının sahibi bu mesajı atanla aynı isimse (gerçekten kendisiyle konuşuyor) → doğrudan cevaplanır, isteklilik değerlendirmesi atlanır. Etiket de aynı şekilde doğrudan cevaplanır. İkisi de değilse (kanalda başka biri yazdı, ya da sohbet yok) isteklilik değerlendirmesi gerekir (kanal başına en sık 2 dk). **2. faz (kilitsiz):** gerekiyorsa `isteklilik()`; puan ≥ eşik (evre ±1, seyahat +2) ise katılır; çağrı yoksa yedek zar (`SANS`). **3. faz (kilit):** katılıyorsa `sohbet_baslat`, kullanıcı satırını geçmişe ekle (20'de tut), `kanal_not`. Kilit dışı: `cevapla`. Not: bu, bir kez açılan sohbette kanaldaki HERKESE otomatik cevap verme davranışını (eski tasarım) kaldırır — yalnız gerçek muhatabına.
@@ -119,7 +119,7 @@ döngüler tik başında bakar ve döner, bekçi yeniden başlatmaz; `main`'in k
 ## src/komut.rs (impl Bot)
 Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot::komut(ctx, msg, komut, arg)`'a düşer, tanınan komut true döner ve mesaj sohbete girmez.
 - `komut` dalları: sifirla · haber · sorun · gez · saka/hack · ajanlar · uyan · uyu · durum · zihin · düşünme · model · yardım/help.
-- `zihin`: `hafiza::dizin_yenile()` çıktısını 1900'lük parçalar halinde kanala döker + `/zihin` yönlendirmesi (5×4000 karakteri kanala dökmek yerine).
+- `zihin`: `modal::zihin_embedleri` kartını kanala gönderir + "detay için `/zihin`" (kanal mesajında bileşen/modaal açılamaz, etkileşim gerekir).
 - `durum`: `modal::durum_metni` ile ortak metin (`!durum` ve `/durum` aynı satırı gösterir).
 - `düşünme` (`dusunme` da tanınır): argüman `DusunmeKip::arg_ile` ile çözülür (göster/aç, gizle, sessiz, kapat/kapalı); kipi `Durum.dusunme`'ye yazar, `durum/dusunme.md`'de kalıcılaştırır. Argümansız çağrı mevcut kipi söyler.
 - `yardım`/`yardim`/`help`: `YARDIM` sabiti, tüm komutların kısa listesi.
@@ -135,14 +135,18 @@ denemek için. `cargo run -- sohbet` ile açılır (`main`).
 - Testler: `satir_cozulur`, `gecmis_bellekte_sinirli`.
 
 ## src/modal.rs
-Slash komut modalları; discord sınırları tasarımı belirler (en çok 5 bileşen, TextInput value ≤4000, başlık/etiket ≤45).
-- `durum_metni(d)` — evre/gün, sayaçlar, model, uyku, düşünme, seyahat, token metriği; `!durum` ve `/durum` ortak kullanır.
-- `zihin_bolumleri(d)` → `bolumler(...)` (saf birleştirme) — 5 slot: bot özeti (+ kendim son 4 satır), kişiler ikiye bölünmüş (mtime sırası, ilk yarı "yakın"), konular (ad + son not), olaylar (son 15) + gündem (1500'e kırpık).
-- `sigdir` — 4000'i aşan içerik son satır/boşluk hizasında kesilir + "sığmadı, kırpıldı" notu.
-- `modal_olustur` — her bölmeye `InputText(paragraph, required=false)`; boş bölmeye "(henüz boş)".
-- `modal_zihin` / `modal_durum` / `modal_yardim` — `CreateInteractionResponse::Modal` olarak gider; zihin herkese açık.
+Komut arayüzü: slash komutlar ephemeral **embed kart** döndürür (web sayfası gibi bölümlü),
+detaylar **etiketli modal alanlarına** dağıtılır — tek metin kutusuna her şey boca edilmez.
+Discord sınırları: embed field value ≤1024, modal ≤5 bileşen × value ≤4000, başlık/etiket ≤45,
+select menü ≤25 seçenek (etiket ≤45, açıklama ≤100).
+- `durum_metni(d)` — evre/gün, sayaçlar, model, uyku, düşünme, seyahat, token metriği (+ kırılım); `!durum` kullanır. `token_kirilimi(m)` — kategoriler toplam tokene göre sıralı.
+- `zihin_embedleri(d)` — tek kart: description evre/gün/model/kip; üç satır içi alan: Kişiler (ilk 8: ad+puaan+etiket), Konular (ilk 8: ad+son not), Olaylar (son 5, en yeni aydan kronolojik); footer bot adı + tarih. Boş alan "—".
+- `zihin_bilesenleri()` — 1. satır: kişi select menüsü (`ZIHIN_KISI_SEC`, ≤25 kişi, değer=id, açıklama etiket+not); 2. satır: Konular/Olaylar/Bot özeti butonları.
+- `zihin_mesaji(d)` / `durum_mesaji(d)` / `yardim_mesaji()` — ephemeral `CreateInteractionResponseMessage` (embed + bileşen).
+- Detay modalları (`modal_kisi(id)` / `modal_konular()` / `modal_olaylar()` / `modal_ozet(d)`) — her konu kendi etiketli alanında: kişi = Kimlik/İzlenim/Etiketler/Bildikleri(son 8)/Son olaylar(son 5); konular = Son değişenler(15)+Diğer; olaylar = ay başına alan (son 3 ay, her ayın son 10 kaydı, başlık "Eylül 2026"); özet = Durum/Token/Kendim/Gündem. Boş bölümler atlanır, hepsi boşsa tek "(henüz boş)" alanı.
+- `sigdir(metin, sinir)` — sınır aşımı son satır/boşluk hizasında kesilir + not. `ay_adi("2026-09")` → "Eylül 2026".
 - `komutlari_kayit(http, guild)` — `/durum` `/yardim` `/zihin` sunucu komutları; her ready'de idempotent.
-- `hafiza.rs` yardımcıları: `kisi_dokumleri` (mtime sırası `Kisi` listesi), `konu_dokumleri` (ad + son not), `olay_dokumu` (bu ay).
+- `hafiza.rs` yardımcıları: `kisi_dokumleri` (mtime sırası `Kisi` listesi), `konu_dokumleri` (ad + son not), `olay_aylari(n)` (son n ayın "- " satırları, en yeni ay başta).
 
 ## src/ajanlar.rs (impl Bot)
 - `profilci()` — son 600 satır → `analiz(PROFIL_CIKAR, 1200)` → `profil.md` + `Durum.profil`.

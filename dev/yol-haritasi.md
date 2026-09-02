@@ -22,19 +22,23 @@ etiket listesi hata kaybına karşı geri konur, üniversite haber önceliği.
 ### Adım 7 · Final — TAMAMLANDI
 Tüm adımlar bitti; docs + doğrulama + push tamam. Açık kalanlar aşağıdaki "Bekleyen" listesinde.
 
-## Adım 8: Modal'lar + /zihin — TAMAMLANDI
-Yeni `src/modal.rs`: `zihin_bolumleri` 5 slot (özet / kişiler iki yarıda / konular /
-olaylar+gündem), `sigdir` 4000 sınırında son satır/boşluk hizasında keser + not,
-`modal_zihin/durum/yardim`, `komutlari_kayit` (guild komutları, ready'de idempotent).
-`interaction_create` yeniden yazıldı: `Command` → modal, `Modal` → ephemeral onay,
-`Component` → `dusunce_dugmesi` (ayrı impl). `!zihin` dizin dökümü + `/zihin` yönlendirmesi;
-`!durum` artık `modal::durum_metni` ortak metni. 4 yeni test.
+## Adım 8: Modal'lar + /zihin — TAMAMLANDI (arayüz 2026-09-02 yeniden tasarlandı)
+İlk sürüm 5 slotlu zihin modalıydı; canlı şikayet üzerine (içerik boş/kötü, tek kutuya boca)
+**embed kart + detay modalı** düzenine geçildi: `/durum` `/yardim` `/zihin` ephemeral embed kart,
+`/zihin`'de kişi select menüsü + bölüm butonları, her detay kendi etiketli modal alanlarında.
+Ayrıntı `dev/ilerleme.md`'nin ilgili kaydında ve `docs/moduller.md` `src/modal.rs` bölümünde.
+Eski 5 slot (`modal_zihin`/`bolumler`) kaldırıldı.
 
 Doğrulanmış serenity 0.12.5 API notları:
 - `CreateModal::new(custom_id, title)` — sıra: önce custom_id, sonra title.
 - `CreateInputText::new(style, label, custom_id)` + `.value().required(false)`.
+- `CreateSelectMenu::new(custom_id, CreateSelectMenuKind::String{options})` + `.placeholder()`;
+  `CreateSelectMenuOption::new(label, value)` + `.description()`; `CreateActionRow::SelectMenu`.
+- `CreateEmbed::new().title/color/description/field/ad/footer`; embed field value ≤1024.
+- `CreateInteractionResponseMessage::new().ephemeral().embeds().components()`.
 - `GuildId::set_commands(http, Vec<CreateCommand>)`; `CreateCommand::new(ad).description(...)`.
-- Interaction varyantı `Interaction::Modal` (ModalSubmit değil).
+- Interaction varyantı `Interaction::Modal` (ModalSubmit değil); select menü seçimi
+  `ComponentInteractionData.kind`'da `ComponentInteractionDataKind::StringSelect{values}`.
 
 Kalan risk: modal canlı davranışı Discord'ta görülecek (birim testleri boyut mantığını korur).
 

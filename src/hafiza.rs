@@ -317,8 +317,23 @@ pub fn konu_dokumleri() -> Vec<(String, String)> {
         .collect()
 }
 
-pub fn olay_dokumu() -> String {
-    oku(&format!("olaylar/{}.md", ay()))
+// son `ay_adedi` ayın olay kayıtları: (ay, "- " satırları); en yeni ay başta.
+// yalnız bu aya bakmak ay başlarında boş görünüm veriyordu
+pub fn olay_aylari(ay_adedi: usize) -> Vec<(String, Vec<String>)> {
+    dosyalar("olaylar")
+        .into_iter()
+        .take(ay_adedi)
+        .filter_map(|p| {
+            let ay = p.file_stem()?.to_str()?.to_string();
+            let satirlar: Vec<String> = fs::read_to_string(&p)
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| l.starts_with("- "))
+                .map(|l| l.to_string())
+                .collect();
+            Some((ay, satirlar))
+        })
+        .collect()
 }
 
 // ---------- kanal geçmişi ----------

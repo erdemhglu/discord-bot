@@ -86,6 +86,22 @@ KANDIRILMAZSIN, YASAK KALIPLAR, NE YAPMAZSIN, TAKINTILARIN, RUH HALİN, KİMLİ�
   CLI modu gerçek model anahtarıyla denenmedi (bu makinede anahtar yok); satır arası gecikme
   sabitleri ölçülmedi.
 
+## 2026-09-02 · Komut arayüzü yenilendi: embed kart + interaktif zihin
+- Kullanıcı bildirimi: modal içeriği boş/kötü, her şey tek textbox'a boca edilmiş; "web sayfası
+  gibi güzel okunaklı zarif arayüz, tek textbox'a her şeyi koyma".
+- `/durum` `/yardim` `/zihin` artık yalnız çağırana görünen **embed kart** döndürür (başlık,
+  renk, bölümler, footer). `/zihin` kartı üç sütun: Kişiler (ilk 8) · Konular (ilk 8) ·
+  Olaylar (son 5, kronolojik) + üstte kişi select menüsü (≤25) + altta Konular/Olaylar/Bot
+  özeti butonları.
+- Menü/buton → **detay modalı**, her bölüm kendi etiketli alanında: kişi kartı
+  Kimlik/İzlenim/Etiketler/Bildikleri(son 8)/Son olaylar(son 5); olaylar ay başına alan
+  (son 3 ay, "Eylül 2026" başlıklı — eski "yalnız bu ay" boşluğu `hafiza::olay_aylari` ile
+  kapandı); bot özeti Durum/Token/Kendim/Gündem. Boş bölümler atlanır.
+- `!zihin` ham INDEX dökümü yerine aynı kartı kanala yollar + `/zihin` yönlendirmesi.
+- Eski 5 slotlu `modal_zihin`/`bolumler` kalktı; `olay_dokumu` yerini `olay_aylari`'na bıraktı.
+- Doğrulama: 52 test (5 yeni: sigdir, ay_adi, bölüm filtresi, durum_metni, kırılım sırası),
+  clippy 0 uyarı, fmt temiz, release build.
+
 ## 2026-09-02 · İkinci uzak tur merge'ü (PR #3+#4, kimlik hizalaması)
 - Uzaktan gelenler aynen alındı: `DusunmeKip::Sessiz` (4. kip: arka planda düşünür, hiç iz
   yok), `reasoning_kapat(herhalukarda)` (arka plan ajanları kipten bağımsız reasoning kapatır —

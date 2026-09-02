@@ -113,11 +113,16 @@ döngüler bu kipte hiç çalışmaz. (Tek istisna: `Bot::kur()` canlı yolla or
 cevap alışverişi görülmedi (bkz. AGENTS.md "Bilinen açıklar").
 
 ## Modal'lar (slash komutlar)
+
+## Komut arayüzü (slash → embed kart → detay modalı)
 `ready` → her sunucuya `/durum` `/yardim` `/zihin` kaydı (idempotent) → kullanıcı slash çalıştırır →
-`interaction_create(Command)` → `modal_durum`/`modal_yardim`/`modal_zihin` → modal açılır (herkese açık).
-`/zihin`: dizin + durum dosyalarından 5 bölmelik içerik (her bölme ≤4000, taşanı kırpılır).
+`interaction_create(Command)` → ephemeral **embed kart** (`durum_mesaji`/`yardim_mesaji`/`zihin_mesaji`),
+yalnız çağırana görünür.
+`/zihin` kartı: üç sütun (Kişiler/Konular/Olaylar) + üstte kişi select menüsü, altta Konular/Olaylar/Bot özeti butonları.
+Menüden kişi seç ya da butona bas → `interaction_create(Component)` → ilgili **detay modalı**
+(`modal_kisi` / `modal_konular` / `modal_olaylar` / `modal_ozet`); her bölüm kendi etiketli alanında, tek kutuya boca yok.
 Kullanıcı modal'ı gönderirse → `interaction_create(Modal)` → kısa ephemeral onay; girdi toplanmaz.
-Paralel düz metin: `!durum`, `!zihin` (dizin dökümü + yönlendirme), `!yardım` aynen durur.
+Paralel düz metin: `!durum` ortak `durum_metni`; `!zihin` aynı embed kartını kanala yollar + `/zihin` yönlendirmesi; `!yardım` aynen.
 
 ## Sunucuya bağlanınca
 `guild_create` (sunucu başına bir kez) → arka planda: 14 gün geriye tarama (izinli kanallar, 100'lük sayfalar) → ham hafıza son 2000 → profilci → hoca (huy boşsa). Yeniden bağlanmada tekrar taranmaz.
