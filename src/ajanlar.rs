@@ -59,9 +59,9 @@ impl Bot {
             Ok(yeni) => {
                 hafiza::yaz("profil.md", &yeni);
                 self.durum().profil = yeni;
-                println!("profilci: profil güncellendi");
+                log::info!("profilci: profil güncellendi");
             }
-            Err(e) => eprintln!("profilci: {e}"),
+            Err(e) => log::warn!("profilci: {e}"),
         }
     }
 
@@ -80,11 +80,11 @@ impl Bot {
         };
         let cevap = match self.analiz(&dokum, &talimat, 1200).await {
             Ok(c) => c,
-            Err(e) => return eprintln!("gunlukcu: {e}"),
+            Err(e) => return log::warn!("gunlukcu: {e}"),
         };
         let kayit: Kayit = match serde_json::from_str(json_ayikla(&cevap)) {
             Ok(k) => k,
-            Err(e) => return eprintln!("gunlukcu: json çözülemedi: {e}"),
+            Err(e) => return log::warn!("gunlukcu: json çözülemedi: {e}"),
         };
 
         if !kayit.olay.is_empty() {
@@ -133,7 +133,7 @@ impl Bot {
             self.durum().kendim = kayit.kendim.trim().to_string();
         }
         self.durum().dizin = hafiza::dizin_yenile();
-        println!("gunlukcu: {kaynak} kaydedildi");
+        log::info!("gunlukcu: {kaynak} kaydedildi");
 
         self.ozetleyici().await;
     }
@@ -197,14 +197,14 @@ impl Bot {
                         hafiza::arsivle(&parca, &eski);
                     }
                     hafiza::yaz(&parca, yeni.trim_end());
-                    println!(
+                    log::info!(
                         "ozetleyici: {parca} {} -> {} karakter",
                         eski.len(),
                         yeni.len()
                     );
                 }
-                Ok(_) => eprintln!("ozetleyici: {parca} küçülmedi, bırakıldı"),
-                Err(e) => eprintln!("ozetleyici: {parca}: {e}"),
+                Ok(_) => log::warn!("ozetleyici: {parca} küçülmedi, bırakıldı"),
+                Err(e) => log::warn!("ozetleyici: {parca}: {e}"),
             }
         }
         self.durum().dizin = hafiza::dizin_yenile();
@@ -238,9 +238,9 @@ impl Bot {
             Ok(huy) => {
                 hafiza::yaz("huy.md", &huy);
                 self.durum().huy = huy;
-                println!("hoca: huy güncellendi");
+                log::info!("hoca: huy güncellendi");
             }
-            Err(e) => eprintln!("hoca: {e}"),
+            Err(e) => log::warn!("hoca: {e}"),
         }
     }
 
@@ -258,9 +258,9 @@ impl Bot {
             Ok(notlar) => {
                 hafiza::yaz("duzeltmeler.md", &notlar);
                 self.durum().duzeltmeler = notlar;
-                println!("elestirmen: notlar güncellendi");
+                log::info!("elestirmen: notlar güncellendi");
             }
-            Err(e) => eprintln!("elestirmen: {e}"),
+            Err(e) => log::warn!("elestirmen: {e}"),
         }
     }
 
@@ -306,7 +306,7 @@ impl Bot {
                     }
                 }
             }
-            Err(e) => eprintln!("haberci: rss: {e}"),
+            Err(e) => log::warn!("haberci: rss: {e}"),
         }
         if haberler.is_empty() {
             return Err("haber bulunamadı".into());

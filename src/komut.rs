@@ -18,6 +18,10 @@ impl Bot {
     // tanınan komutsa true döner
     pub async fn komut(&self, ctx: &Context, msg: &Message, komut: &str, arg: &str) -> bool {
         let kanal = msg.channel_id;
+        log::debug!(
+            "komut [{kanal}]: !{komut} arg=\"{arg}\" kullanıcı={}",
+            msg.author.id
+        );
         let soyle = |m: String| async move {
             let _ = kanal.say(&ctx.http, m).await;
         };
@@ -101,8 +105,9 @@ impl Bot {
                 let metin = {
                     let d = self.durum();
                     let g = &d.gelisim;
+                    let m = &d.metrik;
                     format!(
-                        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {}",
+                        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · seyahat: {} · token: {} çağrı, {} giriş + {} çıkış",
                         gelisim::evre(g).ad,
                         gelisim::gun(g) + 1,
                         g.sohbet,
@@ -111,6 +116,9 @@ impl Bot {
                         if uyku::uyanik_mi(&d) { "uyanık" } else { "uyuyor" },
                         d.dusunme.ad(),
                         seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
+                        m.cagri,
+                        m.giris_token,
+                        m.cikis_token,
                     )
                 };
                 soyle(metin).await;

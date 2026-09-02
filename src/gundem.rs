@@ -208,7 +208,7 @@ impl Bot {
     pub async fn gezgin(&self) {
         let haberler = match rss(&self.http).await {
             Ok(h) => h,
-            Err(e) => return eprintln!("gezgin: {e}"),
+            Err(e) => return log::warn!("gezgin: rss: {e}"),
         };
         let liste = haberler
             .iter()
@@ -226,7 +226,7 @@ impl Bot {
         };
         let secim = match self.analiz(&liste, &talimat, 20).await {
             Ok(s) => s,
-            Err(e) => return eprintln!("gezgin: {e}"),
+            Err(e) => return log::warn!("gezgin: seçim: {e}"),
         };
         let secilen: Vec<usize> = secim
             .split(|c: char| !c.is_ascii_digit())
@@ -235,7 +235,7 @@ impl Bot {
             .take(3)
             .collect();
         if secilen.is_empty() {
-            return eprintln!("gezgin: seçim çözülemedi: {secim}");
+            return log::warn!("gezgin: seçim çözülemedi: {secim}");
         }
 
         let mut okunan = String::new();
@@ -250,7 +250,7 @@ impl Bot {
 
         let not = match self.uret(&[kullanici(okunan)], GEZGIN_NOT, Some(350)).await {
             Ok(n) => n,
-            Err(e) => return eprintln!("gezgin: {e}"),
+            Err(e) => return log::warn!("gezgin: not: {e}"),
         };
 
         let mut g = girisler(&hafiza::oku("gundem.md"));
@@ -266,7 +266,7 @@ impl Bot {
         let metin = g.join("\n\n");
         hafiza::yaz("gundem.md", &metin);
         self.durum().gundem = son_gundem(&metin);
-        println!("gezgin: gündem notu yazıldı");
+        log::info!("gezgin: gündem notu yazıldı");
     }
 }
 

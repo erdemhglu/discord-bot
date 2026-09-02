@@ -97,7 +97,7 @@ pub fn guncelle(d: &mut Durum) {
         if !d.planlar.iter().any(|p| p.gun == g) {
             let p = plan_kur(g, gergin_mi(d));
             if p.uykusuz_bas.is_some() {
-                println!(
+                log::info!(
                     "uyku: {} gecesi uykusuz geçecek",
                     hafiza::tarih_unix(g * 86400)
                 );

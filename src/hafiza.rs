@@ -36,7 +36,7 @@ pub fn yaz(parca: &str, icerik: &str) {
         let _ = fs::create_dir_all(ust);
     }
     if let Err(e) = fs::write(&p, icerik) {
-        eprintln!("{} yazılamadı: {e}", p.display());
+        log::error!("{} yazılamadı: {e}", p.display());
     }
 }
 

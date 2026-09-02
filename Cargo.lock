@@ -284,6 +284,7 @@ version = "0.2.0"
 dependencies = [
  "base64",
  "dotenvy",
+ "log",
  "rand 0.8.8",
  "reqwest",
  "serde",
