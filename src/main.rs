@@ -1572,7 +1572,7 @@ async fn gecmisi_oku(bot: &Bot, ctx: &Context, guild: &Guild) {
         }
         hatirla(&mut d, isim, metin);
     }
-    log::info!("{}: {} mesaj okundu", guild.name, toplam.len());
+    log::debug!("{}: {} mesaj okundu", guild.name, toplam.len());
 }
 
 // haber ve hoş geldin için kanal: ayarlanmışsa o, yoksa sunucunun sistem kanalı, o da yoksa en üstteki metin kanalı

@@ -59,7 +59,7 @@ impl Bot {
             Ok(yeni) => {
                 hafiza::yaz("profil.md", &yeni);
                 self.durum().profil = yeni;
-                log::info!("profilci: profil güncellendi");
+                log::debug!("profilci: profil güncellendi");
             }
             Err(e) => log::warn!("profilci: {e}"),
         }
@@ -197,7 +197,7 @@ impl Bot {
                         hafiza::arsivle(&parca, &eski);
                     }
                     hafiza::yaz(&parca, yeni.trim_end());
-                    log::info!(
+                    log::debug!(
                         "ozetleyici: {parca} {} -> {} karakter",
                         eski.len(),
                         yeni.len()
@@ -238,7 +238,7 @@ impl Bot {
             Ok(huy) => {
                 hafiza::yaz("huy.md", &huy);
                 self.durum().huy = huy;
-                log::info!("hoca: huy güncellendi");
+                log::debug!("hoca: huy güncellendi");
             }
             Err(e) => log::warn!("hoca: {e}"),
         }
@@ -258,7 +258,7 @@ impl Bot {
             Ok(notlar) => {
                 hafiza::yaz("duzeltmeler.md", &notlar);
                 self.durum().duzeltmeler = notlar;
-                log::info!("elestirmen: notlar güncellendi");
+                log::debug!("elestirmen: notlar güncellendi");
             }
             Err(e) => log::warn!("elestirmen: {e}"),
         }

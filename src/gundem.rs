@@ -266,7 +266,7 @@ impl Bot {
         let metin = g.join("\n\n");
         hafiza::yaz("gundem.md", &metin);
         self.durum().gundem = son_gundem(&metin);
-        log::info!("gezgin: gündem notu yazıldı");
+        log::debug!("gezgin: gündem notu yazıldı");
     }
 }
 
