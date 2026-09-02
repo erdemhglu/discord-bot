@@ -2,8 +2,9 @@
 
 ## Bir mesaj geldi
 0. Her mesaj (bot dahil, `gonder` üstünden) kanalın geçmişine düşer: `kanal_not` → bellek (60 satır) + `durum/kanallar/<id>.md`. Yeni sohbet açılırken son 10 satır tohum olur (`sohbet_baslat`), böylece sohbet bitmiş ya da bot yeniden başlamış olsa da bağlam kaybolmaz.
-0. Metin `!` ya da `/` ile başlıyorsa `komut.rs::Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · düşünme · model · yardım/help. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır. `düşünme göster/gizle/sessiz/kapat` düşünme kipini değiştirir (`durum/dusunme.md`): göster=spoiler'da, gizle="Düşünüyorum..." sonrası cevap, sessiz=arka planda düşünür ama hiç iz göstermez (placeholder/sayaç/buton yok), kapat=istekler reasoning'siz.
-1. `Handler::message`: bot/webhook/DM → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
+0. **Ham** metin (resim işareti eklenmeden önceki `content_safe` çıktısı) `!` ya da `/` ile başlıyorsa `komut.rs::Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · düşünme · model · yardım/help. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır. `düşünme göster/gizle/sessiz/kapat` düşünme kipini değiştirir (`durum/dusunme.md`): göster=spoiler'da, gizle="Düşünüyorum..." sonrası cevap, sessiz=arka planda düşünür ama hiç iz göstermez (placeholder/sayaç/buton yok), kapat=istekler reasoning'siz.
+1. `Handler::message`: bot/webhook/DM → çık; `GUILD_ID`/`KANALLAR` ayarlıysa dışarıdaki sunucu/kanal → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
+1b. **Resim eki:** `msg.attachments` içinde `content_type`'ı `image/` ile başlayan ilk ekin URL'i alınır. Erken çıkış artık "metin boş" değil "metin de ek de yok": sırf görsel atılmış mesaj da işlenir. Hafızaya/kanal notuna/sohbet satırına giden metin işaretlenir: metin varsa `[resim] <metin>`, yoksa `[resim attı]`. URL yalnız sohbet geçmişindeki `Mesaj.resim` alanına konur ve **yalnız en son kullanıcı mesajında** kalır (yeni satır eklenirken eskilerin `resim`'i `None` olur: discord cdn linki ömürlü, eski görseli her turda yollamak token yakar). `mesaj_json` bu alanı görürse istek gövdesinde `content` düz metin değil `[{text},{image_url}]` dizisi olur (ajanlar.rs `resimci` ile aynı biçim).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.
 4. Haber attıysa ve 2 saat dolduysa o sohbeti sessizce kapat (yasak yok).
@@ -19,20 +20,66 @@
 7. Sohbet açıksa kullanıcı satırını geçmişe ekle (son 20).
 8. Kilit dışı: `cevapla`.
 
+## Çıktı protokolü (her kişilikli cevap bundan geçer)
+Model düz metin değil **satır bazlı bir protokol** yazar; `cevap_parcala` çözer (`soy` uygulanmış
+metin üzerinde, yeniden soyma yok):
+- **Her satır ayrı bir discord mesajıdır.** Boş satırlar atılır, en çok `PATLAMA_SINIRI` (4) satır
+  gider; fazlası düşer (debug log). 1900'ü aşan satır `bol` ile kendi içinde bölünür.
+- **`tepki: 💀`** satırı yazı olarak GİTMEZ, cevaplanan mesaja emoji tepkisi olur. Büyük/küçük harf
+  ve "tepki :" boşluğu tolere edilir; iki noktadan sonraki ilk emoji dizisi alınır (harf, boşluk ve
+  bilinen emoji bloklarından bir karakter — U+2600–27BF, U+2B00–2BFF, U+1F000–1FAFF, ©/®/™ gibi
+  tekiller — + peşindeki varyasyon seçici/ZWJ/keycap, en çok 8 char). Tanım bilerek dar: `—`, `…`,
+  `→`, tipografik tırnak emoji değildir, Discord bunlara 400 döner. `:kekw:` gibi özel emoji biçimi
+  ve emoji bulunmayan satır sessizce düşer. İlk tepki kazanır.
+- **Susma:** tek başına `-` (ya da `"-"`, `'-'`, `[sus]`, `(sus)`) satırı `sus` bayrağını kaldırır ve
+  satır olarak gitmez. Yalnız `sus` varsa hiçbir şey gönderilmez.
+- **Kırıntı ve slop:** `'` ile başlayan satır (önceki mesajın devamı) atılır; `slop_temizle` baştaki
+  `- `/`* `/`• ` madde öneklerini ve `**`/`__` işaretlerini siler (backtick'in kendisi de İÇİ de
+  korunur: `` `__init__` `` bozulmaz). `1. `/`2) ` numara öneki yalnız cevapta **≥2 numaralı satır**
+  varsa (gerçek liste) silinir — tek satırdaki "3. sınıftayım" Türkçe sıra sayısıdır. Aynı turda
+  birebir tekrar eden satır ikinci kez gitmez. **Kısa satır elenmez**: "he", "yok", "la" doğal
+  tepkidir.
+- Geçmişe ve kanal notuna giren biçim `Cevap::protokol_metni()`: satırlar `\n` ile, varsa sonunda
+  `tepki: 💀`. Model bir sonraki turda kendi biçimini görsün diye böyle.
+
 ## cevapla (bir sohbet turu, stream)
 ```
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
-bekle 0,15-0,35 sn ── güncel geçmiş + son mesaj + bekleyenler ── arastir(link/haber/araştır) ── hedef seçimi (2+ yazan varsa) ── yazıyor…
-uret_akis(stream, bütçe: cevap_butcesi!; release'de bütçe yok) ── (hata: meşgul=0, çık)
-gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünürken (cevap başlamadı): göster="Düşünüyorum...", gizle=canlı kelime sayacı, sessiz/kapalı=hiçbir şey (mesaj cevap başlayana dek hiç açılmaz) ── cevap başlayınca aynı mesaj düzenlenerek stream ── göster: thinking newline'sız tek satır, hem spoiler hem kod bloğu ── gizle: thinking mesajda yok, cevap sonunda "Düşünce Sürecini Göster" butonu (interaction_create tıklayana ephemeral kod bloğu açar, düşünce deposu 50 mesaj) ── sessiz: reasoning isteniyor (arka planda çalışıyor) ama hiç toplanmıyor/gösterilmiyor, buton da yok ── kapalı: istek reasoning'siz ── 1900'ü aşan parça yeni mesaj ── discord yanıtı her cevapta ilk mesajda
-tekrar_mi? bir kez yeniden üret, yine tekrarsa açılanları sil ve sus
+bekle 0,15-0,35 sn ── güncel geçmiş + son mesaj + bekleyenler ── ruh hali (4 turda bir) ── arastir(link/haber/araştır) ── hedef seçimi (2+ yazan varsa) ── soru tavanı (soru_fazla_mi) ── yazıyor…
+uret_akis(stream, bütçe: cevap_butcesi!) ── (hata: meşgul=0, çık)
+gonder_akis: mesaj ilk ANLAMLI içerikle açılır (yerleşim boş kaldığı sürece "ilk" harcanmaz; akis_kesiti kısa yarım satırı bekletir) ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünürken (cevap başlamadı): göster="Düşünüyorum...", gizle=canlı kelime sayacı, sessiz/kapalı=hiçbir şey (mesaj cevap başlayana dek hiç açılmaz) ── cevap başlayınca aynı mesaj düzenlenerek stream ── göster: thinking newline'sız tek satır, hem spoiler hem kod bloğu ── gizle: thinking mesajda yok, cevap sonunda "Düşünce Sürecini Göster" butonu (interaction_create tıklayana ephemeral kod bloğu açar, düşünce deposu 50 mesaj) ── sessiz: reasoning isteniyor (arka planda çalışıyor) ama hiç toplanmıyor/gösterilmiyor, buton da yok ── kapalı: istek reasoning'siz ── discord yanıtı yalnız ilk mesajda
+akış SÜRERKEN görünen kısım: tamamlanmış satırlar (ardında \n olan) + son yarım satır ancak YARIM_SATIR_ESIGI (12) karakteri geçtiyse (akis_kesiti) ── böylece "tep" yarım hâlde mesaj olup silinmez
+akış BİTİNCE cevap_parcala:
+  sus ∧ satır yok ∧ TEPKİ DE YOK → açılan geçici mesajlar silinir, AkisSonuc::Sus (geçmişe hiçbir şey girmez, sayac artmaz, son_aktivite tazelenmez, yedek uret ÇAĞRILMAZ; hackli yine de azalır) ── "-" ile "tepki: 💀" birlikte gelirse susma değil, emoji düşer
+  hiçbir şey yok → AkisSonuc::Bos → stream'siz yedek uret + satır bazlı tekrar elemesi + gonder_cevap
+  tekrar_mi SATIR BAZLI: son 5 bot satırıyla aynı olanlar düşer; hiç satır kalmaz ve tepki de yoksa bir kez yeniden üret, yine tekrarsa (ya da yeni cevapta ne satır ne tepki varsa) açılanları sil ve Bos
+  final yerleşim yaz_akis ile yazılır (fazla mesajlar silinir) ── tepki varsa baglam.tepki_hedefi mesajına create_reaction (hata warn log, akış durmaz; yalnız tepki de geçerli bir cevaptır)
 üst üste 2+ farklı kişi yazdıysa HEDEF_SEC mini çağrısı hedef kişiyi seçer; yanıt o kişinin mesajına bağlanır, talimata "ona seslen" notu girer
 üretim sırasında yeni mesaj gelse de akış tamamlanır (sil-baştan yok); yeni mesaj sıradaki turda ele alınır
-stream hiçbir şey üretmediyse uret ile stream'siz yedek
-… bitti değilse: yeni mesaj yoksa çık
-kilit ── meşgul=0 ── asistan satırı ekle (yalnız cevap, thinking değil) ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
+kilit ── meşgul=0 ── her görünen satır ayrı ayrı kendi_mesajlarim'a, hepsi TEK dosya yazımıyla kanal_not_coklu'ya (tepki "bot: tepki: 💀" satırı olarak) ── asistan satırı = protokol_metni ── sayac++ ── hackli-- ── kilit bırak
+… yeni mesaj yoksa çık, varsa bir tur daha
 ```
-Talimat önceliği: hack devam > hack çıkış > boş.
+Talimat önceliği: hack devam > hack çıkış > boş. Üstüne eklenenler: ruh hali, internet bulgusu,
+hedef kişi notu, soru tavanı.
+
+## Soru tavanı
+`soru_fazla_mi(d, kanal)`: kanal geçmişindeki son 4 bot satırından (`tepki:` satırları sayılmaz)
+≥2'si `?` ile bitiyorsa talimata "Bu sefer soru sorma; düz laf et ya da sus." eklenir. Kod ölçer,
+uygulamayı model yapar — kesme/kırpma yok. `cevapla` ve CLI sohbet modu ikisi de uygular.
+
+## gonder_satirlar (stream OLMAYAN yollar)
+`soy` + `cevap_parcala` → `gonder_cevap` (gövde; elinde çözülmüş `Cevap` olan yollar doğrudan onu
+çağırır) → satırlar sırayla ayrı mesaj. Aralarına `300 ms + 15 ms × karakter`
+(tavan 1500 ms) gecikme + `broadcast_typing` girer: stream'in kendi temposu burada yok, üç mesaj
+aynı anda düşmesin. Discord yanıtı yalnız ilk satıra takılır; ping de öyle ama **protokol
+çözüldükten sonra**, gönderim anında ilk satırın başına `<@id> ` diye eklenir — metne baştan
+yapıştırılırsa `-` ve `tepki:` satırları tanınmıyordu. Tepki hedefi verildiyse emoji atılır ve
+kanal notuna protokol biçimiyle yazılır; **hedef yoksa tepki düşürülür** (kanalda görünmeyecek
+tepki "gönderildi" sayılmasın). `sus` ya da gidecek hiçbir şey kalmayan cevapta **hiçbir şey gitmez**,
+`None` döner — açılış göndericileri (dürtme, sorun, haber tanıtımı, hoş geldin, uyandım, uyanış
+cevabı, yolda, gidiyorum, isim duyurusu) o turu atlar, sohbet açılmaz. Döndürdüğü `protokol_metni`
+sohbeti tohumlayan açılış metni olur. `saka_yap` görsel + metni tek mesajda yolladığı için
+protokolden yalnız ilk satırı alır.
 
 ## Sohbet yaşam döngüsü
 - Başlangıç kaynakları: rastgele araya girme, etiket, hoş geldin, haber paylaşımı, dürtme, şaka, uyanınca dönüş, yoldan mesaj, gidiyorum duyurusu. Açılışlı olanlar `sayac=1` ile başlar.
@@ -46,6 +93,24 @@ Talimat önceliği: hack devam > hack çıkış > boş.
 3. Kilit: `getir(katilimcilar, ad_id, anahtar, ham hafıza, 20)` → bütçeli bağlam; `sistem_metni`.
 4. `sor` → `temizle` (ad öneki, tırnak, 1900).
 Sohbet cevapları bunu kullanmaz; `uret_akis` aynı sistemi kurup stream açar (`gonder_akis` yazar), kırpma yoktur.
+
+## CLI sohbet (`cargo run -- sohbet`)
+Discord'a hiç bağlanmadan protokolü denemek için terminal tezgâhı (`src/sohbet_cli.rs`).
+```
+main: ilk argüman "sohbet" mi → Bot::kur() (DISCORD_TOKEN İSTEMEZ, yalnız model anahtarı)
+  anahtar yoksa → "sohbet modu açılamadı: <sebep>" + çıkış kodu 1
+bot_adi boşsa (ready hiç gelmiyor) gelisim.isim, o da yoksa "bot"
+sohbet_baslat(ChannelId::new(1)) — gerçek durum/ dosyalarından tohumlanır, kişilik gerçekçi
+döngü: stdin satırı "isim: metin" (iki nokta yoksa ya da bir yanı boşsa yazan "emin") · !cik ya da EOF → çık
+  hatirla + kanal geçmişi (yalnız BELLEKTE, gecmise_ekle) + sohbet geçmişine kullanici satırı
+  soru tavanı talimatı ── uret (stream YOK) ── soy ── cevap_parcala
+  çıktı: her satır "bot_adi: satır" · tepki "[tepki 💀]" · sus "(sustu)" · hiçbir şey yoksa "(boş)" · model hatası "(hata: …)" ve döngü sürer
+  geçmişe protokol_metni iter, sayac++
+```
+Durum içeriğine hiçbir şey yazılmaz: `kanal_not` yerine bellek içi `gecmise_ekle` kullanılır, ajanlar ve
+döngüler bu kipte hiç çalışmaz. (Tek istisna: `Bot::kur()` canlı yolla ortak olduğu için boş
+`durum/{kisiler,konular,olaylar,arsiv,kanallar}` ve `resimler/` klasörlerini oluşturur.) **Doğrulanmadı:** gerçek model anahtarı bu makinede yok, canlı
+cevap alışverişi görülmedi (bkz. AGENTS.md "Bilinen açıklar").
 
 ## Modal'lar (slash komutlar)
 `ready` → her sunucuya `/durum` `/yardim` `/zihin` kaydı (idempotent) → kullanıcı slash çalıştırır →

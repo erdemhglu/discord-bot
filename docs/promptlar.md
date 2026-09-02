@@ -49,6 +49,23 @@ düşülür.
 ## Sayı bekleyen promptlar
 HABER_SEC (tek numara), GEZGIN_SEC (virgüllü). Kod rakam dışını atar; aralık dışıysa 0 / boş.
 
+## Çıktı protokolünü anlatan prompt
+`kisilik.md` `## NASIL YAZARSIN` bölümü modele protokolü öğretir; kod tarafındaki karşılığı
+`cevap_parcala` (bkz. docs/akislar.md "Çıktı protokolü"). İkisi birlikte değişir:
+- her SATIR ayrı mesaj (çoğu zaman tek satır; iki bazen, üç nadir, dört asla — kodda tavan
+  `PATLAMA_SINIRI=4`), nötr/bilgi lafı bölünmez, bölmek duygu sinyalidir
+- söyleyecek şey yoksa tek satır `-` (kod: `sus_isareti` → hiçbir şey gitmez)
+- `tepki: 💀` satırı yazı yerine emoji tepkisi (kod: `tepki_govdesi` + `emoji_ayikla`)
+- madde işareti/numara/kalın yazı/paragraf yok (kod ayrıca `slop_temizle` ile siler)
+- resim atılırsa görür, betimlemez (kod: `mesaj_json` görsel bloğu)
+- üst üste soru yok (kod: `soru_fazla_mi` talimatı)
+`elestirmen.md` "neye bak" listesi bu protokolü de denetler: gereksiz yere cevap verdi mi /
+susması gereken yerde konuştu mu (`-`), tepkiyi yerinde mi kullandı, satırları doğal mı böldü.
+`kisilik.md` içinde model kopyalasın diye konmuş POZİTİF replik listesi yoktur (kopyalıyor,
+bkz kararlar.md); geçen replikler ya yasak kalıp örneği ("ne o öyle …?", "sa naber") ya da
+yapılmaması gereken şeyin örneğidir ("kafam karışık da", "yo erdem, ne var ne yok"). Tek
+biçim örneği `tepki: 💀`.
+
 ## Değiştirirken
 - Metin değişikliği yeniden derleme ister (`include_str!`).
 - Kişilik çekirdeği (`kisilik.md`) "değişmezler"i taşır: asistan gibi davranmama, bot olduğunu

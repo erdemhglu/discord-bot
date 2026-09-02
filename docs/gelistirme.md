@@ -63,7 +63,11 @@ alanına ekle (kod değişmez). Sohbet sonrası düzeltme → `elestirmen.md`.
 
 ## Test etme
 - Birim: `cargo test` (hafiza: tarih, slug, kişi biçimi, anahtar, ham çekme; gundem: rss,
-  html, girişler; seyahat: gün no, yıl sarkması, bayram, yer sabitliği).
+  html, girişler; seyahat: gün no, yıl sarkması, bayram, yer sabitliği; çıktı protokolü:
+  satır bölme, `tepki:`, sus işareti, slop önekleri, patlama sınırı, soru tavanı, `mesaj_json`;
+  sohbet_cli: satır çözme, bellek geçmişi sınırı).
+- Protokol tezgâhı: `cargo run -- sohbet` (discord'suz, yalnız model anahtarı) — satır patlaması,
+  `tepki:` ve `-` davranışını canlı modelde denemek için.
 - Canlı: `.env` doldur, `cargo run --release`, log'da "giriş yapıldı", "<sunucu>: N mesaj okundu",
   "profilci", "hoca". `durum/INDEX.md` oluşmalı. Bir sohbet bitince `gunlukcu: biten sohbet
   kaydedildi` ve `kisiler/` altında dosya.
@@ -72,6 +76,13 @@ alanına ekle (kod değişmez). Sohbet sonrası düzeltme → `elestirmen.md`.
 - Seyahat testi: `seyahat::gunde(gun_no(y,m,d))` birim testleriyle.
 
 ## Yapılmamış / fikirler
+- `reaction_add` olayı yok: bot tepkiyi yalnız verir, kendi mesajına gelen tepkiyi görmez
+  (tepkiye tepki, "kim neye güldü" bilgisi kayıp).
+- Özel (sunucuya yüklü) emoji tepkisi desteklenmiyor: `emoji_ayikla` `:kekw:` biçimini eler,
+  yalnız Unicode emoji atılır. Gerekirse `ReactionType::Custom` + sunucu emoji listesinden
+  doğrulama gerekir.
+- ILGI/keyword kancası: belirli kelime geçince (kendi takıntı konuları) isteklilik çağrısını
+  atlayıp doğrudan girme yolu yok; şimdilik her şey isteklilik puanından geçiyor.
 - Kişi anahtarı için kullanıcı id (görünen ad çakışması).
 - Anahtar kelime için basit kök kesme (Türkçe ekler).
 - `planlar` ve `atilan_haberler` diske yazılmıyor; yeniden başlatınca sıfırlanır.

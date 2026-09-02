@@ -34,7 +34,8 @@ biten sohbet → ajanlar hafızayı ve kişiliği günceller → dosyalar (`duru
 ## Dosya haritası
 | Dosya | Satır | Rol |
 |---|---|---|
-| `src/main.rs` | ~1000 | sabitler, `Durum`, `Bot`, OpenRouter çağrıları, sohbet motoru, döngüler, discord olayları, `main` |
+| `src/main.rs` | ~4200 | sabitler, `Durum`, `Bot`, OpenRouter çağrıları, sohbet motoru, döngüler, discord olayları, `main` |
+| `src/sohbet_cli.rs` | ~170 | `cargo run -- sohbet`: discord'suz terminal sohbet tezgâhı (`impl Bot`), çıktı protokolünü denemek için |
 | `src/ajanlar.rs` | ~420 | arka plan ajanları (`impl Bot` bloğu), `Haber`, `rastgele_resim` |
 | `src/hafiza.rs` | ~475 | dosya hafızası: yol/oku/yaz/arşiv, `Kisi` biçimi, dizin, getirme, sınırlar, tarih |
 | `src/gundem.rs` | ~265 | Sözcü RSS, html temizleme, firecrawl, `gezgin` ajanı, `gundem.md` |

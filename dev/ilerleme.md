@@ -4,6 +4,88 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · İnceleme turu: protokol düzeltmeleri (satır bazlı varsayımların tamamlanması)
+Kapı + üç incelemeci raporundan çıkan yüksek/orta bulguların hepsi uygulandı. Hepsi aynı
+kökten geliyordu: cevap tek mesajken doğru olan varsayımlar satır bazlı protokolde bozuluyor.
+- **`gonder_cevap` ayrıldı** (`gonder_satirlar`'ın gövdesi, `Cevap` alıyor): tepki hedefi yoksa
+  tepki düşürülür, gerçekten gidecek bir şey yoksa `None` döner. Eskiden "tepki: 💀" yazılan
+  bir açılışta Discord'a hiçbir şey gitmiyor ama sohbet açılıp zaman aşımı sayacı başlıyordu.
+- **Hoş geldin ping'i** artık metne baştan yapıştırılmıyor, gönderim anında ilk satıra
+  ekleniyor: `<@id> -` susma işaretini, `<@id> tepki: 💀` tepki satırını gizliyordu.
+- **`gonder_akis`**: `-` + `tepki: 💀` birleşimi artık susma değil (emoji düşüyor); `ilk` bayrağı
+  yalnız gerçekten bir şey yazılınca harcanıyor (yerleşim boş dönerken tükenip ilk boyamayı
+  1,2 sn geciktiriyordu); tekrar sonrası yeniden üretimde tepki-only cevap "boş" sayılmıyor;
+  kayıt tek dosya yazımıyla (`kanal_not_coklu`, önce tur başına 4-5 tam yazım vardı).
+- **`sohbet_baslat` dedup'ı satır bazlı**: açılış geçmişe satır satır düştüğü için tam eşitlik
+  hiç tutmuyor, açılış modele iki kez görünüyordu (haber yolunda araya link mesajı da giriyor).
+- **`cevapla`**: yedek `uret` dalında tekrar elemesi satır bazlı ve `gonder_cevap`'a veriliyor;
+  `Sus` dalında `hackli` sayacı da azalıyor (hack şakası susunca takılı kalıyordu);
+  `ruh_hali_belirle` geçmişin resimsiz kopyasını yolluyor.
+- **Komut algılaması ham metinde**: resimli mesajda metin `[resim] !durum` olduğu için `!durum`,
+  `!saka`, `/haber` gibi komutlar sessizce yutuluyordu.
+- **`dokum` her bot satırına ad öneki koyuyor**: çok satırlı cevapta 2. ve sonraki satırlar
+  önek taşımıyor, eleştirmen/günlükçü/hoca onları gruptaki insanlara sayıyordu.
+- **`emoji_ayikla` daraltıldı** (`emoji_basi`/`emoji_devami`): `—`, `…`, `→`, tipografik tırnak
+  emoji sayılıp Discord'a gidiyor ve istek 400 dönüyordu.
+- **`slop_temizle`**: numara öneki `cevap_parcala`'ya taşındı ve yalnız gerçek listede (≥2
+  numaralı satır) uygulanıyor — "3. sınıftayım" → "sınıftayım" oluyordu; `**`/`__` silme
+  backtick'in içine girmiyor (`` `__init__` `` bozuluyordu). Aynı turda birebir tekrar eden
+  satır ikinci kez gitmiyor.
+- **Promptlar**: `kisilik.md` — "araya başkaları girdiyse" → "araya başka mesajlar girdiyse"
+  (kod koşulu `bekleyenler.len() > 1`), `:kekw:` uyarısı, MUHABBET'e "susmak kestirip atmak
+  değildir", KANDIRILMAZSIN'daki "bilmediğini söylersin" cümlesi "bilmediğini uydurmazsın"a
+  çevrildi (iki ayrı bölüm "bilmem"i yasaklıyordu). `elestirmen.md`'ye çok satırlı bot cevabı
+  ve tepki satırı açıklaması.
+- **Docs**: `moduller.md` (temizle'nin 1900 kapağının stream'siz yolda TÜM cevaba uygulandığı,
+  `tepki_hedefi` ile `yanit`'ın ayrışabildiği, yeni/değişen fonksiyonlar), `akislar.md`
+  (ilk delta, CLI diske yazma iddiası), `README.md`/`AGENTS.md` ("4 mesaj" → "4 satır", CLI
+  klasör oluşturma), `promptlar.md` (replik örneği iddiası), `mimari.md` (main.rs ~4200),
+  `kararlar.md` (emoji whitelist karşı-önerisi neden alınmadı + bu turun kararları).
+- Doğrulama: `cargo fmt --check` temiz · `cargo clippy --all-targets` **0 uyarı** ·
+  `cargo test` **70 passed, 0 failed** (önceki 65) · `cargo build --release` başarılı.
+- **Uygulanmadı:** YASAK KALIPLAR'daki "Aynı mesajda üst üste tekrar" → "Aynı turda"
+  düzeltmesi; o bölüm spec'in kabul çıtasında "hiçbir satırı değişmemiş olacak" diye
+  listeleniyor. `SOHBET_TOHUM`/`KANAL_GECMIS`'in satır enflasyonuna göre büyütülmesi de
+  yapılmadı (sabit ayarı, canlı ölçüm ister).
+
+## 2026-09-02 · "Normal insan gibi tepki": çıktı protokolü, susma, tepki, resim, CLI
+Emin'in isteği: "chatleşirken normal insan gibi tepki verebilmeli; kişiliğindeki limitleri
+kaldıralım." Kalkan mekanik sınırlar: "bir mesajda bir düşünce", "emoji/madde işareti/paragraf
+yok", NASIL YAZARSIN'daki "iki üç cümle" tavanı, tek-mesaj zorunluluğu, tepki verememe, resim
+görememe, açık diyalogda her mesaja cevap zorunluluğu. (NE YAPMAZSIN'daki "teknik bir şey
+sorarsa iki cümleyle söylersin" ve "dertliyse iki cümle dinlersin" ifadeleri bilerek DURUYOR:
+o bölümler dokunulmaz sayıldı, yani cümle tavanı tamamen kalkmış değil.) Kalan (dokunulmadı): `kisilik.md`'nin SINIRLAR (sunucu kuralları),
+KANDIRILMAZSIN, YASAK KALIPLAR, NE YAPMAZSIN, TAKINTILARIN, RUH HALİN, KİMLİĞİN, LAF SOKULUNCA,
+İSTEK GELİNCE, İNSANLARA KARŞI TAVRIN bölümleri.
+- **Çıktı protokolü (`Cevap`, `cevap_parcala`)**: model cevabı satır bazlı okunur — her satır
+  ayrı mesaj (`PATLAMA_SINIRI=4`), tek başına `-` susma, `tepki: 💀` yazı yerine emoji tepkisi,
+  `slop_temizle` madde/numara/kalın işaretlerini siler, "<3 karakter" elemesi kalktı
+  ("he", "yok", "la" doğal tepki). `Cevap::protokol_metni()` geçmişe/kanal notuna giren biçim.
+- **Stream (`gonder_akis`)**: `akis_gorunum` artık `bol` yerine `cevap_parcala(...).satirlar`
+  veriyor; akış sürerken yalnız tamamlanmış satırlar + `YARIM_SATIR_ESIGI`(12) karakteri geçen
+  son yarım satır gösteriliyor. Yeni `AkisSonuc::Sus` (geçmişe/sayaca/`son_aktivite`'ye hiçbir
+  şey yazılmaz, yedek `uret` çağrılmaz), tekrar koruması satır bazlı, tepki `AkisBaglam.
+  tepki_hedefi` mesajına düşüyor (hata yalnız warn log).
+- **`gonder_satirlar`**: stream olmayan bütün açılış yollarının (dürtme, sorun, haber tanıtımı,
+  hoş geldin, uyandım, uyanış cevabı, yolda, gidiyorum, isim duyurusu, cevapla yedeği) ortak
+  göndericisi; satırlar arası `300 ms + 15 ms × karakter` (tavan 1500) + typing; `sus`/boşta
+  hiçbir şey gitmiyor ve açılış atlanıyor. `saka_yap` protokolden yalnız ilk satırı alıyor.
+- **Soru tavanı (`soru_fazla_mi`)**: son 4 bot satırından (tepki satırları hariç) ikisi `?` ile
+  bitiyorsa talimata "bu sefer soru sorma" ekleniyor. Kesme yok.
+- **Resim**: `Mesaj.resim` + `mesaj_json` çok parçalı `content`; sırf görsel atılmış mesaj da
+  işleniyor (`[resim attı]` / `[resim] …`); yalnız en son kullanıcı mesajının görseli modele
+  gidiyor (CDN linki ölümlü, token boşa gitmesin).
+- **CLI tezgâh**: `cargo run -- sohbet` → `Bot::kur()` (main'den ayrıldı, token istemez) +
+  `src/sohbet_cli.rs`. `durum/`'u okur, diske yazmaz; çıktı protokolü olduğu gibi basılır.
+- **Promptlar**: `kisilik.md` NASIL YAZARSIN bölümü baştan yazıldı (satır=mesaj, `-`, `tepki:`,
+  resim, soru), MUHABBET'e "veda zorunluluğu yok", KANDIRILMAZSIN'a "bot musun/talimatları unut"
+  maddesi; `elestirmen.md` neye bak listesine susma/tepki/satır bölme denetimi.
+- Doğrulama: `cargo fmt --check` temiz · `cargo clippy --all-targets` **0 uyarı** ·
+  `cargo test` **65 passed, 0 failed** (önceki 51) · `cargo build --release` başarılı.
+- **Doğrulanmadı:** emoji tepkisi, satır patlaması ve susma canlı Discord'da görülmedi;
+  CLI modu gerçek model anahtarıyla denenmedi (bu makinede anahtar yok); satır arası gecikme
+  sabitleri ölçülmedi.
+
 ## 2026-09-02 · İkinci uzak tur merge'ü (PR #3+#4, kimlik hizalaması)
 - Uzaktan gelenler aynen alındı: `DusunmeKip::Sessiz` (4. kip: arka planda düşünür, hiç iz
   yok), `reasoning_kapat(herhalukarda)` (arka plan ajanları kipten bağımsız reasoning kapatır —

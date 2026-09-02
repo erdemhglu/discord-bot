@@ -17,10 +17,11 @@ arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Pr
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 40 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek)
+cargo test             # 70 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
 cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR isteğe bağlı
+cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, yalnız model anahtarı); çıktı protokolünü denemek için
 ```
 
 ## Yön levhası
@@ -30,6 +31,7 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 | Genel resim, katmanlar, veri akışı | docs/mimari.md |
 | Bir fonksiyonun ne yaptığı, kim çağırıyor, kilit kuralı | docs/moduller.md |
 | Bir olay olunca sırayla ne oluyor (mesaj, sohbet, uyku, seyahat, şaka, haber) | docs/akislar.md |
+| Çıktı protokolü (satır = mesaj, `-` susma, `tepki:` emoji, resim, CLI tezgâh) | docs/akislar.md ("Çıktı protokolü", "CLI sohbet") |
 | `durum/` dosya biçimleri, sınırlar, özetleme | docs/durum-dosyalari.md |
 | Hangi prompt nerede kullanılıyor, yer tutucular, max_tokens | docs/promptlar.md |
 | Bütün sabitler ve anlamları | docs/sabitler.md |
@@ -42,7 +44,12 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 1. **Kilit await üstünde tutulmaz.** `Bot::durum()` `std::sync::MutexGuard` döner; her zaman
    `{ let d = bot.durum(); ... }` bloğunda alınır, `.await` görmeden bırakılır.
 2. **Model çıktısı sınırlanır, koda güvenilir.** Puanlar `clamp`, dosya boyları sabit, mesaj
-   başına 1900 karakter (aşan cevap kırpılmaz, yeni mesaja bölünür). Sohbet cevabı bütçesi
+   başına 1900 karakter (aşan cevap kırpılmaz, yeni mesaja bölünür). Cevap satır bazlı bir
+   protokoldür (`cevap_parcala`): her satır ayrı mesaj, **tur başına en çok 4 satır**
+   (`PATLAMA_SINIRI`) — normalde 4 mesaj; 1900'ü aşan satır ayrıca bölünür, düşünme "göster"
+   kipinde düşünce mesajları da eklenir. Tek başına `-` susma, `tepki: 💀` yazı yerine emoji
+   tepkisi (yalnız bilinen emoji blokları kabul edilir).
+   Sohbet cevabı bütçesi
    `cevap_butcesi!()` makrosunda: debug `Some(2000)`, release `Some(CEVAP_TAVANI=4096)` — ikisinde
    de üst sınır var, sıradan cevap altında kalır, yalnız tekrar/döngü gibi kaçak durumları keser;
    diğer çağrılarda max_tokens sabit. Model ne derse desin favori +10.
@@ -87,3 +94,10 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
   desteklemeyen modelde gerçekten sessizce yok saydığı varsayımı canlıda doğrulanmadı.
 - GUILD_ID/KANALLAR filtreleri ve reply-to'nun koşullu hale gelmesi (`son_etiketlendi`) canlıda
   hiç görülmedi, yalnız derleyici+testlerle doğrulandı.
+- Emoji tepkisi (`create_reaction`), satır patlaması (satır = ayrı mesaj) ve susma (`-`) canlıda
+  görülmedi; yalnız birim testleriyle doğrulandı. Tepki hız sınırı davranışı (Discord emoji
+  route'ları ayrı kotaya tabi) canlıda ölçülmedi.
+- `gonder_satirlar` satır arası gecikme sabitleri (300 ms + 15 ms/karakter, tavan 1500 ms)
+  ölçülmedi, kabaca seçildi; canlıda ayarlanmak isteyebilir.
+- CLI sohbet modu (`cargo run -- sohbet`) gerçek model anahtarıyla denenmedi (bu makinede
+  anahtar yok): anahtarsız hata yolu ve birim testleri dışında **doğrulanmadı**.

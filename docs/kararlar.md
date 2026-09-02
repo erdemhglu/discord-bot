@@ -338,3 +338,100 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   kurulmaz). `konu_ekle` kontrol+başlık+satır tek kilit bölgesinde (eşzamanlı çağrıda
   başlık çiftlenmesi/satır silinmesi kapanır). `sohbet_sistemi` contains için geçici
   String üretmez.
+- **2026-09-02 · Cevap artık satır bazlı bir protokol (satır = ayrı mesaj).** Emin'in isteği:
+  "chatleşirken normal insan gibi tepki verebilmeli; kişiliğindeki limitleri kaldıralım."
+  Model düz metin değil satır protokolü yazar, `cevap_parcala` çözer. Gerekçe tek bir zevk
+  tercihi değil: Discord'un kendi API ekibi, "ChatGPT gibi akan mesaj" isteğini reddederken
+  insanların platformda uzun makaleler değil "multiple shorter messages" attığını söylüyor
+  (<https://github.com/discord/discord-api-docs/discussions/6310#discussioncomment-6519016>);
+  referans uygulamalar da satır sınırında bölüp sırayla gönderiyor
+  (<https://honcho.dev/docs/v2/guides/discord#message-sending>,
+  <https://github.com/0xranx/golembot/blob/ce48b37c8e1eb267548d352d56e34836714e0c01/docs/channels/discord.md>).
+  Tavan `PATLAMA_SINIRI=4`, hedef değil: gerçek IM korpusunda bir kişinin peş peşe mesaj
+  dizisi ortalama **1.7 mesaj**, dizilerin **%42'si** çok-mesajlı, mesaj ortalaması 5.4 kelime
+  (Baron 2010, 23 sohbet / 2185 iletim birimi,
+  <https://scholarworks.iu.edu/journals/index.php/li/article/view/37586/40137>) — yani "her
+  cevabı üçe böl" yanlıştır, çoğu cevap tek satır olmalı, prompt da bunu böyle söyler.
+- **2026-09-02 · İnceleme düzeltmeleri: "gidecek bir şey var mı" tek ölçü oldu.** Protokol
+  satır bazlı olunca birkaç yer eski (tek mesajlık) varsayımda kalmıştı, hepsi aynı kurala
+  çekildi: (1) `gonder_cevap` tepki hedefi yoksa tepkiyi düşürür ve gerçekten gidecek bir şey
+  yoksa `None` döner — yoksa kanalda hiçbir şey görünmezken sohbet açılıp 30 dk'lık zaman
+  aşımı sayacı başlıyordu. (2) `gonder_akis`'te `-` + `tepki: 💀` birleşimi susma sayılmaz,
+  emoji yine düşer (prompt ikisini birlikte kullanmayı açıkça öneriyor). (3) Hoş geldin
+  ping'i metne baştan yapıştırılmıyor, gönderim anında ilk satıra ekleniyor: `<@id> -` susma
+  işaretini, `<@id> tepki: 💀` tepki satırını gizliyordu. (4) `sohbet_baslat` açılış dedup'ı
+  satır bazlı (açılış geçmişe satır satır düşüyor, tam eşitlik hiç tutmuyordu). (5) `cevapla`
+  yedek dalında tekrar elemesi satır bazlı. (6) Komut algılaması ham metne bakıyor: resimli
+  mesajda metin `[resim] !durum` olduğu için komutlar yutuluyordu. (7) `dokum` bot cevabının
+  HER satırına ad öneki koyuyor, yoksa eleştirmen alt satırları gruptakilere sayıyordu.
+- **2026-09-02 · Numara öneki yalnız gerçek listede silinir.** `slop_temizle` "1. "/"2) "
+  önekini koşulsuz eliyordu; Türkçe'de satır başındaki sıra sayısı sık ("3. sınıftayım",
+  "2. el araba") ve mesajdan sessizce anlam düşüyordu. Artık `cevap_parcala` cevabın
+  tamamına bakıyor: iki ya da daha çok numaralı satır varsa liste sayıp önekleri siliyor,
+  tek satırda dokunmuyor. Aynı gerekçeyle `**`/`__` silme backtick'in İÇİNE girmiyor
+  (`` `__init__` `` bozulmamalı) — "backtick'e dokunulmaz" kuralı zaten böyle okunuyordu.
+- **2026-09-02 · Bölmek nötr değil, duygu sinyali: nötr/bilgi lafı bölünmez.** Aynı ifadenin
+  çok-mesajlı hâli tek mesajlı hâlinden daha şiddetli duygu okunuyor (M=5.89 vs 5.65, p<0.05,
+  d=0.36-0.50); aynı kelimeleri tek mesaj içinde alt alta satırlara koymak bu etkiyi
+  ÜRETMİYOR (p>0.10) — etki ayrı mesaj olmaktan geliyor
+  (<https://pmc.ncbi.nlm.nih.gov/articles/PMC11867088/>). Karşı kanıt da var: bilgi yüklü bir
+  mesajı peş peşe atmak gönderenin sevilirliğini %19.6 düşürüyor (n=805, 40 yaş altında %25.6)
+  (<https://www.lyngolab.com/texting-back-to-back.html>). İkisi birlikte tek kurala çıkıyor:
+  bilgi/açıklama tek satır, coşku/sinir/dalga bölünebilir. Bu kural kodla zorlanmadı
+  (kod yalnız tavan koyar), `kisilik.md`'ye yazıldı — içerik tipini model biliyor, kod bilmiyor.
+- **2026-09-02 · Susma işareti `-` (AkisSonuc::Sus).** Model tek satır `-` yazarsa hiçbir şey
+  gitmez; geçmişe, sayaca, `son_aktivite`'ye de yazılmaz ve yedek `uret` çağrılmaz (yoksa
+  "susmayı seçti" kararı ikinci çağrıyla delinirdi). Gerekçe: açık bir sohbette her mesaja
+  cevap vermek zorunluluğu insanda yok; ayrıca "cevap yok" bir AI-tetikleyicisi değil, "her
+  şeye cevap yetiştirmek" tetikleyici (K1 Tablo 2 meta sınıfı,
+  <https://arxiv.org/html/2405.08007v1>). İsteklilik ön-elemesi kanala girip girmemeyi seçiyordu;
+  bu, girdikten sonra da susabilmeyi veriyor.
+- **2026-09-02 · Emoji tepkisi bir cevap türü (`tepki: 💀`).** Satır yazı olarak gitmez,
+  cevaplanan mesaja `create_reaction` düşer; yalnız tepki de geçerli bir cevaptır. Hedef
+  `AkisBaglam.tepki_hedefi` ile taşınır — `yanit` koşullu olduğu (yalnız etiket/kalabalık)
+  için ayrı alan şart. Dürüstlük notu: bunun için birinci-el uygulanmış bir kaynak
+  **bulunamadı** (ra-muhendislik.md §10); karar Emin'in isteğine ve tepkinin ucuz/geri
+  alınabilir olmasına dayanıyor. Özel emoji (`:kekw:`) desteklenmiyor, yalnız Unicode; hata
+  yalnız warn log'a düşer, akışı durdurmaz. Discord emoji route'ları ayrı ve belirsiz bir
+  kotaya tabi (<https://discord.com/developers/docs/topics/rate-limits>), o yüzden tur başına
+  en çok bir tepki atılır (ilk `tepki:` kazanır). ra-muhendislik.md §10 emojiyi modelden
+  serbest bırakmak yerine sunucunun gerçek emoji listesinden seçtirmeyi (whitelist) öneriyor;
+  **bilerek alınmadı**: sunucu emoji listesini çekmek `guild_create` üzerinden ayrı bir durum
+  ve tazeleme işi getiriyor, tepki zaten geri alınabilir ve ucuz bir yan etki. Whitelist yerine
+  `emoji_basi`/`emoji_devami` ile ayıklama daraltıldı (yalnız bilinen emoji blokları; `—`, `…`,
+  `→` gibi işaretler tepki olmuyor, olsaydı istek 400 dönerdi). Saçma emoji riski canlıda
+  izlenecek. Kullanılmayan kaynaklar: shapes (docs.shapes.inc) ve frontiersin 2021 —
+  taranan malzemede vardı, bu kararların hiçbirinde belirleyici olmadı.
+- **2026-09-02 · "3 karakterden kısa satır" elemesi kaldırıldı, yerine slop temizliği geldi.**
+  Eski kural "he", "yok", "la" gibi doğal tepkileri yiyordu; gerçek IM'de mesajların **%21.8'i
+  tek kelimelik** (Baron 2010). Elemenin yerini `slop_temizle` aldı: madde/numara öneki ve
+  `**`/`__` işaretleri silinir (backtick durur). Gerekçe: "AI mı" hükmünün gerekçelerinin
+  %43'ü dilsel üslup, %10'u bilgi/akıl yürütme; çıktı biçimlendirme (markdown) doğrudan bir
+  AI-tetikleyicisi olarak listeleniyor (K1 Tablo 2, <https://arxiv.org/html/2405.08007v1>;
+  üç taraflı testte de en sık gerekçe sınıfı üslup, <https://www.pnas.org/doi/10.1073/pnas.2524472123>).
+- **2026-09-02 · Soru tavanı: kod ölçer, model uygular.** Son 4 bot satırından ikisi `?` ile
+  bittiyse talimata "bu sefer soru sorma" girer; kesme/kırpma yok, model isterse yine sorar.
+  Gerekçe: üç taraflı Turing testinde en doğru karar gerekçelerinden biri "soru ele alışı" —
+  "sürekli soruyu geri soruyordu" (<https://www.pnas.org/doi/10.1073/pnas.2524472123>); soruyu
+  soruyla çevirmek LLM refleksi ve doğrudan ele veriyor. Sert kesme yerine talimat seçildi,
+  çünkü karşı soru muhabbeti gerçekten sürdürüyor; yasak değil tavan isteniyordu.
+- **2026-09-02 · Resim eki modele gider (yalnız en sonuncusu).** `Mesaj.resim` +
+  `mesaj_json` çok parçalı `content` (ajanlar.rs `resimci` ile aynı biçim); sırf görsel atılmış
+  mesaj da işlenir, metin `[resim] …` / `[resim attı]` diye işaretlenir. Yeni kullanıcı satırı
+  eklenirken önceki girdilerin `resim`'i `None` yapılır: discord CDN linkleri kısa ömürlü ve
+  her turda eski görseli yollamak boşuna token yakar. Prompt betimlemeyi yasaklar ("resimde
+  şunu görüyorum" demez) — çünkü betimleme asistan refleksi, insan laf eder ya da tepki verir.
+- **2026-09-02 · Stream'siz yollarda satır arası gecikme, stream'de gecikme yok.**
+  `gonder_satirlar` satırlar arasına `300 ms + 15 ms × karakter` (tavan 1500 ms) + typing koyar;
+  parçalar arasına gecikme konmazsa üç mesaj aynı saniyede düşer ve bu insandan *daha az*
+  insan gibi görünür (ra-muhendislik.md §1 tuzak listesi). Referans Turing-testi
+  uygulamaları da gecikmeyi karakter sayısına bağlıyor
+  (<https://arxiv.org/html/2405.08007v1>, <https://www.pnas.org/doi/10.1073/pnas.2524472123>);
+  ms katsayıları yayınlarda **verilmemiş**, buradaki üç sabit ölçülmedi, kabaca seçildi.
+  Stream yolunda ek gecikme YOK: akışın kendi temposu zaten insan yazma hızını veriyor ve
+  Emin gecikme istemiyor (bkz. "Hız" kararı).
+- **2026-09-02 · CLI sohbet modu (`cargo run -- sohbet`).** Kişilik değişikliklerini canlı
+  sunucuda denemek pahalı ve geri alınamaz; tezgâh discord'a hiç bağlanmadan (token istemeden)
+  aynı `uret` + `cevap_parcala` yolundan geçiriyor. `Bot::kur()` bu yüzden `main`'den ayrıldı:
+  iki yol da aynı kurulumu görsün. Diske yazmaz (`kanal_not` yerine bellek içi `gecmise_ekle`),
+  ama `durum/` dosyalarını okur — kişilik gerçekçi olmadan tezgâhın anlamı olmaz.

@@ -19,6 +19,11 @@ GLM, Grok, Gemini, Claude gibi herhangi bir model kullanılabilir.
 - discord yanıtı (reply-to) yalnız etiketlenince ya da araya birden fazla mesaj girince kullanılır; sıradan tek-kişilik sohbette düz mesaj atar
 - her sohbete özgü an'lık bir ruh hali var (bilişsel, korku, pozitif, çökkünlük, öfke, sosyal muhakeme kategorilerinden); üsluba yedirir, ilan etmez
 - sohbet cevapları canlı akar: mesaj belirir, yazıldıkça büyür; model düşünce üretiyorsa (reasoning) kırpılmadan spoiler içinde gösterilir, 1900'ü aşan cevap kırpılmaz, yeni mesaja bölünür
+- tek uzun mesaj yerine arka arkaya kısa mesaj atar: modelin yazdığı **her satır ayrı bir mesaj** olarak gider (tur başına en çok 4 satır — normalde 4 mesaj; 1900 karakteri aşan satır ayrıca bölünür, düşünme "göster" kipinde düşünce mesajları da eklenir). Çoğu cevap tek satır; nötr/bilgi lafı bölünmez, coşunca bölünür
+- söyleyecek bir şeyi yoksa **susar**: muhabbet ona değilse ya da araya girmesi sırıtacaksa hiçbir şey göndermez (sohbet açıkken bile)
+- yazı yerine **emoji tepkisi** bırakabilir; tepki ile bir laf birlikte de gelebilir
+- resim atarsan **görür**: ekli görsel modele gider (yalnız en son atılan), "resimde şunu görüyorum" diye betimlemez, insan gibi laf eder ya da tepki verir
+- üst üste soru sormaz: son cevaplarında soru birikmişse o tur soru sormaması söylenir
 - `GUILD_ID`/`KANALLAR` (.env, isteğe bağlı) ile tek sunucuya/kanal listesine kilitlenebilir; boşsa eriştiği her yerde çalışır
 - bayram, uzun hafta sonu, yaz, festival zamanlarında seyahatte gibi davranır: az yazar, yoldan mesaj atar, gitmeden haber verir
 - arada `resimler/` klasöründen bir görsel atar; bazen hacklenmiş taklidiyle (3 mesaj sürer,
@@ -96,6 +101,20 @@ cargo run --release
 
 discord developer portal'da **Message Content** ve **Server Members** intent'leri açık olmalı.
 Şakalarda atılacak görselleri `resimler/` içine koy (png, jpg, gif, webp); klasör git'e girmez.
+
+## terminalden deneme
+
+```
+cargo run -- sohbet
+```
+
+Discord'a hiç bağlanmadan, terminalden konuşma tezgâhı. `DISCORD_TOKEN` gerekmez, yalnız model
+anahtarı (`OPENROUTER_KEY` ya da `MISTRAL_KEY`); anahtar yoksa tek satır hata verip çıkar.
+Girdi biçimi `isim: metin` (iki nokta yazmazsan yazan `emin` sayılır), çıkmak için `!cik` ya da
+ctrl-d. Kişiliği gerçekçi olsun diye `durum/` klasörünü normal şekilde okur ama **durum içeriğine
+hiçbir şey yazmaz** (`Bot::kur()` her iki yolda da boş `durum/*` ve `resimler/` klasörlerini
+oluşturur; dosya içeriği yazılmaz). Çıktı protokolü olduğu gibi görünür: her satır ayrı mesaj, `[tepki 💀]`,
+`(sustu)`. Kişilik ve prompt değişikliklerini canlı sunucuda denemeden görmek için.
 
 ## komutlar
 

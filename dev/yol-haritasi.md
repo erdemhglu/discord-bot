@@ -55,7 +55,41 @@ bayt değil karakter say (Türkçe İ gibi harflerde panik riski kapandı) · `h
 karışan kalıntı satırlar temizlendi + `hoca.md`'ye bunu bir daha üretmeme kuralı eklendi
 (kaynağı: hoca test sırasındaki sık `!uyan` muhabbetini kişilik sanmış).
 
+## "Normal insan gibi tepki" turu (2026-09-02) — TAMAMLANDI
+Emin'in isteği üzerine kişilikteki mekanik yazma sınırları kaldırıldı, yerine satır bazlı bir
+çıktı protokolü geldi. Dört lane paralel koştu: L1 protokol+stream (`Cevap`, `cevap_parcala`,
+`slop_temizle`, `AkisSonuc::Sus`, `AkisBaglam.tepki_hedefi`, `soru_fazla_mi`, `gonder_satirlar`),
+L2 promptlar (`kisilik.md` NASIL YAZARSIN yeniden, `elestirmen.md` denetim maddeleri),
+L3 resim + CLI (`Mesaj.resim`, `mesaj_json`, `kullanici_resimli`, `Bot::kur`, `src/sohbet_cli.rs`),
+L4 dokümantasyon. Dokunulmayan bölümler (sunucu kuralları, kandırılmazsın vb.) byte byte aynı.
+Doğrulama: fmt temiz · clippy 0 uyarı · 65 test yeşil (önceki 51) · release build.
+Ayrıntı + gerekçe (araştırma URL'leriyle): docs/kararlar.md 2026-09-02 girdileri.
+
+**İnceleme turu (aynı gün) — TAMAMLANDI.** Kapı + üç incelemecinin yüksek/orta bulgularının
+hepsi uygulandı: `gonder_cevap` ayrıldı (tepki hedefi yoksa tepki düşer, gidecek bir şey yoksa
+`None`), hoş geldin ping'i protokol çözümünden sonra takılıyor, `-`+`tepki:` birleşimi susma
+sayılmıyor, `sohbet_baslat` dedup'ı ve yedek `uret` yolundaki tekrar elemesi satır bazlı,
+komut algılaması ham metinde, `dokum` her bot satırına önek koyuyor, `emoji_ayikla` gerçek
+emoji bloklarıyla sınırlı, numara öneki yalnız gerçek listede siliniyor, `kanal_not_coklu` ile
+tur başına tek dosya yazımı. 70 test yeşil. Uygulanmayanlar (gerekçeli): YASAK KALIPLAR'daki
+"Aynı mesajda" ifadesi (kabul çıtası o bölümü dondurmuş) ve `SOHBET_TOHUM`/`KANAL_GECMIS`'in
+satır enflasyonuna göre büyütülmesi (sabit ayarı, canlı ölçüm ister).
+
+Kalan risk (canlıda görülecek): emoji tepkisi rate limit davranışı, satır patlamasının gerçek
+kanaldaki temposu, `-` susmasının sıklığı (model fazla susarsa prompt ayarlanır),
+`gonder_satirlar` gecikme sabitleri (ölçülmedi).
+
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
+- **`reaction_add` olayı yok:** bot tepki verir ama kendi mesajına gelen tepkiyi görmez
+  (tepkiye tepki, "kim neye güldü" bilgisi kayıp).
+- **Özel emoji tepkisi:** `emoji_ayikla` `:kekw:` biçimini eler, yalnız Unicode emoji atılıyor.
+  `ReactionType::Custom` + sunucu emoji listesinden doğrulama gerekir. Aynı iş emoji whitelist'i
+  de getirir (ra-muhendislik §10 öneriyordu, bilerek ertelendi — bkz kararlar.md).
+- **Tohum/geçmiş pencereleri satır cinsinden:** `SOHBET_TOHUM=10` ve `KANAL_GECMIS=60` artık
+  "tur" değil "satır" sayıyor; çok satırlı turlarda modelin gördüğü geçmiş kısalıyor. Canlıda
+  ölçülüp büyütülmesi gerekebilir (şimdilik dokunulmadı).
+- **ILGI/keyword kancası:** takıntı konusu geçtiğinde isteklilik çağrısını atlayıp doğrudan
+  girme yolu yok; her şey isteklilik puanından geçiyor.
 - **Ajan 5 (döngüler):** uyanış kanal bazlı.
 - Tamamlanıp düşenler: hata sınıflandırma+retry, typing edit dışı, ajan yazımları tek sıra,
   günlükçü JSON kurtarma, arsivle append, zarif kapanış (`KAPANIYOR`), süresi dolan haber
