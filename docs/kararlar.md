@@ -348,3 +348,18 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   diğerleri; bot özeti Durum/Token/Kendim/Gündem. Boş bölümler modalda atlanır. `!zihin` artık
   aynı kartı kanala yollar (ham INDEX dökümü kalktı); kanal mesajında modal açılamadığı için
   detay `/zihin`'e yönlendirir. Eski `modal_zihin`/`bolumler`/5 slot kaldırıldı.
+- **2026-09-02 · `!zihin` zihin kartı yerine panel ekran görüntüsü.** Emin'in isteği: "!zihin yazınca
+  modern web ui şeklinde ss atacak". Embed kart Discord'un kutularına sıkışıyordu; panel görseli
+  hem daha okunur hem telefonda tek bakışta anlaşılır. Etkileşim gerektiren detaylar (kişi menüsü,
+  bölüm butonları, modallar) `/zihin`'de bırakıldı — kanal mesajına bileşen konamıyor zaten.
+- **2026-09-02 · Görsel resvg ile üretiliyor, headless tarayıcıyla değil.** Alternatif HTML + Chrome/
+  Puppeteer'dı: kurulum ağır, çalıştığı makineye bağımlı, bot sürecine 200 MB'lık bir tarayıcı
+  bağlıyor. `resvg` saf Rust; SVG'yi kendimiz kuruyoruz, PNG çıkıyor, dış süreç yok. Bedeli: SVG
+  metni sarmıyor — satır kırma, kısaltma ve yerleşim `zihin_gorsel.rs`'de elle hesaplanıyor.
+  `default-features` kapalı (yalnız `text` + `system-fonts`); jpeg/gif çözücüleri gereksiz.
+- **2026-09-02 · Font gömülü (Inter, SIL OFL).** Sistem fontuna güvenilirse çıktı makineden makineye
+  değişir, sunucuda hiç font olmayabilir. Inter Regular/SemiBold/Italic `fonts/` altında,
+  `include_bytes!` ile ikiliye giriyor (~1,2 MB); lisans `fonts/LICENSE`'ta duruyor (OFL şartı).
+  Gömme bozulursa `load_system_fonts`'a düşülüyor ve `warn` basılıyor.
+- **2026-09-02 · Emoji çizilmiyor, atılıyor.** Inter'de emoji glifi yok; atılmazsa panelde tofu kutu
+  çıkıyor. `temizle` U+2190 üstü sembolleri ve kontrol karakterlerini eliyor.

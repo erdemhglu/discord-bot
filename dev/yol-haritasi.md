@@ -59,6 +59,18 @@ bayt değil karakter say (Türkçe İ gibi harflerde panik riski kapandı) · `h
 karışan kalıntı satırlar temizlendi + `hoca.md`'ye bunu bir daha üretmeme kuralı eklendi
 (kaynağı: hoca test sırasındaki sık `!uyan` muhabbetini kişilik sanmış).
 
+## Zihin panel görseli (2026-09-02) — TAMAMLANDI
+`!zihin` embed kart yerine PNG panel atıyor (`src/zihin_gorsel.rs`, SVG → resvg → PNG).
+Gerekçe ve alternatifler (headless Chrome neden değil): docs/kararlar.md.
+Bekleyen uçlar:
+- **Kişi detay görseli.** `/zihin` menüsünden seçilen kişi için tek kişilik panel (bildikleri,
+  son olaylar, puan geçmişi). Şu an o detay modalda metin olarak duruyor.
+- **Açık tema.** Palet `zihin_gorsel.rs` başındaki `C_*` sabitlerinde tek yerde; açık tema
+  ikinci bir palet + `!zihin acik` argümanıyla eklenebilir.
+- **Gerçek glif ölçümü.** Şimdilik harf/em oranı tahmini. `fontdb`/`ttf-parser` ile gerçek
+  advance okunabilir; tahmin yukarı yuvarladığı için taşma değil, boşluk israfı riski var.
+- Görsel canlı Discord'da doğrulanmalı (ek gönderimi, koyu temada görünüm, telefonda okunurluk).
+
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
 - **Ajan 5 (döngüler):** uyanış kanal bazlı.
 - Tamamlanıp düşenler: hata sınıflandırma+retry, typing edit dışı, ajan yazımları tek sıra,

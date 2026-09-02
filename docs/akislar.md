@@ -55,7 +55,16 @@ yalnız çağırana görünür.
 Menüden kişi seç ya da butona bas → `interaction_create(Component)` → ilgili **detay modalı**
 (`modal_kisi` / `modal_konular` / `modal_olaylar` / `modal_ozet`); her bölüm kendi etiketli alanında, tek kutuya boca yok.
 Kullanıcı modal'ı gönderirse → `interaction_create(Modal)` → kısa ephemeral onay; girdi toplanmaz.
-Paralel düz metin: `!durum` ortak `durum_metni`; `!zihin` aynı embed kartını kanala yollar + `/zihin` yönlendirmesi; `!yardım` aynen.
+Paralel düz metin: `!durum` ortak `durum_metni`; `!yardım` aynen. `!zihin` artık kart değil **görsel** atar (aşağı bak).
+
+## !zihin görsel yolu (panel ekran görüntüsü)
+`!zihin` → `zihin_gorsel::zihin_verisi(&durum())` kilit altındaki alanları kopyalar, **guard satır
+sonunda düşer** → `spawn_blocking`: `dosyalari_oku` (durum/ okumaları) → `zihin_svg` (yerleşim, metin
+sarma, XML kaçışı) → `resvg` ile 2x PNG → `durum/zihin.png` (her seferinde üstüne) → `gonder(...,
+dosya: Some(&yol), ...)` tek satır başlıkla ("zihnim, {tarih}").
+Üretim ya da yazma patlarsa: hata `warn`'lanır ve eski `zihin_embedleri` kartı gönderilir — `!zihin`
+boş dönmez. Etkileşimli detay (kişi menüsü, bölüm butonları, modallar) `/zihin`'de kalır.
+Aynı görsel Discord'suz da üretilir: `cargo run -- zihin`.
 
 ## Sunucuya bağlanınca
 `guild_create` (sunucu başına bir kez) → arka planda: 14 gün geriye tarama (izinli kanallar, 100'lük sayfalar) → ham hafıza son 2000 → profilci → hoca (huy boşsa). Yeniden bağlanmada tekrar taranmaz.

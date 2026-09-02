@@ -101,7 +101,7 @@ döngüler tik başında bakar ve döner, bekçi yeniden başlatmaz; `main`'in k
 ## src/komut.rs (impl Bot)
 Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot::komut(ctx, msg, komut, arg)`'a düşer, tanınan komut true döner ve mesaj sohbete girmez.
 - `komut` dalları: sifirla · haber · sorun · gez · saka/hack · ajanlar · uyan · uyu · durum · zihin · düşünme · model · yardım/help.
-- `zihin`: `modal::zihin_embedleri` kartını kanala gönderir + "detay için `/zihin`" (kanal mesajında bileşen/modaal açılamaz, etkileşim gerekir).
+- `zihin`: panel görselini üretip kanala ek olarak yollar (`zihin_gorsel`), başlık tek satır "zihnim, {tarih}". Kilit satır sonunda düşer, dosya okuma + rasterize `spawn_blocking`'e taşınır. Üretim patlarsa eski `modal::zihin_embedleri` kartına düşülür ve hata `warn`'lanır. Etkileşimli detaylar `/zihin`'de kalır (kanal mesajında bileşen/modal açılamaz).
 - `durum`: `modal::durum_metni` ile ortak metin (`!durum` ve `/durum` aynı satırı gösterir).
 - `düşünme` (`dusunme` da tanınır): argüman `DusunmeKip::arg_ile` ile çözülür (göster/aç, gizle, sessiz, kapat/kapalı); kipi `Durum.dusunme`'ye yazar, `durum/dusunme.md`'de kalıcılaştırır. Argümansız çağrı mevcut kipi söyler.
 - `yardım`/`yardim`/`help`: `YARDIM` sabiti, tüm komutların kısa listesi.
@@ -120,6 +120,33 @@ select menü ≤25 seçenek (etiket ≤45, açıklama ≤100).
 - `sigdir(metin, sinir)` — sınır aşımı son satır/boşluk hizasında kesilir + not. `ay_adi("2026-09")` → "Eylül 2026".
 - `komutlari_kayit(http, guild)` — `/durum` `/yardim` `/zihin` sunucu komutları; her ready'de idempotent.
 - `hafiza.rs` yardımcıları: `kisi_dokumleri` (mtime sırası `Kisi` listesi), `konu_dokumleri` (ad + son not), `olay_aylari(n)` (son n ayın "- " satırları, en yeni ay başta).
+
+## src/zihin_gorsel.rs
+`!zihin` görseli: botun bildikleri **modern bir web paneli** gibi çizilir. SVG metin olarak kurulur,
+`resvg` ile PNG'ye rasterize edilir — saf Rust, sistemde tarayıcı/sunucu/Chrome gerekmez. Fontlar
+`fonts/` altında gömülü (Inter Regular/SemiBold/Italic, `include_bytes!`), `fontdb`'ye bir kez yüklenir.
+- `ZihinVerisi` — panelin çizimi için gereken her şey, `Durum`'dan koparılmış hali (`Send`, bu yüzden
+  `spawn_blocking`'e taşınabilir). Alt kayıtlar: `KisiSatiri` / `KonuSatiri` / `OlaySatiri` / `GundemGirisi`.
+- `zihin_verisi(&Durum) -> ZihinVerisi` — **birinci aşama**: yalnız kilit altındaki alanları kopyalar
+  (evre, gün, model, kip, uyanık, ruh hali, token, kendim, huy, gündem). Dosyaya dokunmaz.
+- `dosyalari_oku(&mut ZihinVerisi)` — **ikinci aşama**: `durum/` okumaları (`hafiza::kisi_dokumleri`,
+  `konu_dokumleri`, `olay_aylari(3)`, `gundem::girisler`). **Kilit dışında** çağrılır (kural 1).
+  Kişiler favori tepede, sonra puana göre sıralanır; eşitlikte ad (aynı veri hep aynı görünür).
+- `zihin_svg(&ZihinVerisi) -> String` — test edilebilir katman; tuval 1280 px, yükseklik içeriğe göre
+  (720..2200). Üstte tarayıcı şeridi, sonra başlık + chip'ler, 5 kutuluk sayaç şeridi, 7/12–5/12 ızgara:
+  solda Kişiler + Olaylar, sağda Konular / Gündem / Kendim / Huyum. Boş kart silik bir cümle gösterir.
+- `zihin_png(&ZihinVerisi) -> Result<Vec<u8>, Hata>` — 2x ölçekle rasterize (2560 px). 7,5 MB'ı aşarsa
+  sırayla 1.5x, 1x denenir (Discord sınırı 8 MB); pratikte ilkinde biter (~0,5 MB).
+- `cli_zihin()` — `cargo run -- zihin`: Discord'suz, `durum/`'dan okuyup `durum/zihin.png` üretir.
+- **Metin sarma elle**: SVG sarmaz. `genislik(metin, boy)` Inter'de harf/em oranıyla tahmin eder
+  (dar 0.28 · orta 0.55 · büyük harf 0.62 · m/w 0.82) ve bilerek yukarı yuvarlar — fazla sarmak
+  kartı taşırmaktan iyidir. `sar` kelime sınırından böler, sığmayan kelimeyi harften kırar,
+  taşan kuyruğu `…` ile bitirir. `tek_satir` sarmadan kısaltır.
+- `kacir(metin)` — `& < > " '` XML kaçışı. `durum/` içeriği Discord kullanıcı metnidir, **zorunlu**.
+- `temizle(metin)` — Inter'de olmayan glifleri (emoji, U+2190 üstü semboller) atar, kontrol
+  karakterlerini boşluğa indirir. Atılmazsa tofu kutu çizilir.
+- Uzunluk sabitleri modülün başında: `KISI_SATIRI` 8 · `OLAY_SATIRI` 8 · `KONU_SATIRI` 6 ·
+  `GUNDEM_GIRISI` 2 · `KENDIM_SATIRI` 4 · `HUY_SATIRI` 5 · `ETIKET_ADEDI` 4.
 
 ## src/ajanlar.rs (impl Bot)
 - `profilci()` — son 600 satır → `analiz(PROFIL_CIKAR, 1200)` → `profil.md` + `Durum.profil`.
