@@ -2,7 +2,7 @@
 
 ## Bir mesaj geldi
 0. Her mesaj (bot dahil, `gonder` üstünden) kanalın geçmişine düşer: `kanal_not` → bellek (60 satır) + `durum/kanallar/<id>.md`. Yeni sohbet açılırken son 10 satır tohum olur (`sohbet_baslat`), böylece sohbet bitmiş ya da bot yeniden başlamış olsa da bağlam kaybolmaz.
-0. Metin `!` ya da `/` ile başlıyorsa `Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · model. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır.
+0. Metin `!` ya da `/` ile başlıyorsa `komut.rs::Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · düşünme · model · yardım/help. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır. `düşünme göster/gizle/kapat` düşünme kipini değiştirir (`durum/dusunme.md`): göster=spoiler'da, gizle="Düşünüyorum..." sonrası cevap, kapat=istekler reasoning'siz.
 1. `Handler::message`: bot/webhook/DM → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.
@@ -17,7 +17,7 @@
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
 bekle 0,15-0,35 sn ── güncel geçmiş + son mesajı al ── arastir(link/haber/araştır) ── yazıyor…
 uret_akis(stream, bütçe: cevap_butcesi!; release'de bütçe yok) ── (hata: meşgul=0, çık)
-gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── thinking ||spoiler|| bloklarında kırpılmadan, uzunsa yeni mesaj ── cevap 1900'ü aşarsa yeni mesaj ── discord yanıtı her cevapta ilk mesajda
+gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünme kipi: göster=thinking tek satır spoiler'da (newline'sız), gizle/kapalı=spoiler yok ── düşünürken (cevap başlamadı) göster/gizle kipinde "Düşünüyorum...", cevap başlayınca aynı mesaj düzenlenerek stream ── kapalı kipte istek reasoning'siz, düşünce biriktirilmez ── 1900'ü aşan parça yeni mesaj ── discord yanıtı her cevapta ilk mesajda
 tekrar_mi? bir kez yeniden üret, yine tekrarsa açılanları sil ve sus; üretim sırasında yeni mesaj geldiyse açılanları sil, güncel bağlamla başa dön
 stream hiçbir şey üretmediyse uret ile stream'siz yedek
 … bitti değilse: yeni mesaj yoksa çık

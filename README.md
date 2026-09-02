@@ -98,7 +98,9 @@ discord developer portal'da **Message Content** ve **Server Members** intent'ler
 - `!ajanlar` — profilci ve hocayı şimdi çalıştır.
 - konuşmalar `durum/kanallar/<id>.md`'de kalır; sohbet bitse ya da bot yeniden başlasa da son 10 satırla devam eder
 - `!uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `!uyu [saat]` — test için uyutur (varsayılan 8 saat).
-- `!durum` — evre, sayaçlar, model, uyku, seyahat.
+- `!durum` — evre, sayaçlar, model, uyku, düşünme kipi, seyahat.
+- `!düşünme` — düşünme kipi. `!düşünme göster` thinking'i cevapla spoiler'da gösterir; `!düşünme gizle` thinking'i üretir ama göstermez (düşünürken "Düşünüyorum..." yazar, cevap sonra akar); `!düşünme kapat` istekleri reasoning'siz atar. Seçim `durum/dusunme.md`'de kalır. `!düşünme aç` = göster.
+- `!yardım` / `!help` — komut listesi.
 - `!model` — şu anki model. `!model <id>` değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
 
 ## ayarlar

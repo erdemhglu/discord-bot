@@ -27,6 +27,8 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `kesim_noktasi(metin, sinir) -> usize` — `bol`'ün kesim yeri; sınırın dörtte birinden önceki cümle/boşluk sayılmaz.
 - `spoiler(metin) -> String` — `||...||`; içindeki `|` kaçırılır.
 - `akis_yerlesimi(dusunce, cevap) -> Vec<String>` — stream'in mesaj dizilişi: thinking kırpılmadan `bol(_, 1896)` ile spoiler bloklarına, cevap `bol(_, 1900)` ile düz mesajlara.
+- `akis_gorunum(kip, dusunce, cevap) -> Vec<String>` — kipe göre ekran: düşünme sürerken (cevap boş, düşünce var) göster/gizle kipinde tek mesaj "Düşünüyorum..."; cevap başlayınca göster kipinde `tek_satir(dusunce)` spoiler'ı + cevap, gizle/kapalı kiplerde yalnız cevap. `tek_satir(metin)` thinking'i tek akıcı satıra indirger (her düşüncede newline atılmaz).
+- `DusunmeKip { Goster, Gizle, Kapali }` (main.rs) — düşünme kipi; `arg_ile` komut argümanı çözer, `oku/dosya_degeri` `durum/dusunme.md`, `ad` ekran adı. Kapalı kip `Bot::reasoning_kapat` ile isteğe `reasoning.enabled=false` + `enable_thinking=false` ekler.
 - `cevap_butcesi!()` — makro; sohbet cevabı token bütçesi derleme durumuna göre: release `None` (bütçe yok, model sonuna kadar konuşur), debug `Some(2000)` (maliyet koruması).
 - `json_ayikla(&str) -> &str` — ilk `{` ile son `}` arası (kod bloğu süsünü atar).
 
@@ -37,7 +39,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `sohbet_sistemi(gecmis, talimat) -> (sabit, degisken, bot_adi)` — geçmişteki `user` mesajlarından katılımcı adlarını (`"isim: "` öneki) ve metinleri çıkarır → `hafiza::anahtarlar` → kilit altında `hafiza::getir` + `sistem_metni`. `uret` ve `uret_akis` ortak kullanır.
 - `sor_ham_akis(sabit, degisken, gecmis, butce) -> Result<AkisOkuyucu>` — `stream:true` POST; hata kontrolü `sor_ham` ile aynı. `Parca{metin,dusunce}` döndüren `AkisOkuyucu::sonraki()` SSE satırlarını çözer (`sse_ayikla`; reasoning `reasoning` ya da `reasoning_content` alanından), utf-8 chunk ortasında bölünse de tamponda bekletir.
 - `uret_akis(gecmis, talimat, butce) -> Result<(AkisOkuyucu, bot_adi)>` — sohbet cevabını akış olarak açar. Çağıran: yalnız `cevapla`.
-- `gonder_akis(ctx, kanal, okuyucu, AkisBaglam) -> Result<AkisSonuc>` — parçaları biriktirir, `AKIS_DUZENLEME` aralıkla `yaz_akis`; bitince `yeni_mesaj_var` (Eski), `soy` + boş/kırıntı denetimi (Bos), `tekrar_mi` ise bir kez `uret` ile yeniden üretim, final yerleşim + `kendi_mesajlarim`/`kanal_not` (yalnız cevap, thinking değil). `AkisSonuc::{Gonderildi(String),Eski,Bos}`; `AkisBaglam{bot_adi,yanit,gelen,gecmis,talimat,butce}` argüman yığını yerine tek yapı.
+- `gonder_akis(ctx, kanal, okuyucu, AkisBaglam) -> Result<AkisSonuc>` — parçaları biriktirir (kapalı kipte reasoning biriktirilmez), `AKIS_DUZENLEME` aralıkla `akis_gorunum` + `yaz_akis`; bitince `yeni_mesaj_var` (Eski), `soy` + boş/kırıntı denetimi (Bos), `tekrar_mi` ise bir kez `uret` ile yeniden üretim, final yerleşim + `kendi_mesajlarim`/`kanal_not` (yalnız cevap, thinking değil). `AkisSonuc::{Gonderildi(String),Eski,Bos}`; `AkisBaglam{bot_adi,yanit,gelen,gecmis,talimat,butce}` argüman yığını yerine tek yapı.
 - `yaz_akis(ctx, kanal, &mut Vec<Message>, yerlesim, yanit)` — serbest fonksiyon. Yerleşimi açık mesajlarla uzlaştırır: değişeni `EditMessage` ile düzenler, eksiği açar (yalnız ilk mesaj yanıt/mention taşır), fazlasını siler. `sil_mesajlar(ctx, Vec<Message>)` açılanları geri alır.
 - `analiz(metin, talimat, max_tokens)` — **kişiliksiz tek yol.** Sistem = `ANALIST`; kullanıcı mesajı = `metin + "---" + talimat`. Çağıranlar: profilci, gunlukcu, hoca, elestirmen, ozetleyici, haberci seçim, gezgin seçim.
 - `gonder(ctx, kanal, metin, ping, dosya, yanit: Option<MessageId>)` — `yanit` verilirse discord yanıtı (`reference_message`) olur ve yanıtlanan kişi pinglenir (`replied_user`).  mention'lar kapalı (`CreateAllowedMentions::new()`, yalnız `ping` açılır), isteğe bağlı ek dosya; başarılıysa `kendi_mesajlarim`'a (50) ekler. Kilit gönderimden SONRA alınır.
@@ -51,7 +53,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `sohbet_baslat(&mut Durum, kanal, acilis: Option<String>) -> &mut Sohbet` — kanal geçmişinin son 10 satırıyla tohumlar (bot satırları assistant), açılış mesajı geçmişte zaten varsa iki kez koymaz;  varsa mevcut sohbeti döner (`entry().or_insert`), yoksa yeni; açılış varsa `asistan` mesajı + `sayac=1`.
 - `sohbet_bitir(&mut Durum, kanal) -> Option<Sohbet>` — haber bekleme silinir, kanal 3 saat yasaklanır, sohbet çıkarılıp döner (günlükçüye gider).
 - `girebilir_mi(&Durum, kanal) -> bool` — yasak süresi geçmiş mi.
-- `Bot::komut(ctx, msg, komut, arg) -> bool` — test/yönetim komutları (bkz README). `Bot::model_var_mi(id)` OpenRouter `/models` listesinde arar; liste çekilemezse engel olmaz.
+- `Bot::komut` → artık `src/komut.rs` içinde (aşağıda).
 - `Bot::haber_at(ctx, kanal) -> bool` — haberci → link → tanıtım → gönder → sohbet + 2 saat yorum bekleme. `haber_dongusu` ve `!haber` çağırır.
 - `Bot::saka_yap(ctx, kanal, hack)` — görsel seç, hack ise `HACK_GIRIS`, değilse `resimci`; gönder; sohbet (`hackli=3`). `saka_dongusu` ve `!saka`/`!hack` çağırır.
 - `Bot::cevapla(ctx, kanal)` — döngü: (1) kilit: meşgulse çık; sohbet yoksa çık; talimat seç ve meşgul işaretle. (2) 0,15-0,35 sn mesaj biriktirme payı; güncel geçmiş, hedef mesaj, `gelen`; `arastir` bulgusu göreve eklenir; `broadcast_typing`. (3) `uret_akis` (bütçe `cevap_butcesi!()`) ile stream açılır. (4) `gonder_akis`: mesaj ilk delta ile belirir, thinking spoiler'da, 1900'ü aşan kısım yeni mesaj; üretim sırasında yeni mesaj geldiyse açılanları silip güncel bağlamla başa döner (Eski); tekrar_mi bir kez yeniden üretir. (5) stream kullanılır bir şey üretmezse `uret` ile stream'siz yedek (Bos). (6) meşgul kaldır, asistan satırı ekle, sayaçları ilerlet. Yeni mesaj geldiyse başa dön; biten sohbet `gunlukcu` ve `elestirmen`'e gider.
@@ -79,6 +81,13 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `ayar(isim)` — boş olmayan env değişkeni ya da açık hata.
 - `kapanis_bekle()` — ctrl-c veya SIGTERM.
 - `main` — `.env`, anahtarlar, `durum/{kisiler,konular,olaylar,arsiv}` ve `resimler/` klasörleri, `Durum::yukle` + `uyku::guncelle`, reqwest 60 sn, intents `GUILDS|GUILD_MESSAGES|GUILD_MEMBERS|MESSAGE_CONTENT`, kapanışta `shard_manager.shutdown_all`.
+
+## src/komut.rs (impl Bot)
+Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot::komut(ctx, msg, komut, arg)`'a düşer, tanınan komut true döner ve mesaj sohbete girmez.
+- `komut` dalları: sifirla · haber · sorun · gez · saka/hack · ajanlar · uyan · uyu · durum · düşünme · model · yardım/help.
+- `düşünme` (`dusunme` da tanınır): argüman `DusunmeKip::arg_ile` ile çözülür (göster/aç, gizle, kapat/kapalı); kipi `Durum.dusunme`'ye yazar, `durum/dusunme.md`'de kalıcılaştırır. Argümansız çağrı mevcut kipi söyler.
+- `yardım`/`yardim`/`help`: `YARDIM` sabiti, tüm komutların kısa listesi.
+- `model_var_mi(id)` — OpenRouter `/models` listesinde arar; liste çekilemezse engel olmaz.
 
 ## src/ajanlar.rs (impl Bot)
 - `profilci()` — son 600 satır → `analiz(PROFIL_CIKAR, 1200)` → `profil.md` + `Durum.profil`.

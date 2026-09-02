@@ -97,7 +97,16 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
 - **Thinking kırpılmadan spoiler'da.** Model `reasoning` ya da `reasoning_content` döndürürse
   (openrouter reasoning modelleri, qwen vb.) cevap boyunca `||...||` bloklarında gösterilir,
   asla kesilmez; 1896 karakteri aşan düşünce yeni spoiler mesaja taşar. Üretmeyen modelde blok
-  yoktur. Kayda yalnız cevap girer; hoca/eleştirmen düşünceyi görmez.
+  yoktur. Kayda yalnız cevap girer; hoca/eleştirmen düşünceyi görmez. Thinking tek akıcı satıra
+  indirgenir (`tek_satir`); her düşünce için newline atılmaz.
+- **Düşünme kipi komutu (`!düşünme`).** Üç kip: göster (thinking cevapla spoiler'da), gizle
+  (thinking üretilir ama gösterilmez; düşünürken tek mesaj "Düşünüyorum...", cevap başlayınca
+  aynı mesaj düzenlenerek stream edilir), kapat (istekler `reasoning.enabled=false` +
+  `enable_thinking=false` ile reasoning'siz atılır, token harcanmaz). Kip `durum/dusunme.md`'de
+  kalıcı; `Durum::yukle` okur. Göster/gizle'de cevap başlamadan placeholder gider ki kullanıcı
+  beklediğini bilsin.
+- **Komutlar ayrı modülde (`src/komut.rs`).** Test/yönetim komutları main.rs'ten taşındı;
+  `impl Bot` aynı crate içinde dağılabilir geleneğine uyar. `!yardım`/`!help` tüm komutları listeler.
 - **Kod tarafı kırpma kalktı (`kisalt` silindi).** Cevabı prompt kısa tutar; kod ancak Discord'un
   fizik sınırında devreye girer: 1900'ü aşan cevap cümle/boşluk sınırından yeni mesaja bölünür
   (`bol`), hiçbir şey atılmaz.

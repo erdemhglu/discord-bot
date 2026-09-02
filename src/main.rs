@@ -2,6 +2,7 @@ mod ajanlar;
 mod gelisim;
 mod gundem;
 mod hafiza;
+mod komut;
 mod promptlar;
 mod seyahat;
 mod uyku;
@@ -97,6 +98,51 @@ struct Sohbet {
     gelen: u32,
 }
 
+// düşünme gösterim kipi; !düşünme ile değişir, durum/dusunme.md'de kalır
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum DusunmeKip {
+    #[default]
+    Goster, // reasoning istenir, cevapla birlikte spoiler içinde gösterilir
+    Gizle,  // reasoning istenir ama gösterilmez; düşünürken "Düşünüyorum..." yazar
+    Kapali, // reasoning istenmez, istekler düşünmesiz atılır
+}
+
+impl DusunmeKip {
+    fn dosya_degeri(self) -> &'static str {
+        match self {
+            DusunmeKip::Goster => "goster",
+            DusunmeKip::Gizle => "gizle",
+            DusunmeKip::Kapali => "kapali",
+        }
+    }
+
+    fn oku() -> Self {
+        match hafiza::oku("dusunme.md").trim() {
+            "gizle" => DusunmeKip::Gizle,
+            "kapali" => DusunmeKip::Kapali,
+            _ => DusunmeKip::Goster,
+        }
+    }
+
+    // komut argümanından kip; tanınmıyorsa None
+    fn arg_ile(arg: &str) -> Option<Self> {
+        match arg {
+            "göster" | "goster" | "aç" | "ac" | "on" => Some(DusunmeKip::Goster),
+            "gizle" => Some(DusunmeKip::Gizle),
+            "kapat" | "kapalı" | "kapali" | "off" => Some(DusunmeKip::Kapali),
+            _ => None,
+        }
+    }
+
+    fn ad(self) -> &'static str {
+        match self {
+            DusunmeKip::Goster => "göster",
+            DusunmeKip::Gizle => "gizli",
+            DusunmeKip::Kapali => "kapalı",
+        }
+    }
+}
+
 #[derive(Default)]
 struct Durum {
     bot_adi: String,
@@ -128,6 +174,7 @@ struct Durum {
     gelisim: gelisim::Gelisim,                           // evre, sayaçlar, seçtiği isim
     kullanici_adi: String, // discord kullanıcı adı; bot_adi seçilen isim olabilir
     model: String,         // kullanılan model; !model ile değişir, durum/model.md'de kalır
+    dusunme: DusunmeKip,   // düşünme kipi; !düşünme ile değişir, durum/dusunme.md'de kalır
     son_yol_mesaji: i64,   // seyahatte en son hangi gün yoldan yazdı
     duyurulan_seyahat: i64, // "yarın gidiyorum" dediği seyahatin başlangıç günü
 }
@@ -147,6 +194,7 @@ impl Durum {
                 .into_iter()
                 .map(|(id, v)| (ChannelId::new(id), v))
                 .collect(),
+            dusunme: DusunmeKip::oku(),
             ..Durum::default()
         }
     }
@@ -445,8 +493,22 @@ struct AkisBaglam<'a> {
 }
 
 impl Bot {
+    // düşünme kapalıysa modelin reasoning üretmesini istekte kapatır (token harcamasın);
+    // openrouter "reasoning", qwen tarzı router'lar "enable_thinking" anlar
+    fn reasoning_kapat(&self, govde: &mut serde_json::Value) {
+        if self.durum().dusunme != DusunmeKip::Kapali {
+            return;
+        }
+        let Some(o) = govde.as_object_mut() else {
+            return;
+        };
+        o.insert("reasoning".into(), serde_json::json!({ "enabled": false }));
+        o.insert("enable_thinking".into(), serde_json::json!(false));
+    }
+
     // openrouter'a ham istek; her şey buradan geçer
-    async fn sor_ham(&self, govde: serde_json::Value) -> Result<String, Hata> {
+    async fn sor_ham(&self, mut govde: serde_json::Value) -> Result<String, Hata> {
+        self.reasoning_kapat(&mut govde);
         let cevap = self
             .http
             .post(&self.api_adres)
@@ -526,6 +588,7 @@ impl Bot {
         if let Some(t) = butce {
             govde["max_tokens"] = serde_json::json!(t);
         }
+        self.reasoning_kapat(&mut govde);
         let cevap = self
             .http
             .post(&self.api_adres)
@@ -658,16 +721,20 @@ impl Bot {
         let mut son_yazma = Instant::now();
         let mut ilk = true;
         let mut akis_hatasi: Option<Hata> = None;
+        // kip cevap boyunca sabit kalır; stream ortasında değişirse bir sonraki cevapta geçer
+        let kip = self.durum().dusunme;
 
         loop {
             match okuyucu.sonraki().await {
                 Ok(Some(p)) => {
                     metin.push_str(&p.metin);
-                    dusunce.push_str(&p.dusunce);
+                    if kip != DusunmeKip::Kapali {
+                        dusunce.push_str(&p.dusunce);
+                    }
                     if ilk || son_yazma.elapsed() >= AKIS_DUZENLEME {
                         ilk = false;
                         let yerlesim =
-                            akis_yerlesimi(&dusunce, &soy(metin.clone(), baglam.bot_adi));
+                            akis_gorunum(kip, &dusunce, &soy(metin.clone(), baglam.bot_adi));
                         if !yerlesim.is_empty() {
                             yaz_akis(ctx, kanal, &mut gonderilenler, &yerlesim, baglam.yanit).await;
                             son_yazma = Instant::now();
@@ -708,7 +775,7 @@ impl Bot {
                 }
             }
         }
-        let yerlesim = akis_yerlesimi(&dusunce, &cevap);
+        let yerlesim = akis_gorunum(kip, &dusunce, &cevap);
         yaz_akis(ctx, kanal, &mut gonderilenler, &yerlesim, baglam.yanit).await;
 
         // gönderilenler kayda geçer; thinking kayda girmez, hoca ve eleştirmen yalnız cevabı görür
@@ -740,6 +807,26 @@ fn akis_yerlesimi(dusunce: &str, cevap: &str) -> Vec<String> {
     }
     v.extend(bol(cevap, MESAJ_SINIRI));
     v
+}
+
+// thinking fazı: cevap henüz başlamadıysa ve model düşünüyorsa "Düşünüyorum..."
+// placeholder'ı gider; cevap başlayınca aynı mesaj düzenlenerek stream edilir
+fn akis_gorunum(kip: DusunmeKip, dusunce: &str, cevap: &str) -> Vec<String> {
+    if kip != DusunmeKip::Kapali && cevap.trim().is_empty() && !dusunce.trim().is_empty() {
+        return vec!["Düşünüyorum...".to_string()];
+    }
+    // düşünme gizli ya da kapalıysa spoiler hiç oluşmaz
+    let gosterilen = if kip == DusunmeKip::Goster {
+        tek_satir(dusunce)
+    } else {
+        String::new()
+    };
+    akis_yerlesimi(&gosterilen, cevap)
+}
+
+// thinking'de her düşünce için newline atılmasın; tek akıcı satıra indirgenir
+fn tek_satir(metin: &str) -> String {
+    metin.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 // yerleşimi açık mesajlarla uzlaştırır: değişenler düzenlenir, eksikler açılır,
@@ -1604,152 +1691,6 @@ impl Bot {
 
 // ---------- discord olayları ----------
 
-impl Bot {
-    // test ve yönetim komutları; tanınan komutsa true döner
-    async fn komut(&self, ctx: &Context, msg: &Message, komut: &str, arg: &str) -> bool {
-        let kanal = msg.channel_id;
-        let soyle = |m: String| async move {
-            let _ = kanal.say(&ctx.http, m).await;
-        };
-        match komut {
-            "sifirla" => {
-                {
-                    let mut d = self.durum();
-                    if arg.contains("hepsi") {
-                        d.yasakli.clear();
-                        d.sohbetler.clear();
-                        d.haber_bekleyen.clear();
-                        d.mesgul.clear();
-                    } else {
-                        d.yasakli.remove(&kanal);
-                        d.sohbetler.remove(&kanal);
-                        d.haber_bekleyen.remove(&kanal);
-                        d.mesgul.remove(&kanal);
-                    }
-                }
-                let _ = msg.react(&ctx.http, '👍').await;
-            }
-            "haber" => {
-                self.durum().sohbetler.remove(&kanal);
-                if !self.haber_at(ctx, kanal).await {
-                    soyle("haber bulamadım".into()).await;
-                }
-            }
-            "sorun" => {
-                self.durum().sohbetler.remove(&kanal);
-                self.sorun_at(ctx, kanal).await;
-            }
-            "gez" => {
-                self.gezgin().await;
-                let _ = msg.react(&ctx.http, '👍').await;
-            }
-            "saka" | "hack" => {
-                self.durum().sohbetler.remove(&kanal);
-                self.saka_yap(ctx, kanal, komut == "hack").await;
-            }
-            "ajanlar" => {
-                self.profilci().await;
-                self.hoca().await;
-                self.durum().dizin = hafiza::dizin_yenile();
-                let _ = msg.react(&ctx.http, '👍').await;
-            }
-            "uyan" => {
-                {
-                    // planı silme: silinirse dakika sonra yeniden kurulup tekrar uyutur.
-                    // onun yerine planlı uyku bitene kadar "zorla uyanık" kal
-                    let mut d = self.durum();
-                    let simdi = simdi_unix();
-                    let bitis = d
-                        .planlar
-                        .iter()
-                        .filter(|p| p.bas <= simdi && simdi < p.bit)
-                        .map(|p| p.bit)
-                        .max()
-                        .unwrap_or(simdi + 6 * 3600);
-                    d.uyanik_zorla = bitis;
-                }
-                let _ = msg.react(&ctx.http, '👍').await;
-                self.uyku_gecisi(ctx).await;
-            }
-            "uyu" => {
-                {
-                    let mut d = self.durum();
-                    let simdi = simdi_unix();
-                    let sure: i64 = arg.parse().unwrap_or(8); // saat
-                    d.uyanik_zorla = 0;
-                    d.planlar.push(uyku::Plan {
-                        gun: -1,
-                        uykusuz_bas: None,
-                        bas: simdi,
-                        bit: simdi + sure * 3600,
-                    });
-                }
-                let _ = msg.react(&ctx.http, '😴').await;
-                self.uyku_gecisi(ctx).await;
-            }
-            "durum" => {
-                let metin =
-                    {
-                        let d = self.durum();
-                        let g = &d.gelisim;
-                        format!(
-                        "evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · seyahat: {}",
-                        gelisim::evre(g).ad,
-                        gelisim::gun(g) + 1,
-                        g.sohbet,
-                        g.mesaj,
-                        d.model,
-                        if uyku::uyanik_mi(&d) { "uyanık" } else { "uyuyor" },
-                        seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
-                    )
-                    };
-                soyle(metin).await;
-            }
-            "model" => {
-                if arg.is_empty() {
-                    let m = self.durum().model.clone();
-                    soyle(format!("şu an {m}")).await;
-                } else if msg.author.id.get() != FAVORI {
-                    soyle("onu sen değiştiremezsin".into()).await;
-                } else if self.api_adres.contains("openrouter") && !self.model_var_mi(arg).await {
-                    soyle("yok öyle model".into()).await;
-                } else {
-                    self.durum().model = arg.to_string();
-                    hafiza::yaz("model.md", arg);
-                    soyle(format!("tamam, {arg}")).await;
-                }
-            }
-            _ => return false,
-        }
-        true
-    }
-
-    // openrouter model listesinde var mı
-    async fn model_var_mi(&self, id: &str) -> bool {
-        #[derive(Deserialize)]
-        struct Liste {
-            data: Vec<Kayit>,
-        }
-        #[derive(Deserialize)]
-        struct Kayit {
-            id: String,
-        }
-        match self
-            .http
-            .get("https://openrouter.ai/api/v1/models")
-            .send()
-            .await
-        {
-            Ok(r) => r
-                .json::<Liste>()
-                .await
-                .map(|l| l.data.iter().any(|k| k.id == id))
-                .unwrap_or(false),
-            Err(_) => true, // liste çekilemediyse engel olma
-        }
-    }
-}
-
 struct Handler {
     bot: Arc<Bot>,
     baslatildi: AtomicBool,
@@ -2141,6 +2082,47 @@ mod test {
     fn yerlesim_dusuncesiz() {
         let v = akis_yerlesimi("", "kısa cevap");
         assert_eq!(v, vec!["kısa cevap"]);
+    }
+
+    #[test]
+    fn dusunme_kip_ayristirilir() {
+        assert_eq!(DusunmeKip::arg_ile("göster"), Some(DusunmeKip::Goster));
+        assert_eq!(DusunmeKip::arg_ile("aç"), Some(DusunmeKip::Goster));
+        assert_eq!(DusunmeKip::arg_ile("gizle"), Some(DusunmeKip::Gizle));
+        assert_eq!(DusunmeKip::arg_ile("kapat"), Some(DusunmeKip::Kapali));
+        assert_eq!(DusunmeKip::arg_ile("kapalı"), Some(DusunmeKip::Kapali));
+        assert_eq!(DusunmeKip::arg_ile("saçma"), None);
+        assert_eq!(DusunmeKip::Goster.dosya_degeri(), "goster");
+    }
+
+    #[test]
+    fn gorunum_dusunurken_placeholder() {
+        // cevap başlamadı, model düşünüyor → "Düşünüyorum..."
+        let v = akis_gorunum(DusunmeKip::Goster, "hmm düşünüyorum", "");
+        assert_eq!(v, vec!["Düşünüyorum..."]);
+        let v = akis_gorunum(DusunmeKip::Gizle, "hmm", "");
+        assert_eq!(v, vec!["Düşünüyorum..."]);
+        // kapalıyken placeholder yok
+        let v = akis_gorunum(DusunmeKip::Kapali, "", "");
+        assert!(v.is_empty());
+    }
+
+    #[test]
+    fn gorunum_cevap_basladi() {
+        // göster: thinking spoiler + cevap
+        let v = akis_gorunum(DusunmeKip::Goster, "düşündüm", "cevap bu");
+        assert_eq!(v.len(), 2);
+        assert!(v[0].starts_with("||") && v[0].ends_with("||"));
+        assert_eq!(v[1], "cevap bu");
+        // gizle: yalnız cevap
+        let v = akis_gorunum(DusunmeKip::Gizle, "düşündüm", "cevap bu");
+        assert_eq!(v, vec!["cevap bu"]);
+    }
+
+    #[test]
+    fn tek_satira_indirgenir() {
+        assert_eq!(tek_satir("a\nb\n\nc"), "a b c");
+        assert_eq!(tek_satir("  boşluk   ve\nsatır  "), "boşluk ve satır");
     }
 
     // cevap bütçesi derleme durumuna göre değişir: ikisi de Option<u32>;
