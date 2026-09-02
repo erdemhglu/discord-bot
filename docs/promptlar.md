@@ -21,6 +21,7 @@ doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken 
 | ISIM_SEC | isim-sec.md | görev (tek kelime) | `isim_sec` | — | 12 |
 | ISIM_DUYURU | isim-duyuru.md | görev | `isim_sec` | `{isim}` | 150 |
 | ANALIST | analist.md | sistem (analiz) | `analiz` | — | — |
+| ISTEKLILIK | isteklilik.md | görev (analiz) | `isteklilik` (mesaj gelince, rate limitli) | `{ad}` | 80 |
 | PROFIL_CIKAR | profil-cikar.md | analiz | `profilci` | — | 1200 |
 | GUNLUKCU | gunlukcu.md | analiz (JSON) | `gunlukcu` | `{ad}` `{kaynak}` `{favori}` | 1200 |
 | HOCA | hoca.md | analiz | `hoca` | `{ad}` | 800 |

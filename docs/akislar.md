@@ -8,7 +8,11 @@
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.
 4. Haber attıysa ve 2 saat dolduysa o sohbeti sessizce kapat (yasak yok).
 5. **Uyuyorsa:** etiketlendiyse kuyruğa (≤20), cevap yok, çık.
-6. Sohbet açık değilse: etiketlendi → aç (yasak olsa da); değilse yasaklı değil ∧ rastgele < SANS (seyahatte ×0.3) → aç.
+6. Sohbet açık ya da etiketlendiyse doğrudan cevap. Değilse **isteklilik değerlendirmesi**:
+   kanal başına en sık 2 dakikada bir mini model çağrısı (`isteklilik.md`, ~80 token) son 12
+   mesaj + profil + dizin üzerinden `{"puan":0-10}` üretir; eşik (`ISTEK_ESIGI`, evre
+   cesaretine göre ±1, seyahatte +2) üstündeyse sohbete girer. Çağrı başarısızsa yedek zar
+   (`SANS`).
 7. Sohbet açıksa kullanıcı satırını geçmişe ekle (son 20).
 8. Kilit dışı: `cevapla`.
 

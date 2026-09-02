@@ -121,6 +121,12 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   son mesajdan 30 dk sonra (`SOHBET_ZAMAN_ASIMI`) sessizce kapanır, dökümü yine günlükçüye ve
   eleştirmene gider. `Durum.son_aktivite` haritası tazelenir (kullanıcı mesajı, sohbet açılışı,
   bot cevabı).
+- **2026-09-02 · Cevap istekliliği model değerlendirmesi.** Kullanıcı bildirimi: bot her mesaja
+  cevap zorunluluğu hissediyordu. Sabit zar (`SANS × evre`) kalktı; etiket/yanıt/ad hâlâ her
+  zaman cevaplanır, diğer mesajlar için mini model çağrısı (`isteklilik.md`, ~80 token,
+  `analiz` yolundan) son 12 mesaj + profil + dizinle 0-10 puan verir. Eşik `ISTEK_ESIGI` (6),
+  evre cesareti ±1, seyahatte +2. Kanal başına en sık `DEGERLENDIRME_ARALIGI` (2 dk) çağrı;
+  çağrı başarısızsa eski yedek zar (`SANS`) devrede.
 - **2026-09-02 · Zihin id bazlı + saniyeli zaman damgası + bellek döngüsü.** Kişi dosyaları
   `kisiler/<id>.md`; `id`, `kullanici_adi`, `eski_adlar` alanları eklendi (ad değişikliği hafızayı
   bölmez). İsim→id çevirisi `Durum.ad_id` üzerinden; çözülemeyen kayıt o tur atlanır ve loglanır.

@@ -5,7 +5,8 @@
 |---|---|---|
 | OPENROUTER_ADRES / OPENROUTER_MODEL | …/api/v1/chat/completions / openai/gpt-4o-mini | varsayılan sağlayıcı |
 | MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-medium-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
-| SANS | 0.35 | mesaj başına araya girme olasılığı (seyahatte × YOLDA_SANS_CARPANI) |
+| SANS | 0.35 | yedek zar: isteklilik çağrısı başarısızsa araya girme olasılığı |
+| ISTEK_ESIGI / DEGERLENDIRME_ARALIGI | 6 / 2 dk | isteklilik puan eşiği / kanal başına en sık değerlendirme |
 | SOHBET_ZAMAN_ASIMI | 30 dk | bu kadar sessiz kalan sohbet vedasız kapanır |
 | YORUM_SURESI | 2 saat | haber attıktan sonra yorum bekleme |
 | HABER_ARALIGI | 6 saat | haber turu ve 6 saatlik ajanlar |
@@ -35,7 +36,7 @@ SAAT_FARKI +3 saat (TR, yaz saati yok) · UYKUSUZLUK_SANSI 0.07 · UYKUSUZLUK_GE
 normal uyku 01:00→09:00 ±45 dk · uykusuz gece 01:00 ayakta, 06:00→13:00 ±45 dk
 
 ## src/seyahat.rs
-YOLDA_SANS_CARPANI 0.3 · ETKINLIKLER tablosu (yılbaşı 30 Ara 4g, sömestr 24 Oca 7g, ramazan
+ETKINLIKLER tablosu (yılbaşı 30 Ara 4g, sömestr 24 Oca 7g, ramazan
 bayramı 2026: 19 Mar 4g / 2027: 8 Mar, 23 Nisan 3g, 19 Mayıs 3g, kurban 2026: 26 May 5g / 2027:
 15 May, yaz 14 Tem 6g, zeytinli rock 21 Ağu 4g, 30 Ağustos 3g, 29 Ekim 3g)
 

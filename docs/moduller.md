@@ -42,7 +42,8 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `uret_akis(gecmis, talimat, butce) -> Result<(AkisOkuyucu, bot_adi)>` — sohbet cevabını akış olarak açar. Çağıran: yalnız `cevapla`.
 - `gonder_akis(ctx, kanal, okuyucu, AkisBaglam) -> Result<AkisSonuc>` — parçaları biriktirir (kapalı kipte reasoning biriktirilmez), `AKIS_DUZENLEME` aralıkla `akis_gorunum` + `yaz_akis`; bitince `yeni_mesaj_var` (Eski), `soy` + boş/kırıntı denetimi (Bos), `tekrar_mi` ise bir kez `uret` ile yeniden üretim, final yerleşim + `kendi_mesajlarim`/`kanal_not` (yalnız cevap, thinking değil). `AkisSonuc::{Gonderildi(String),Eski,Bos}`; `AkisBaglam{bot_adi,yanit,gelen,gecmis,talimat,butce}` argüman yığını yerine tek yapı.
 - `yaz_akis(ctx, kanal, &mut Vec<Message>, yerlesim, yanit)` — serbest fonksiyon. Yerleşimi açık mesajlarla uzlaştırır: değişeni `EditMessage` ile düzenler, eksiği açar (yalnız ilk mesaj yanıt/mention taşır), fazlasını siler. `sil_mesajlar(ctx, Vec<Message>)` açılanları geri alır.
-- `analiz(metin, talimat, max_tokens)` — **kişiliksiz tek yol.** Sistem = `ANALIST`; kullanıcı mesajı = `metin + "---" + talimat`. Çağıranlar: profilci, gunlukcu, hoca, elestirmen, ozetleyici, haberci seçim, gezgin seçim.
+- `analiz(metin, talimat, max_tokens)` — **kişiliksiz tek yol.** Sistem = `ANALIST`; kullanıcı mesajı = `metin + "---" + talimat`. Çağıranlar: profilci, gunlukcu, hoca, elestirmen, ozetleyici, haberci seçim, gezgin seçim, isteklilik, hedef seçimi.
+- `isteklilik() -> Option<u8>` — "bu konuşmaya katılayım mı?" mini değerlendirmesi: son 12 mesaj + profil + dizin → `analiz(ISTEKLILIK{ad}, 80)` → `isteklilik_puan` JSON'dan 0-10. Çağıran: `Handler::message` (kanal başına en sık 2 dk, `son_degerlendirme`). Hata/bozukta `None` → yedek zar.
 - `gonder(ctx, kanal, metin, ping, dosya, yanit: Option<MessageId>)` — `yanit` verilirse discord yanıtı (`reference_message`) olur ve yanıtlanan kişi pinglenir (`replied_user`).  mention'lar kapalı (`CreateAllowedMentions::new()`, yalnız `ping` açılır), isteğe bağlı ek dosya; başarılıysa `kendi_mesajlarim`'a (50) ekler. Kilit gönderimden SONRA alınır.
 - `Bot::sor_bolumlu(sabit, degisken, gecmis, butce: Option<u32>)` — sistem mesajını `sistem_json` ile iki metin bloğu olarak gönderir, ilki `cache_control: ephemeral`; bütçe `None` ise max_tokens yok.
 - `sistem_json(sabit, degisken) -> Value` — değişken boşsa düz system, değilse iki blok. Serbest fonksiyon.
@@ -76,7 +77,7 @@ Her satır: imza · ne yapar · kim çağırır · kilit/await notu. Satır numa
 - `ready` — bot adını yazar; `baslatildi` ilk kez ise beş döngüyü başlatır.
 - `guild_create` — `taranan`'a ilk kez giriyorsa arka planda `gecmisi_oku → profilci → hoca (huy boşsa)`.
 - `guild_member_addition` — kanal: sunucu sistem kanalı → varsayılan; favori ise adını kaydet; sohbet açık/yasaklıysa çık; `uret(HOS_GELDIN)` → mention'lı gönder (ping açık) → sohbet başlat.
-- `message` — bot/webhook/DM ise çık; `content_safe`; boşsa çık. Kilit: etiketlendi mi (mention listesi, yanıtlanan mesaj botun mu, metinde bot adı geçiyor mu) → `hatirla`, `son_kanal`, favori adı; haber bekleme süresi dolduysa sohbeti kapat; **uyuyorsa**: etiketlendiyse `bekleyen_etiketler`'e (20) ekle, çık; sohbet yoksa: etiketlendiyse ya da (yasaklı değil ve şans tuttuysa; seyahatte şans ×0.3) başlat; sohbet varsa kullanıcı mesajını geçmişe ekle (20'de tut). Kilit dışı: `cevapla`.
+- `message` — bot/webhook/DM ise çık; `content_safe`; boşsa çık. **1. faz (kilit):** etiketlendi mi (mention listesi, yanıtlanan mesaj botun mu, metinde bot adı geçiyor mu) → `hatirla`, `ad_id`/`kullanici_adlari`, `son_kanal`, favori adı; haber bekleme süresi dolduysa sohbeti kapat; **uyuyorsa**: etiketlendiyse `bekleyen_etiketler`'e (20) ekle, çık; sohbet açık mı + isteklilik değerlendirmesi gerekli mi (etiket/açık sohbette hayır; kanal başına en sık 2 dk). **2. faz (kilitsiz):** gerekiyorsa `isteklilik()`; puan ≥ eşik (evre ±1, seyahat +2) ise katılır; çağrı yoksa yedek zar (`SANS`). **3. faz (kilit):** katılıyorsa `sohbet_baslat`, kullanıcı satırını geçmişe ekle (20'de tut), `kanal_not`. Kilit dışı: `cevapla`.
 
 ### Başlangıç
 - `ayar(isim)` — boş olmayan env değişkeni ya da açık hata.
@@ -137,7 +138,7 @@ Test ve yönetim komutları; `Handler::message` metin `!`/`/` ile başınca `Bot
 - `guncelle(&mut Durum)` — dün ve bugün için plan yoksa kurar, biteni atar. `uyanik_mi`, `uykusuz_mu`, `durum_metni` ("ŞU AN" satırı).
 
 ## src/seyahat.rs
-- `YOLDA_SANS_CARPANI 0.3`. `Seyahat { yer, sebep, bas, bit }` (yerel gün no). `Etkinlik` tablosu `ETKINLIKLER` (yıllık + yıla özel bayramlar 2026-2027).
+- `Seyahat { yer, sebep, bas, bit }` (yerel gün no). `Etkinlik` tablosu `ETKINLIKLER` (yıllık + yıla özel bayramlar 2026-2027).
 - `gun_no(y,m,d)` — Hinnant days-from-civil. `yil(gun)`.
 - `gunde(gun) -> Option<Seyahat>` — bu yıl ve geçen yıl (yılbaşı sarkması) için tabloyu tarar; yer = `(y + ay*31 + gun) % yerler.len()` ile sabit.
 - `bugun()`, `simdi()`, `yarin()` (yarın başlayan, bugün olmayan). `durum_metni()` — "Şu an X'desin (...); n gündür, m gün sonra dönüyorsun" / "Yarın X'ye gidiyorsun" / boş.

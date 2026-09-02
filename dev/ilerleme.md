@@ -4,6 +4,15 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 4 · cevap istekliliği
+- Sabit zar (`SANS × evre`) kalktı: etiket/yanıt/ad her zaman cevaplanır, diğer mesajlar için
+  mini model çağrısı (`promptlar/isteklilik.md`, ~80 token): son 12 mesaj + profil + dizin →
+  `{"puan":0-10,"sebep"}`; eşik `ISTEK_ESIGI`=6, evre cesareti ±1, seyahatte +2.
+- Rate limit: kanal başına en sık 2 dk'da bir çağrı (`Durum.son_degerlendirme`).
+- Çağrı başarısızsa yedek zar (`SANS=0.35`). `YOLDA_SANS_CARPANI` kaldırıldı (seyahat etkisi
+  eşik kaymasında).
+- Doğrulama: 33 test (isteklilik_puan clamp/süs dahil), clippy 0 uyarı.
+
 ## 2026-09-02 · Adım 3 · zihin id bazlı + saniyeli zaman + bellek döngüsü
 - Kişi dosyaları `kisiler/<id>.md`; `Kisi` alanları: id, kullanici_adi, eski_adlar + eskiler.
   Ad değişince eski ad `eski_adlar`'a düşer, hafıza bölünmez. Temiz başlangıç: eski slug

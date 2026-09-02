@@ -29,7 +29,9 @@ const OPENROUTER_MODEL: &str = "openai/gpt-4o-mini";
 const MISTRAL_ADRES: &str = "https://api.mistral.ai/v1/chat/completions";
 const MISTRAL_MODEL: &str = "mistral-medium-latest";
 const SOHBET_ZAMAN_ASIMI: Duration = Duration::from_secs(30 * 60); // bu kadar sessiz kalan sohbet kendiliğinden kapanır
-const SANS: f64 = 0.35; // normal mesajlaşmaya %10 ihtimalle dalar
+const SANS: f64 = 0.35; // artık kullanılmıyor: yerini isteklilik değerlendirmesi aldı (yedek zar)
+const ISTEK_ESIGI: u8 = 6; // isteklilik puanı bu eşiğin üstündeyse sohbete girer
+const DEGERLENDIRME_ARALIGI: Duration = Duration::from_secs(2 * 60); // kanal başına en sık isteklilik çağrısı
 const YORUM_SURESI: Duration = Duration::from_secs(2 * 60 * 60); // haber attıktan sonra 2 saat yorum bekler
 const HABER_ARALIGI: Duration = Duration::from_secs(6 * 60 * 60); // ne sıklıkla hacker news'e bakar (ajanlar da bu turda çalışır)
 const DURTME_ARALIGI: Duration = Duration::from_secs(60 * 60); // ne sıklıkla kendiliğinden laf atmayı dener
@@ -161,6 +163,7 @@ struct Durum {
     sohbetler: HashMap<ChannelId, Sohbet>,
     mesgul: HashSet<ChannelId>, // şu an cevap üretilen kanallar
     son_aktivite: HashMap<ChannelId, Instant>, // sohbetin son canlandığı an (zaman aşımı kapatır)
+    son_degerlendirme: HashMap<ChannelId, Instant>, // kanal başına son isteklilik çağrısı (rate limit)
     haber_bekleyen: HashMap<ChannelId, Instant>,
     atilan_haberler: HashSet<u64>,
     taranan: HashSet<GuildId>,
@@ -389,6 +392,17 @@ fn json_ayikla(metin: &str) -> &str {
         (Some(b), Some(s)) if s > b => &metin[b..=s],
         _ => metin,
     }
+}
+
+// isteklilik cevabından 0-10 puanı çözer; bozuksa None
+fn isteklilik_puan(cevap: &str) -> Option<u8> {
+    #[derive(Deserialize)]
+    struct Deger {
+        #[serde(default)]
+        puan: i32,
+    }
+    let d: Deger = serde_json::from_str(json_ayikla(cevap)).ok()?;
+    Some(d.puan.clamp(0, 10) as u8)
 }
 
 // ---------- yapay zeka ----------
@@ -770,6 +784,33 @@ impl Bot {
     async fn analiz(&self, metin: &str, talimat: &str, max_tokens: u32) -> Result<String, Hata> {
         let girdi = kullanici(format!("{metin}\n\n---\n\n{talimat}"));
         self.sor(ANALIST, &[girdi], max_tokens).await
+    }
+
+    // "bu konuşmaya katılmak istiyor muyum?" mini değerlendirmesi (0-10 puan).
+    // etiket/yanıt her zaman cevaplanır, buraya hiç gelmez; hata durumunda None (yedek zar devrede)
+    async fn isteklilik(&self) -> Option<u8> {
+        let (baglam, profil, dizin, bot_adi) = {
+            let d = self.durum();
+            (
+                son_mesajlar(&d, 12),
+                d.profil.clone(),
+                d.dizin.clone(),
+                d.bot_adi.clone(),
+            )
+        };
+        if baglam.trim().is_empty() {
+            return None;
+        }
+        let talimat = ISTEKLILIK.replace("{ad}", &bot_adi);
+        let girdi =
+            format!("GRUP PROFİLİ\n{profil}\n\nKİŞİ DİZİNİ\n{dizin}\n\nSON MESAJLAR\n{baglam}");
+        match self.analiz(&girdi, &talimat, 80).await {
+            Ok(c) => isteklilik_puan(&c),
+            Err(e) => {
+                log::debug!("isteklilik: çağrı başarısız: {e}");
+                None
+            }
+        }
     }
 
     // mention'lar kapalı gider: model @everyone yazsa bile kimse pinglenmez.
@@ -2041,7 +2082,8 @@ impl EventHandler for Handler {
             }
         }
 
-        let cevap_ver = {
+        // 1. faz (kilit): kayıtlar + bayrak kararları
+        let (acik, etiketlendi, degerlendir) = {
             let mut d = self.bot.durum();
             // etiketlendi mi, adı geçti mi, mesajına yanıt mı verildi
             let etiketlendi = msg.mentions.iter().any(|u| u.id == bot_id)
@@ -2083,13 +2125,62 @@ impl EventHandler for Handler {
                 return;
             }
 
-            // etiketlenince her zaman cevap verir; yoksa şansa bağlı araya girer
-            let mut acik = d.sohbetler.contains_key(&kanal);
-            let mut sans = SANS * gelisim::evre(&d.gelisim).sans;
-            if seyahat::simdi().is_some() {
-                sans *= seyahat::YOLDA_SANS_CARPANI;
+            let acik = d.sohbetler.contains_key(&kanal);
+            // sohbet açık ya da etiket varsa değerlendirmeye gerek yok
+            let degerlendir = if !acik && !etiketlendi {
+                // rate limit: kanal başına en sık 2 dakikada bir isteklilik çağrısı
+                let simdi = Instant::now();
+                let uygun = d
+                    .son_degerlendirme
+                    .get(&kanal)
+                    .is_none_or(|t| simdi.duration_since(*t) >= DEGERLENDIRME_ARALIGI);
+                if uygun {
+                    d.son_degerlendirme.insert(kanal, simdi);
+                }
+                uygun
+            } else {
+                false
+            };
+            (acik, etiketlendi, degerlendir)
+        };
+
+        // 2. faz (kilitsiz): isteklilik değerlendirmesi — her mesaja atlamaz,
+        // konu/personalık/ilgi tartılır; etiket ve açık sohbet zaten doğrudan cevaplanır
+        let mut katil = acik || etiketlendi;
+        if degerlendir {
+            let esik = {
+                let d = self.bot.durum();
+                // evre cesareti eşik üzerinden: yeni sıkıngan, eski toprak rahat
+                let mut esik = ISTEK_ESIGI as i32;
+                let cesaret = gelisim::evre(&d.gelisim).sans;
+                if cesaret < 0.9 {
+                    esik += 1;
+                } else if cesaret > 1.1 {
+                    esik -= 1;
+                }
+                if seyahat::simdi().is_some() {
+                    esik += 2; // yoldayken daha az katılır
+                }
+                esik
+            };
+            match self.bot.isteklilik().await {
+                Some(puan) => {
+                    log::debug!("isteklilik [{kanal}]: puan={puan} eşik={esik}");
+                    katil = i32::from(puan) >= esik;
+                }
+                None => {
+                    // çağrı başarısız: eski yedek zar
+                    katil = rand::random::<f64>() < SANS;
+                    log::debug!("isteklilik [{kanal}]: çağrı yok, yedek zar={katil}");
+                }
             }
-            if !acik && (etiketlendi || rand::random::<f64>() < sans) {
+        }
+
+        // 3. faz (kilit): sohbete gir ve mesajı işle
+        let cevap_ver = {
+            let mut d = self.bot.durum();
+            let mut acik = d.sohbetler.contains_key(&kanal);
+            if !acik && katil {
                 sohbet_baslat(&mut d, kanal, None);
                 acik = true;
             }
@@ -2423,6 +2514,18 @@ mod test {
         // gizle: yalnız cevap (butonu gonder_akis ekler)
         let v = akis_gorunum(DusunmeKip::Gizle, "düşündüm", "cevap bu");
         assert_eq!(v, vec!["cevap bu"]);
+    }
+
+    #[test]
+    fn isteklilik_puani_ayiklanir() {
+        assert_eq!(
+            isteklilik_puan(r#"{"puan": 7, "sebep": "bana soruldu"}"#),
+            Some(7)
+        );
+        assert_eq!(isteklilik_puan("```json\n{\"puan\": 3}\n```"), Some(3));
+        assert_eq!(isteklilik_puan(r#"{"puan": 25}"#), Some(10)); // clamp
+        assert_eq!(isteklilik_puan(r#"{"puan": -4}"#), Some(0));
+        assert_eq!(isteklilik_puan("puan veremem"), None);
     }
 
     #[test]

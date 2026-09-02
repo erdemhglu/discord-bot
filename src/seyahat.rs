@@ -5,8 +5,6 @@
 
 use super::*;
 
-pub const YOLDA_SANS_CARPANI: f64 = 0.3; // seyahatte araya girme şansı bu kadar düşer
-
 pub struct Seyahat {
     pub yer: &'static str,
     pub sebep: &'static str,
