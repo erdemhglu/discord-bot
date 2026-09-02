@@ -4,6 +4,49 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Kişilik promptunun tamamı elden geçirildi
+
+Aynı oturumda önceki kişilik düzeltmesinin devamı; kullanıcı sırayla ek düzeltmeler istedi,
+sonunda "kisilik.md nin her satirini elden geçir" dedi — satır satır gözden geçirdim.
+
+- **Yakınlık artık kişiye göre**: açılış paragrafı "herkesle asker arkadaşı gibisin" yerine
+  "kiminle ne kadar samimi olacağına o kişinin sana nasıl hitap ettiğine ve geçmişine göre
+  karar verirsin" oldu — kullanıcı bunu ayrıca belirtti (herkesle aynı laubalilik yanlıştı).
+  İNSANLARA KARŞI TAVRIN'a da "az tanıdığın biriyle ilk mesajdan laubali olmazsın" bulgusu
+  eklendi ki iki bölüm birbiriyle tutarlı olsun.
+- **Kimlik değişti**: Nişantaşı Üniversitesi → İstanbul Teknik Üniversitesi, fizik öğrencisi
+  (kullanıcı isteği: "daha iyi bir kimlik"). Beyaz Tofaş detayı bu sırada kaldırıldı (dosya
+  üstünde elle yapılan bir ara düzenleme yarım cümle bırakmıştı — "Bunları" diye plural bir
+  referansın karşılığı kalmamıştı, tekile çevirip düzelttim). `promptlar/haber-sec.md`'deki
+  "üniversiteyle ilgili habere öncelik ver" kuralı da İTÜ'ye güncellendi (aksi halde kişilik ve
+  haber seçimi farklı okuldan söz ederdi).
+- Diğer bölümler (NASIL YAZARSIN, MUHABBET, İSTEK GELİNCE YAPARSIN, YASAK KALIPLAR, NE YAPMAZSIN,
+  RUH HALİN, KANDIRILMAZSIN) gözden geçirildi, risk ya da tutarsızlık bulunmadı; TAKINTILARIN
+  (ICE hayranlığı gag'i) kasıtlı bir önceki karar olduğu için dokunulmadı, ayrıca not edildi.
+- Kod değişmedi (yalnız prompt metni), `include_str!` ile derleme + 47 test doğrulandı.
+
+---
+
+## 2026-09-02 · Kişilik promptu: taciz/hakaret teşviki çıkarıldı, "aq/amk/mk" yasaklandı
+
+Kullanıcı: `promptlar/kisilik.md`'de aşırı saçma/laubali yerler var, millete küfür ediyor —
+kendi paylaştığı sunucu kurallarına (taciz, hakaret, düşmanlık, NSFW, siyasi propaganda vb.
+Seviye 0-3) uydur dedi. Ek istek: "aq", "amk", "mk" gibi kısaltılmış küfürler de yasaklansın,
+küfür edecekse tam yazsın.
+
+- **LAF SOKULUNCA**: "kişinin dosyasındaki bir zaafına vurursun" ve "küfürle/aşağılamayla
+  gelene küfürle/aşağılamayla" karşılık verme talimatı kaldırıldı. Sivri dilli/altta kalmama
+  kaldı; hedef gösterme, zaaf/travma/aile istismarı açıkça yasaklandı.
+- **DOĞALLIK**: "aq"/"amk"/"mk" kısaltmaları yasaklandı — küfür edecekse kelimeyi tam yazar;
+  küfür yalnız dolgu/tepki ünlemi, kişiye yöneltilen hakaret değil.
+- Yeni **SINIRLAR** bölümü: hakaret/taciz/düşmanlık, ırkçılık/cinsiyetçilik/homofobi/transfobi,
+  NSFW/yasadışı içerik, kişisel veri, siyasi/dini propaganda, kasıtlı yanlış bilgi, spam/flood,
+  öfke patlaması — kullanıcının yapıştırdığı sunucu kural setinin kısa özeti. Bu dosya çekirdek
+  (hoca'nın yazdığı huy.md bunu geçersiz kılamaz, mevcut ICE-hayranlığı sınırıyla aynı prensip).
+- Kod değişmedi (yalnız prompt metni), derleme `include_str!` ile doğrulandı, 47 test geçti.
+
+---
+
 ## 2026-09-02 · Reasoning zorunlu modelde küçük bütçe artık tabana çıkarılıyor
 
 Kullanıcı canlı log yapıştırdı: bir önceki turda `sor_ham`'ı kipten bağımsız reasoning
