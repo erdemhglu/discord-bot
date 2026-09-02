@@ -4,6 +4,16 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Canlı hatalar: kirp() off-by-one, geldim/debug embed, reasoning öğrenme
+İlk canlı log turu. Üç ayrı düzeltme (her biri kendi commit'inde, ayrıntı commit mesajlarında):
+- `hafiza::kirp` "…" eklerken sınırı 1 aşıyordu → `/zihin` kişi menüsü Discord'un description
+  100 sınırını aşınca komple reddediliyordu ("Must be 100 or fewer in length"). Düzeltildi + test.
+- Emin: "geldim mesajı da embed olsun, konuşma harici tüm mesajlar embed olsun" → sürüm duyurusu,
+  debug izleri, "resimler klasörü boş" hatası embed'e çevrildi.
+- Emin canlı logdan: reasoning zorunlu model her turda aynı boşa giden "kapat" denemesini
+  tekrarlıyordu → `Bot.reasoning_zorunlu_modeller` ile bir kez öğrenilip unutulmuyor.
+- Doğrulama: 76 test, clippy 0 uyarı, fmt temiz.
+
 ## 2026-09-02 · main.rs + komut.rs ~50 dosyaya bölündü (200 satır kuralı), RESIM_ANALIZI eklendi
 Önceki kaydın devamı, aynı oturum. Emin: "main.rs'teki fonksiyonları ayrı bir klasöre taşıyıp
 alakalı olanları dosya dosya bölebilirsin" → "komutları da ayrı dosyalara böl" → "200 satırdan
