@@ -11,10 +11,10 @@ komutlar:
 `!ajanlar` profilci ve hocayı şimdi çalıştırır
 `!uyan` uykuyu keser · `!uyu [saat]` test için uyutur
 `!durum` evre, sayaçlar, model, düşünme, uyku, seyahat
-`!zihin` ne bildiğimin özeti (ayrıntı: `/zihin` modalı)
+`!zihin` zihin kartı: kişiler/konular/olaylar (detay: `/zihin` menüsü)
 `!düşünme göster|gizle|sessiz|kapat` düşünme kipi (göster: cevapla spoiler'da · gizle: düşünürken \"Düşünüyorum...\", cevap sonra · sessiz: arka planda düşünür, hiç iz göstermez · kapat: istekler reasoning'siz)
 `!model [id]` modeli gösterir/değiştirir (yalnız favori)
-slash: `/durum` `/yardim` `/zihin` aynı şeyleri modal'da açar";
+slash: `/durum` `/yardim` kart, `/zihin` interaktif kart (kişi menüsü + bölüm butonları → detay modalları)";
 
 impl Bot {
     // tanınan komutsa true döner
@@ -106,10 +106,14 @@ impl Bot {
                 soyle(metin).await;
             }
             "zihin" => {
-                let dizin = hafiza::dizin_yenile();
-                let metin = format!("{}\nayrıntı için `/zihin`", dizin.trim());
-                for p in bol(&metin, MESAJ_SINIRI) {
-                    soyle(p).await;
+                // kanal mesajına bileşen konmaz (modal yalnız interaction'la açılır);
+                // kart + yönlendirme yeterli
+                let embedler = modal::zihin_embedleri(&self.durum());
+                let mesaj = CreateMessage::new()
+                    .content("detay için `/zihin`")
+                    .embeds(embedler);
+                if let Err(e) = kanal.send_message(&ctx.http, mesaj).await {
+                    log::warn!("zihin kartı gönderilemedi: {e}");
                 }
             }
             "düşünme" | "dusunme" => {

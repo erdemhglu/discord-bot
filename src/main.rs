@@ -2955,24 +2955,25 @@ impl EventHandler for Handler {
         }
     }
 
-    // slash komutlar modal açar (/durum /yardim /zihin), modal gönderimleri
-    // kısa onay alır (gösterimlik, girdi toplanmaz), düşünce butonu eski akışında
+    // slash komutlar embed kart açar (/durum /yardim /zihin); zihin kartındaki
+    // menü/butonlar detay modallarına götürür; modal gönderimleri kısa onay alır
+    // (gösterimlik, girdi toplanmaz); düşünce butonu eski akışında
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         match interaction {
             Interaction::Command(c) => {
-                let m = {
+                let yanit = {
                     let d = self.bot.durum();
                     match c.data.name.as_str() {
-                        "durum" => modal::modal_durum(&d),
-                        "zihin" => modal::modal_zihin(&d),
-                        _ => modal::modal_yardim(), // "yardim" ya da bilinmeyen
+                        "durum" => modal::durum_mesaji(&d),
+                        "zihin" => modal::zihin_mesaji(&d),
+                        _ => modal::yardim_mesaji(), // "yardim" ya da bilinmeyen
                     }
                 };
                 if let Err(e) = c
-                    .create_response(&ctx.http, CreateInteractionResponse::Modal(m))
+                    .create_response(&ctx.http, CreateInteractionResponse::Message(yanit))
                     .await
                 {
-                    log::warn!("modal gönderilemedi [{}]: {e}", c.data.name);
+                    log::warn!("komut kartı gönderilemedi [{}]: {e}", c.data.name);
                 }
             }
             Interaction::Modal(m) => {
@@ -2982,12 +2983,45 @@ impl EventHandler for Handler {
                         CreateInteractionResponse::Message(
                             CreateInteractionResponseMessage::new()
                                 .ephemeral(true)
-                                .content("gördün :) buradan bir şey toplamıyorum"),
+                                .content("Görüntüleme amaçlı; bir şey kaydetmedim."),
                         ),
                     )
                     .await;
             }
-            Interaction::Component(c) => self.dusunce_dugmesi(&ctx, c).await,
+            Interaction::Component(c) => {
+                if c.data.custom_id == DUSUNCE_DUGMESI {
+                    self.dusunce_dugmesi(&ctx, c).await;
+                    return;
+                }
+                // zihin detay katmanı: butonlar bölüm modalı, menü kişi modalı açar
+                let m = match c.data.custom_id.as_str() {
+                    modal::ZIHIN_KONULAR => Some(modal::modal_konular()),
+                    modal::ZIHIN_OLAYLAR => Some(modal::modal_olaylar()),
+                    modal::ZIHIN_OZET => {
+                        let d = self.bot.durum();
+                        Some(modal::modal_ozet(&d))
+                    }
+                    modal::ZIHIN_KISI_SEC => {
+                        let ComponentInteractionDataKind::StringSelect { values } = &c.data.kind
+                        else {
+                            return;
+                        };
+                        let Some(id) = values.first().and_then(|v| v.parse::<u64>().ok()) else {
+                            return;
+                        };
+                        Some(modal::modal_kisi(id))
+                    }
+                    _ => None,
+                };
+                if let Some(m) = m {
+                    if let Err(e) = c
+                        .create_response(&ctx.http, CreateInteractionResponse::Modal(m))
+                        .await
+                    {
+                        log::warn!("detay modalı gönderilemedi: {e}");
+                    }
+                }
+            }
             _ => {}
         }
     }
