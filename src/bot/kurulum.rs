@@ -112,8 +112,9 @@ impl Bot {
         }
         log::info!("debug [{kanal}]: {metin}");
         let hedef = self.debug_kanali.unwrap_or(kanal);
-        let govde: String = format!("⚙ {metin}").chars().take(300).collect();
-        if let Err(e) = hedef.say(&ctx.http, govde).await {
+        let govde: String = metin.chars().take(300).collect();
+        let mesaj = CreateMessage::new().embed(modal::bilgi_embed("⚙ Debug", &govde));
+        if let Err(e) = hedef.send_message(&ctx.http, mesaj).await {
             log::warn!("debug satırı gönderilemedi ({hedef}): {e}");
         }
     }

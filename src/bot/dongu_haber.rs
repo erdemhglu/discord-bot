@@ -133,7 +133,8 @@ impl Bot {
     // görsel şakası; hack ise hacklenmiş taklidiyle başlar
     async fn saka_yap(&self, ctx: &Context, kanal: ChannelId, hack: bool) {
         let Some(resim) = rastgele_resim() else {
-            let _ = kanal.say(&ctx.http, "resimler klasörü boş").await;
+            let mesaj = CreateMessage::new().embed(modal::bilgi_embed("Şaka", "resimler klasörü boş"));
+            let _ = kanal.send_message(&ctx.http, mesaj).await;
             return;
         };
         let metin = if hack {

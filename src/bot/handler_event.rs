@@ -66,8 +66,10 @@ impl EventHandler for Handler {
                     let d = self.bot.durum();
                     (d.model.clone(), d.dusunme.ad())
                 };
-                let metin = format!("geldim · {} · model {model} · düşünme {kip}", surum_metni());
-                if let Err(e) = kanal.say(&ctx.http, metin).await {
+                let aciklama = format!("model {model} · düşünme {kip}");
+                let embed = modal::bilgi_embed(&format!("geldim · {}", surum_metni()), &aciklama);
+                let mesaj = CreateMessage::new().embed(embed);
+                if let Err(e) = kanal.send_message(&ctx.http, mesaj).await {
                     log::warn!("sürüm duyurusu gönderilemedi ({kanal}): {e}");
                 }
             }
