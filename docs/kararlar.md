@@ -274,3 +274,16 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   toplamaz/göstermez — placeholder, sayaç, spoiler, "Düşünce Sürecini Göster" butonu yok;
   ekrandaki görünüm tamamen Kapali kipiyle aynı (hiç mesaj gitmez ta ki cevap başlayana dek);
   farkı Kapali'de reasoning isteğe hiç girmezken Sessiz'de gerçekten çalışır, yalnız gizlenir.
+- **2026-09-02 · Reasoning zorunlu modelde küçük bütçe tabana çıkarılır.** Canlı log: bir
+  önceki turun düzeltmesinden sonra bile (`z-ai/glm-5.3-flash`, openrouter) bu model/endpoint
+  reasoning'i hiç kapatmaya izin vermiyor ("Reasoning is mandatory ... cannot be disabled").
+  Kod bunu yakalayıp alanları kaldırıp açık haliyle yeniden deniyordu ama bütçeye dokunmuyordu:
+  20 token bütçeli `gezgin_sec` gibi mini-çağrılarda reasoning yine tüm bütçeyi yiyip
+  `content: null` bırakıyordu — bu sefer 200 döndüğü için önceki hata yakalama yoluna hiç
+  girmiyor, direkt "modelden boş yanıt geldi" hatasıyla dönüyordu. İki değişiklik: (1)
+  `butce_tabanini_uygula(govde, taban)` — `max_tokens` varsa ve tabanın (`REASONING_ZORUNLU_TABAN`=500)
+  altındaysa yükseltir, yoksa (bütçesiz çağrı) dokunmaz; mandatory-reasoning yeniden denemesinde
+  çağrılır. (2) `sor_ham`'da 200 dönüp içerik boş/null gelmesi artık anında hata değil: bütçe
+  tabana çıkarılıp (mümkünse) bir kez daha denenir, `AI_YENIDEN_DENEME` tükenince pes edilir.
+  `sor_ham_akis`'te de aynı bütçe tabanı mandatory-reasoning dalında uygulanır (stream tarafında
+  boş-içerik retry'ı yok, `gonder_akis` zaten kısa/boş cevabı ayrıca ele alıyor).

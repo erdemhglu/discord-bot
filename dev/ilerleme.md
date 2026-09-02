@@ -4,6 +4,28 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Reasoning zorunlu modelde küçük bütçe artık tabana çıkarılıyor
+
+Kullanıcı canlı log yapıştırdı: bir önceki turda `sor_ham`'ı kipten bağımsız reasoning
+kapatacak şekilde düzelttim, ama bu model/endpoint (`z-ai/glm-5.3-flash`, openrouter)
+reasoning'i **hiç** kapatmaya izin vermiyor ("Reasoning is mandatory ... cannot be disabled").
+Kod bu hatayı yakalayıp alanları kaldırıp açık haliyle yeniden deniyordu (önceki turdan kalan
+davranış) ama bütçeye dokunmuyordu: `gezgin_sec` gibi 20 token bütçeli mini-çağrılarda reasoning
+yine tüm bütçeyi yiyor, bu sefer 200 dönüp `content: null` bırakıyordu — mandatory-hata yolunun
+dışında kaldığı için doğrudan "modelden boş yanıt geldi" hatasıyla çıkıyordu.
+
+- `REASONING_ZORUNLU_TABAN=500` + `Bot::butce_tabanini_uygula(govde, taban)`: `max_tokens`
+  varsa ve tabanın altındaysa yükseltir, bütçesiz çağrıya dokunmaz.
+- `sor_ham`: mandatory-reasoning yeniden denemesinde bütçe tabana çıkarılır. Ayrıca 200 dönüp
+  içerik boş/null gelmesi artık anında hata değil — bütçe tabana çıkarılıp bir kez daha denenir
+  (`AI_YENIDEN_DENEME` tükenince pes edilir).
+- `sor_ham_akis`: mandatory-reasoning dalında aynı bütçe tabanı uygulanır (boş-içerik retry'ı
+  stream tarafında yok, `gonder_akis` zaten kısa/boş cevabı ayrıca ele alıyor).
+- Doğrulama: 47 test (`butce_taban_altindaysa_yukselir` yeni), clippy 0 uyarı, `cargo fmt`,
+  debug build.
+
+---
+
 ## 2026-09-02 · Düşünme kipine "sessiz" eklendi (4. kip)
 
 Kullanıcı isteği: "gizle" modunda bile düşünürken 'X kelime düşünüldü' yazıyor, bunu hiç
