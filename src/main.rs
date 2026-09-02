@@ -756,8 +756,14 @@ impl Bot {
     // sağlayıcıları bozuyordu, adres bazlı seçilir). Alanları gerçekten eklediyse true
     // döner (bazı modeller yine de reasoning'i kapatmaya izin vermiyor, çağıran taraf
     // bunu geri alıp bir kez daha dener).
-    fn reasoning_kapat(&self, govde: &mut serde_json::Value) -> bool {
-        if self.durum().dusunme != DusunmeKip::Kapali {
+    // herhalukarda=true: kullanıcının kipine bakmadan kapatır — sor_ham (stream olmayan)
+    // reasoning_content alanını hiç okumaz/göstermez, o yüzden arka plan ajanları (profilci,
+    // hoca, günlükçü, gezgin, isteklilik, ruh_hali) kip "gizle" iken bile boşuna düşünüp küçük
+    // max_tokens bütçesini tüketmesin, content: null dönüp "modelden boş yanıt geldi" hatasına
+    // düşmesin. sor_ham_akis (stream, sohbet) kullanıcı kipine bakmaya devam eder: "gizle"
+    // düşünce sayacı, "göster" tam metin gösterir, o yüzden false geçer.
+    fn reasoning_kapat(&self, govde: &mut serde_json::Value, herhalukarda: bool) -> bool {
+        if !herhalukarda && self.durum().dusunme != DusunmeKip::Kapali {
             return false;
         }
         let Some(o) = govde.as_object_mut() else {
@@ -792,7 +798,7 @@ impl Bot {
         mut govde: serde_json::Value,
         kategori: &'static str,
     ) -> Result<String, Hata> {
-        let mut kapatildi = self.reasoning_kapat(&mut govde);
+        let mut kapatildi = self.reasoning_kapat(&mut govde, true);
         let mut son_hata: Hata = "istek hiç yapılamadı".into();
         for deneme in 0..=AI_YENIDEN_DENEME {
             if deneme > 0 {
@@ -920,7 +926,7 @@ impl Bot {
         if let Some(t) = butce {
             govde["max_tokens"] = serde_json::json!(t);
         }
-        let mut kapatildi = self.reasoning_kapat(&mut govde);
+        let mut kapatildi = self.reasoning_kapat(&mut govde, false);
         // yeniden deneme yalnız akış açılmadan önce: parça gelmeye başladıysa okuyucu dönmüş
         // olur, sonrası gonder_akis'in yarım-kaldı yoludur
         let mut son_hata: Hata = "istek hiç yapılamadı".into();

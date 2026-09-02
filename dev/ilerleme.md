@@ -4,6 +4,25 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Arka plan ajanlarında sessiz "boş yanıt" hatası çözüldü
+
+Önceki turda "bu kod tarafında tam çözülebilecek bir şey değil" denen ihtimal gerçekleşti:
+canlı loglarda profilci/hoca/günlükçü/gezgin art arda "modelden boş yanıt geldi" hatası
+veriyordu, `kisiler/konular/olaylar` bu yüzden boş kalmıştı.
+
+- **Kök neden**: `reasoning_kapat` yalnızca kullanıcının global düşünme kipi `Kapali` ise
+  reasoning'i kapatıyordu. Kip `gizle` iken kapatılmıyordu — ama `sor_ham` (stream olmayan,
+  arka plan ajanlarının yolu) `reasoning_content` alanını zaten hiç okumaz/göstermez. Reasoning
+  zorunlu model (glm-5.3-flash), bu ajanların küçük `max_tokens` bütçelerini (20-1200) tamamen
+  düşünmeye harcayıp `content: null` döndürüyordu.
+- **Düzeltme**: `reasoning_kapat` artık `herhalukarda: bool` parametresi alıyor. `sor_ham`
+  (arka plan ajanları + non-stream sohbet) kullanıcı kipine bakmaksızın her zaman `true` geçip
+  reasoning'i kapatıyor. `sor_ham_akis` (stream, sohbet) hâlâ kullanıcı kipine bakıyor (`false`)
+  çünkü orada `gizle`/`göster` gerçekten gösterilen bir şeye karşılık geliyor (sayaç/tam metin).
+- Doğrulama: 46 test, clippy 0 uyarı, `cargo fmt`, debug build.
+
+---
+
 ## 2026-09-02 · İlk canlı loglar: iki gerçek üretim hatası
 Kullanıcı canlı bottan (`z-ai/glm-5.3-flash`, openrouter) gerçek log yapıştırdı. İki ayrı hata:
 
