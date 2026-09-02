@@ -99,7 +99,7 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   eriştiği her sunucuda/kanalda çalışıyordu; ikisi de boşsa davranış aynen sürer. Ayarlanınca `message`,
   `guild_create`, `guild_member_addition`, `varsayilan_kanal` hepsi filtreler (tarama dahil, API'ye yazık
   olmasın).
-- **2026-09-02 · `mesgul` bayrağı RAII (`MesgulKilit`).** 7 farklı çıkış noktasında elle
+- **2026-09-02 · `mesgul` bayrağı RAII (`MesgulGuard`, PR #2 ile birleşti).** 7 farklı çıkış noktasında elle
   `mesgul.remove` vardı; aradaki bir `.await` panikleseydi kanal sonsuza dek "meşgul" kilitli kalırdı
   (yeniden başlamadan açılmaz). Artık `Drop` ile garanti; elle remove çağrıları kaldırıldı.
 - **2026-09-02 · HTTP client timeout ayrıldı (P0 kapandı).** Tek `.timeout(60sn)` uzun stream'i
@@ -258,3 +258,32 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   `MesgulGuard` (RAII): panik dahil her çıkışta kanalın meşgul bayrağı bırakılır.
   `soy` char güvenli (bayt dilimi türkçe adlarda panikletebilirdi) + `kucult` İ→i̇ birleşik
   noktasını atar. Typing edit döngüsünden çıktı (hız sınırı); model çağrısından önce bir kez.
+- **2026-09-02 · Arka plan ajanları reasoning'i kipten bağımsız kapatır.** Canlı log: kip
+  "gizle" iken `reasoning_kapat` yalnız kip "Kapali" ise devreye giriyordu, `sor_ham`
+  (profilci/hoca/günlükçü/gezgin/isteklilik/ruh_hali'nin stream olmayan yolu) `reasoning_content`
+  alanını zaten hiç okumaz/göstermez — küçük `max_tokens` bütçeleri (20-1200) tamamen
+  düşünmeye gidip `content: null` dönüyordu, "modelden boş yanıt geldi" hatasıyla
+  kisiler/konular/olaylar boş kalıyordu. `reasoning_kapat` artık `herhalukarda: bool` alır:
+  `sor_ham` her zaman `true` geçip kipten bağımsız kapatır, `sor_ham_akis` (stream, sohbet)
+  `false` geçip eski davranışını (yalnız kip Kapali ise kapat) korur.
+- **2026-09-02 · Düşünme kipine "sessiz" eklendi.** Kullanıcı isteği: "gizle" kipinde bile
+  düşünürken canlı kelime sayacı ("X kelime düşündüm") görünmesi rahatsız ediyor; hiçbir iz
+  bırakmadan doğrudan cevabı isteyen bir kip istendi — ama reasoning modeli yine arka planda
+  düşünsün. Dördüncü kip `Sessiz`: `reasoning_kapat`'ta kip Kapali sayılmadığı için reasoning
+  normal istenir (stream yolunda kapatılmaz), yalnız `gonder_akis`/`akis_gorunum` düşünceyi hiç
+  toplamaz/göstermez — placeholder, sayaç, spoiler, "Düşünce Sürecini Göster" butonu yok;
+  ekrandaki görünüm tamamen Kapali kipiyle aynı (hiç mesaj gitmez ta ki cevap başlayana dek);
+  farkı Kapali'de reasoning isteğe hiç girmezken Sessiz'de gerçekten çalışır, yalnız gizlenir.
+- **2026-09-02 · Reasoning zorunlu modelde küçük bütçe tabana çıkarılır.** Canlı log: bir
+  önceki turun düzeltmesinden sonra bile (`z-ai/glm-5.3-flash`, openrouter) bu model/endpoint
+  reasoning'i hiç kapatmaya izin vermiyor ("Reasoning is mandatory ... cannot be disabled").
+  Kod bunu yakalayıp alanları kaldırıp açık haliyle yeniden deniyordu ama bütçeye dokunmuyordu:
+  20 token bütçeli `gezgin_sec` gibi mini-çağrılarda reasoning yine tüm bütçeyi yiyip
+  `content: null` bırakıyordu — bu sefer 200 döndüğü için önceki hata yakalama yoluna hiç
+  girmiyor, direkt "modelden boş yanıt geldi" hatasıyla dönüyordu. İki değişiklik: (1)
+  `butce_tabanini_uygula(govde, taban)` — `max_tokens` varsa ve tabanın (`REASONING_ZORUNLU_TABAN`=500)
+  altındaysa yükseltir, yoksa (bütçesiz çağrı) dokunmaz; mandatory-reasoning yeniden denemesinde
+  çağrılır. (2) `sor_ham`'da 200 dönüp içerik boş/null gelmesi artık anında hata değil: bütçe
+  tabana çıkarılıp (mümkünse) bir kez daha denenir, `AI_YENIDEN_DENEME` tükenince pes edilir.
+  `sor_ham_akis`'te de aynı bütçe tabanı mandatory-reasoning dalında uygulanır (stream tarafında
+  boş-içerik retry'ı yok, `gonder_akis` zaten kısa/boş cevabı ayrıca ele alıyor).

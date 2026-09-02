@@ -69,6 +69,10 @@ macro_rules! cevap_butcesi {
 const BAGLANTI_ZAMAN_ASIMI: Duration = Duration::from_secs(15); // tcp/tls el sıkışma
 const OKUMA_ZAMAN_ASIMI: Duration = Duration::from_secs(120); // iki veri arası en çok; ilk tokeni de kapsar
 const AI_YENIDEN_DENEME: u32 = 2; // ağ hatası / 429 / 5xx'te toplam deneme sayısı bu + 1
+
+// reasoning kapatılamayan modelde (mandatory) mini-çağrıların bütçesi bu tabana çıkarılır;
+// yoksa reasoning tamamı yiyip content: null döner (bkz. reasoning_zorunlu_hatasi)
+const REASONING_ZORUNLU_TABAN: u32 = 500;
 const FAVORI: u64 = 259669117248864257; // bu kişiyi ne olursa olsun sever
 const GEZGIN_ARALIGI: Duration = Duration::from_secs(4 * 60 * 60); // ne sıklıkla internette gezer
 const RESIM_KLASORU: &str = "resimler"; // şakalarda atılacak görseller
@@ -118,6 +122,7 @@ enum DusunmeKip {
     #[default]
     Goster, // reasoning istenir, cevapla birlikte spoiler içinde gösterilir
     Gizle,  // reasoning istenir ama gösterilmez; düşünürken "Düşünüyorum..." yazar
+    Sessiz, // reasoning istenir (arka planda düşünür) ama hiçbir iz göstermez: placeholder/sayaç/buton yok, doğrudan cevap gelir
     Kapali, // reasoning istenmez, istekler düşünmesiz atılır
 }
 
@@ -126,6 +131,7 @@ impl DusunmeKip {
         match self {
             DusunmeKip::Goster => "goster",
             DusunmeKip::Gizle => "gizle",
+            DusunmeKip::Sessiz => "sessiz",
             DusunmeKip::Kapali => "kapali",
         }
     }
@@ -133,6 +139,7 @@ impl DusunmeKip {
     fn oku() -> Self {
         match hafiza::oku("dusunme.md").trim() {
             "gizle" => DusunmeKip::Gizle,
+            "sessiz" => DusunmeKip::Sessiz,
             "kapali" => DusunmeKip::Kapali,
             _ => DusunmeKip::Goster,
         }
@@ -143,6 +150,7 @@ impl DusunmeKip {
         match arg {
             "göster" | "goster" | "aç" | "ac" | "on" => Some(DusunmeKip::Goster),
             "gizle" => Some(DusunmeKip::Gizle),
+            "sessiz" => Some(DusunmeKip::Sessiz),
             "kapat" | "kapalı" | "kapali" | "off" => Some(DusunmeKip::Kapali),
             _ => None,
         }
@@ -152,6 +160,7 @@ impl DusunmeKip {
         match self {
             DusunmeKip::Goster => "göster",
             DusunmeKip::Gizle => "gizli",
+            DusunmeKip::Sessiz => "sessiz",
             DusunmeKip::Kapali => "kapalı",
         }
     }
@@ -756,8 +765,14 @@ impl Bot {
     // sağlayıcıları bozuyordu, adres bazlı seçilir). Alanları gerçekten eklediyse true
     // döner (bazı modeller yine de reasoning'i kapatmaya izin vermiyor, çağıran taraf
     // bunu geri alıp bir kez daha dener).
-    fn reasoning_kapat(&self, govde: &mut serde_json::Value) -> bool {
-        if self.durum().dusunme != DusunmeKip::Kapali {
+    // herhalukarda=true: kullanıcının kipine bakmadan kapatır — sor_ham (stream olmayan)
+    // reasoning_content alanını hiç okumaz/göstermez, o yüzden arka plan ajanları (profilci,
+    // hoca, günlükçü, gezgin, isteklilik, ruh_hali) kip "gizle" iken bile boşuna düşünüp küçük
+    // max_tokens bütçesini tüketmesin, content: null dönüp "modelden boş yanıt geldi" hatasına
+    // düşmesin. sor_ham_akis (stream, sohbet) kullanıcı kipine bakmaya devam eder: "gizle"
+    // düşünce sayacı, "göster" tam metin gösterir, o yüzden false geçer.
+    fn reasoning_kapat(&self, govde: &mut serde_json::Value, herhalukarda: bool) -> bool {
+        if !herhalukarda && self.durum().dusunme != DusunmeKip::Kapali {
             return false;
         }
         let Some(o) = govde.as_object_mut() else {
@@ -782,6 +797,18 @@ impl Bot {
         }
     }
 
+    // max_tokens taban altındaysa yükseltir; reasoning zorunlu modelde bütçesiz kalmasın diye.
+    // max_tokens hiç yoksa (bütçesiz çağrı) dokunmaz. Değiştirdiyse true döner (log için).
+    fn butce_tabanini_uygula(govde: &mut serde_json::Value, taban: u32) -> bool {
+        match govde.get("max_tokens").and_then(serde_json::Value::as_u64) {
+            Some(mevcut) if (mevcut as u32) < taban => {
+                govde["max_tokens"] = serde_json::json!(taban);
+                true
+            }
+            _ => false,
+        }
+    }
+
     // açıklayıcı hata ile ham istek; her şey buradan geçer. Ağ hatası / 429 / 5xx'te geri
     // çekilip yeniden dener; bazı modeller (ör. bazı GLM reasoning varyantları) reasoning'i
     // kapatmaya izin vermiyor ("mandatory"/"cannot be disabled" 400) — o durumda alanları
@@ -792,7 +819,7 @@ impl Bot {
         mut govde: serde_json::Value,
         kategori: &'static str,
     ) -> Result<String, Hata> {
-        let mut kapatildi = self.reasoning_kapat(&mut govde);
+        let mut kapatildi = self.reasoning_kapat(&mut govde, true);
         let mut son_hata: Hata = "istek hiç yapılamadı".into();
         for deneme in 0..=AI_YENIDEN_DENEME {
             if deneme > 0 {
@@ -828,6 +855,11 @@ impl Bot {
                     );
                     Self::reasoning_alanlarini_kaldir(&mut govde);
                     kapatildi = false;
+                    if Self::butce_tabanini_uygula(&mut govde, REASONING_ZORUNLU_TABAN) {
+                        log::warn!(
+                            "ai [sor_ham]: küçük bütçe reasoning'e yetmeyebilir, {REASONING_ZORUNLU_TABAN}'a çıkarıldı"
+                        );
+                    }
                     son_hata = hata;
                     continue;
                 }
@@ -846,8 +878,27 @@ impl Bot {
                 .into_iter()
                 .next()
                 .and_then(|s| s.message.content)
-                .ok_or("modelden boş yanıt geldi")?;
-            return Ok(metin.trim().to_string());
+                .filter(|s| !s.trim().is_empty());
+            match metin {
+                Some(metin) => return Ok(metin.trim().to_string()),
+                // kapatılamayan reasoning küçük bütçeyi yiyip content: null bırakmış olabilir;
+                // bütçeyi (varsa) tabana çıkarıp bir kez daha dene, taban da yetmediyse pes et
+                None if deneme < AI_YENIDEN_DENEME => {
+                    let buyudu = Self::butce_tabanini_uygula(&mut govde, REASONING_ZORUNLU_TABAN);
+                    log::warn!(
+                        "ai [sor_ham]: modelden boş yanıt geldi{}",
+                        if buyudu {
+                            format!(
+                                ", bütçe {REASONING_ZORUNLU_TABAN}'a çıkarılıp yeniden deneniyor"
+                            )
+                        } else {
+                            String::new()
+                        }
+                    );
+                    son_hata = "modelden boş yanıt geldi".into();
+                }
+                None => return Err("modelden boş yanıt geldi".into()),
+            }
         }
         Err(son_hata)
     }
@@ -920,7 +971,7 @@ impl Bot {
         if let Some(t) = butce {
             govde["max_tokens"] = serde_json::json!(t);
         }
-        let mut kapatildi = self.reasoning_kapat(&mut govde);
+        let mut kapatildi = self.reasoning_kapat(&mut govde, false);
         // yeniden deneme yalnız akış açılmadan önce: parça gelmeye başladıysa okuyucu dönmüş
         // olur, sonrası gonder_akis'in yarım-kaldı yoludur
         let mut son_hata: Hata = "istek hiç yapılamadı".into();
@@ -957,6 +1008,11 @@ impl Bot {
                     );
                     Self::reasoning_alanlarini_kaldir(&mut govde);
                     kapatildi = false;
+                    if Self::butce_tabanini_uygula(&mut govde, REASONING_ZORUNLU_TABAN) {
+                        log::warn!(
+                            "ai [sor_ham_akis]: küçük bütçe reasoning'e yetmeyebilir, {REASONING_ZORUNLU_TABAN}'a çıkarıldı"
+                        );
+                    }
                     son_hata = hata;
                     continue;
                 }
@@ -1191,7 +1247,7 @@ impl Bot {
                         ilk_parca_ms = Some(baslangic.elapsed().as_millis());
                     }
                     metin.push_str(&p.metin);
-                    if kip != DusunmeKip::Kapali {
+                    if matches!(kip, DusunmeKip::Goster | DusunmeKip::Gizle) {
                         dusunce.push_str(&p.dusunce);
                     }
                     if ilk || son_yazma.elapsed() >= AKIS_DUZENLEME {
@@ -1289,14 +1345,15 @@ impl Bot {
 }
 
 // thinking fazı: cevap henüz başlamadıysa ve model düşünüyorsa placeholder gider;
-// gizlede canlı kelime sayacı, göstergede düz "Düşünüyorum...". Cevap başlayınca
-// aynı mesaj düzenlenerek stream edilir
+// gizlede canlı kelime sayacı, göstergede düz "Düşünüyorum...". Sessiz ve kapalıda hiçbir
+// şey gitmez (sessizde reasoning arka planda çalışır ama iz bırakmaz, kapalıda zaten yok).
+// Cevap başlayınca aynı mesaj düzenlenerek stream edilir
 fn akis_gorunum(kip: DusunmeKip, dusunce: &str, cevap: &str) -> Vec<String> {
     if cevap.trim().is_empty() && !dusunce.trim().is_empty() {
         return match kip {
             DusunmeKip::Gizle => vec![dusunce_sayaci(dusunce)],
             DusunmeKip::Goster => vec!["Düşünüyorum...".to_string()],
-            DusunmeKip::Kapali => Vec::new(),
+            DusunmeKip::Sessiz | DusunmeKip::Kapali => Vec::new(),
         };
     }
     let dusunce = tek_satir(dusunce);
@@ -1308,8 +1365,8 @@ fn akis_gorunum(kip: DusunmeKip, dusunce: &str, cevap: &str) -> Vec<String> {
         }
         v.extend(kod_bloklari(&dusunce));
     }
-    // gizle ve kapalı kiplerde düşünce yerleşime girmez; gizlede cevap sonunda
-    // "Düşünce Sürecini Göster" butonu gider (gonder_akis ekler)
+    // gizle/sessiz/kapalı kiplerde düşünce yerleşime girmez; gizlede cevap sonunda
+    // "Düşünce Sürecini Göster" butonu gider (gonder_akis ekler), sessizde hiç buton yok
     v.extend(bol(cevap, MESAJ_SINIRI));
     v
 }
@@ -3163,10 +3220,12 @@ mod test {
         assert_eq!(DusunmeKip::arg_ile("göster"), Some(DusunmeKip::Goster));
         assert_eq!(DusunmeKip::arg_ile("aç"), Some(DusunmeKip::Goster));
         assert_eq!(DusunmeKip::arg_ile("gizle"), Some(DusunmeKip::Gizle));
+        assert_eq!(DusunmeKip::arg_ile("sessiz"), Some(DusunmeKip::Sessiz));
         assert_eq!(DusunmeKip::arg_ile("kapat"), Some(DusunmeKip::Kapali));
         assert_eq!(DusunmeKip::arg_ile("kapalı"), Some(DusunmeKip::Kapali));
         assert_eq!(DusunmeKip::arg_ile("saçma"), None);
         assert_eq!(DusunmeKip::Goster.dosya_degeri(), "goster");
+        assert_eq!(DusunmeKip::Sessiz.dosya_degeri(), "sessiz");
     }
 
     #[test]
@@ -3177,6 +3236,9 @@ mod test {
         // gizle: canlı kelime sayacı
         let v = akis_gorunum(DusunmeKip::Gizle, "bir iki üç dört beş", "");
         assert_eq!(v, vec!["Düşünüyorum... Şu ana kadar 5 kelime düşündüm."]);
+        // sessiz: arka planda düşünür ama placeholder yok (kapalıyla aynı görünüm)
+        let v = akis_gorunum(DusunmeKip::Sessiz, "hmm düşünüyorum", "");
+        assert!(v.is_empty());
         // kapalıyken placeholder yok
         let v = akis_gorunum(DusunmeKip::Kapali, "", "");
         assert!(v.is_empty());
@@ -3192,6 +3254,9 @@ mod test {
         assert_eq!(v[2], "cevap bu");
         // gizle: yalnız cevap (butonu gonder_akis ekler)
         let v = akis_gorunum(DusunmeKip::Gizle, "düşündüm", "cevap bu");
+        assert_eq!(v, vec!["cevap bu"]);
+        // sessiz: yalnız cevap, hiç iz yok (buton da eklenmez)
+        let v = akis_gorunum(DusunmeKip::Sessiz, "düşündüm", "cevap bu");
         assert_eq!(v, vec!["cevap bu"]);
     }
 
@@ -3222,6 +3287,21 @@ mod test {
             Some("Misafir".into())
         );
         assert_eq!(hedef_ayikla("", &bilinenler), None);
+    }
+
+    #[test]
+    fn butce_taban_altindaysa_yukselir() {
+        let mut govde = serde_json::json!({"max_tokens": 20});
+        assert!(Bot::butce_tabanini_uygula(&mut govde, 500));
+        assert_eq!(govde["max_tokens"], 500);
+        // taban üstündeyse dokunmaz
+        let mut govde = serde_json::json!({"max_tokens": 800});
+        assert!(!Bot::butce_tabanini_uygula(&mut govde, 500));
+        assert_eq!(govde["max_tokens"], 800);
+        // max_tokens hiç yoksa (bütçesiz çağrı) dokunmaz
+        let mut govde = serde_json::json!({});
+        assert!(!Bot::butce_tabanini_uygula(&mut govde, 500));
+        assert!(govde.get("max_tokens").is_none());
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 ## Bir mesaj geldi
 0. Her mesaj (bot dahil, `gonder` üstünden) kanalın geçmişine düşer: `kanal_not` → bellek (60 satır) + `durum/kanallar/<id>.md`. Yeni sohbet açılırken son 10 satır tohum olur (`sohbet_baslat`), böylece sohbet bitmiş ya da bot yeniden başlamış olsa da bağlam kaybolmaz.
-0. Metin `!` ya da `/` ile başlıyorsa `komut.rs::Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · düşünme · model · yardım/help. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır. `düşünme göster/gizle/kapat` düşünme kipini değiştirir (`durum/dusunme.md`): göster=spoiler'da, gizle="Düşünüyorum..." sonrası cevap, kapat=istekler reasoning'siz.
+0. Metin `!` ya da `/` ile başlıyorsa `komut.rs::Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · düşünme · model · yardım/help. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır. `düşünme göster/gizle/sessiz/kapat` düşünme kipini değiştirir (`durum/dusunme.md`): göster=spoiler'da, gizle="Düşünüyorum..." sonrası cevap, sessiz=arka planda düşünür ama hiç iz göstermez (placeholder/sayaç/buton yok), kapat=istekler reasoning'siz.
 1. `Handler::message`: bot/webhook/DM → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
 3. `hatirla` (ham hafıza), `son_kanal`, favori adı.
@@ -24,7 +24,7 @@
 kilit ── meşgul? çık ── sohbet var? ── talimat seç ── meşgul=1 ── kilit bırak
 bekle 0,15-0,35 sn ── güncel geçmiş + son mesaj + bekleyenler ── arastir(link/haber/araştır) ── hedef seçimi (2+ yazan varsa) ── yazıyor…
 uret_akis(stream, bütçe: cevap_butcesi!; release'de bütçe yok) ── (hata: meşgul=0, çık)
-gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünürken (cevap başlamadı): göster="Düşünüyorum...", gizle=canlı kelime sayacı ── cevap başlayınca aynı mesaj düzenlenerek stream ── göster: thinking newline'sız tek satır, hem spoiler hem kod bloğu ── gizle: thinking mesajda yok, cevap sonunda "Düşünce Sürecini Göster" butonu (interaction_create tıklayana ephemeral kod bloğu açar, düşünce deposu 50 mesaj) ── kapalı: istek reasoning'siz ── 1900'ü aşan parça yeni mesaj ── discord yanıtı her cevapta ilk mesajda
+gonder_akis: ilk delta ile mesaj açılır ── AKIS_DUZENLEME (1,2 sn) aralıkla düzenlenir ── düşünürken (cevap başlamadı): göster="Düşünüyorum...", gizle=canlı kelime sayacı, sessiz/kapalı=hiçbir şey (mesaj cevap başlayana dek hiç açılmaz) ── cevap başlayınca aynı mesaj düzenlenerek stream ── göster: thinking newline'sız tek satır, hem spoiler hem kod bloğu ── gizle: thinking mesajda yok, cevap sonunda "Düşünce Sürecini Göster" butonu (interaction_create tıklayana ephemeral kod bloğu açar, düşünce deposu 50 mesaj) ── sessiz: reasoning isteniyor (arka planda çalışıyor) ama hiç toplanmıyor/gösterilmiyor, buton da yok ── kapalı: istek reasoning'siz ── 1900'ü aşan parça yeni mesaj ── discord yanıtı her cevapta ilk mesajda
 tekrar_mi? bir kez yeniden üret, yine tekrarsa açılanları sil ve sus
 üst üste 2+ farklı kişi yazdıysa HEDEF_SEC mini çağrısı hedef kişiyi seçer; yanıt o kişinin mesajına bağlanır, talimata "ona seslen" notu girer
 üretim sırasında yeni mesaj gelse de akış tamamlanır (sil-baştan yok); yeni mesaj sıradaki turda ele alınır
