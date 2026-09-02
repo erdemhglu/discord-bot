@@ -7,13 +7,9 @@ Açık plan. Adımlar tamamlandıkça `ilerleme.md`'ye taşınır, buradan düş
 Kullanıcının bildirdiği 6 kök problemi çözer. Her adım: commit + push + bu dosyanın güncellenmesi.
 
 ### Adım 0 · dev/ klasörü — TAMAMLANDI
-### Adım 1 · Log sadeleştirme
-Info'da yalnız: uyudu/uyandı, PANİK+error, zihne kaydedildi, açılış/kapanış, evre geçişi.
-Kalan her şey debug. `LOG_SEVIYE` varsayılanı info kalır.
-### Adım 2 · 12 mesaj sınırı kalksın
-`MAX_MESAJ`/`VEDA_ESIGI`/veda-son talimatları silinir; kanal yasağı kalkar.
-Sohbet son mesajdan `SOHBET_ZAMAN_ASIMI` (30 dk) sonra sessizce kapanır
-(`Sohbet.son_aktivite` + dakika tikinde tarama).
+### Adım 1 · Log sadeleştirme — TAMAMLANDI
+### Adım 2 · 12 mesaj sınırı kalksın — TAMAMLANDI
+`SOHBET_ZAMAN_ASIMI` 30 dk, `zaman_asimi_kapat` uyku tikinde, kanal yasağı yok.
 ### Adım 3 · Zihin id bazlı + zaman damgası + bellek döngüsü
 - `kisiler/<id>.md`: id, kullanici_adi, gorunen_ad, eski_adlar + mevcut alanlar.
   Temiz başlangıç (eski slug dosyalarına dokunulmaz).

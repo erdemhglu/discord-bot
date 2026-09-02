@@ -4,6 +4,15 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 1+2 · log sadeleştirme + 12 mesaj sınırı kalktı
+- **Adım 1:** info logda yalnız kritik olaylar: uyudu/uyandı, PANİK/error, zihin kaydı
+  (günlükçü), evre geçişi, açılış/kapanış. Ajan güncellemeleri, gezgin, mesaj taraması debug'a indi.
+- **Adım 2:** `MAX_MESAJ`/`VEDA_ESIGI`/`BEKLEME` silindi; veda ve son-mesaj promptları kaldırıldı;
+  kanal yasağı (`yasakli`/`girebilir_mi`) yok. Sohbet son mesajdan `SOHBET_ZAMAN_ASIMI` (30 dk)
+  sonra sessizce kapanır: `Durum.son_aktivite` + dakika tikinde `zaman_asimi_kapat`
+  (meşgul kanallara dokunmaz, kapanan döküm günlükçü+eleştirmene gider).
+- Doğrulama: 31 test, clippy 0 uyarı.
+
 ## 2026-09-02 · Adım 0 · `dev/` klasörü kuruldu
 - Oturum hafızası: `dev/README.md`, `dev/ilerleme.md`, `dev/yol-haritasi.md`.
 - `AGENTS.md` ve `CLAUDE.md`'ye işaretçi eklendi (compact sonrası ilk okunacak yer).

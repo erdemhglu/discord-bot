@@ -8,8 +8,6 @@ doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken 
 |---|---|---|---|---|---|
 | KISILIK | kisilik.md | sistem (uret) | `sistem_metni` | `{ad}` `{favori_satiri}` | — |
 | FAVORI_SATIRI | favori-satiri.md | KISILIK'e eklenir | `sistem_metni` | `{favori}` | — |
-| VEDA_YAKLASIYOR | veda-yaklasiyor.md | görev | `cevapla` (sayac ≥ 9) | — | 250 |
-| SON_MESAJ | son-mesaj.md | görev | `cevapla` (sayac ≥ 11) | — | 250 |
 | HOS_GELDIN | hos-geldin.md | görev | `guild_member_addition` | — | 200 |
 | DURUP_DURURKEN | durup-dururken.md | görev | `durtme_dongusu` | — | 120 |
 | YOLDA | yolda.md | görev | `durtme_dongusu` (seyahatte) | — | 120 |

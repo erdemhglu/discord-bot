@@ -30,12 +30,10 @@ impl Bot {
                 {
                     let mut d = self.durum();
                     if arg.contains("hepsi") {
-                        d.yasakli.clear();
                         d.sohbetler.clear();
                         d.haber_bekleyen.clear();
                         d.mesgul.clear();
                     } else {
-                        d.yasakli.remove(&kanal);
                         d.sohbetler.remove(&kanal);
                         d.haber_bekleyen.remove(&kanal);
                         d.mesgul.remove(&kanal);

@@ -3,8 +3,6 @@
 
 pub const KISILIK: &str = include_str!("../promptlar/kisilik.md");
 pub const FAVORI_SATIRI: &str = include_str!("../promptlar/favori-satiri.md");
-pub const VEDA_YAKLASIYOR: &str = include_str!("../promptlar/veda-yaklasiyor.md");
-pub const SON_MESAJ: &str = include_str!("../promptlar/son-mesaj.md");
 pub const HOS_GELDIN: &str = include_str!("../promptlar/hos-geldin.md");
 pub const DURUP_DURURKEN: &str = include_str!("../promptlar/durup-dururken.md");
 pub const HABER_TANIT: &str = include_str!("../promptlar/haber-tanit.md");

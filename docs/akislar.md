@@ -23,11 +23,11 @@ stream hiçbir şey üretmediyse uret ile stream'siz yedek
 … bitti değilse: yeni mesaj yoksa çık
 kilit ── meşgul=0 ── asistan satırı ekle (yalnız cevap, thinking değil) ── sayac++ ── hackli-- ── sayac≥12 → sohbet_bitir ── kilit bırak
 ```
-Talimat önceliği: hack devam > hack çıkış > son mesaj (sayac ≥ 11) > veda (sayac ≥ 9) > boş.
+Talimat önceliği: hack devam > hack çıkış > boş.
 
 ## Sohbet yaşam döngüsü
 - Başlangıç kaynakları: rastgele araya girme, etiket, hoş geldin, haber paylaşımı, dürtme, şaka, uyanınca dönüş, yoldan mesaj, gidiyorum duyurusu. Açılışlı olanlar `sayac=1` ile başlar.
-- 9. bottan sonra "toparla", 12.'de "vedalaş"; 12'ye ulaşınca sohbet silinir, kanal 3 saat yasaklı.
+- Mesaj sınırı ve veda yok: sohbet son mesajdan 30 dk sonra sessizce kapanır (dakika tikinde `zaman_asimi_kapat`), kanal yasağı yok. Kapanan sohbetin dökümü günlükçüye ve eleştirmene gider.
 - Yasak yalnız *araya girmeyi* engeller; etiket her zaman cevap alır.
 - Model çağrısı hata verirse sayaç ilerlemez, sohbet açık kalır.
 

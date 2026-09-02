@@ -116,3 +116,8 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   bütçeli çağrılar (ajanlar, haber, hoş geldin...) `Some(n)` vermeye devam eder.
 - **`API_ADRES` `.env`'den.** Sağlayıcı adresini ezer; kendi router'ına (openai uyumlu) yönlendirir.
   Anahtar/model seçimi `SAGLAYICI` mantığında kalır.
+- **2026-09-02 · 12 mesaj sınırı ve veda kalktı.** Kullanıcı bildirimi: sınır garip davranış
+  üretiyordu. Artık mesaj sayısı sınırı, veda/son-mesaj talimatları ve kanal yasağı yok; sohbet
+  son mesajdan 30 dk sonra (`SOHBET_ZAMAN_ASIMI`) sessizce kapanır, dökümü yine günlükçüye ve
+  eleştirmene gider. `Sohbet.son_aktivite` yerine `Durum.son_aktivite` haritası tazelenir
+  (kullanıcı mesajı, sohbet açılışı, bot cevabı).

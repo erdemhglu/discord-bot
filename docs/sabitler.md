@@ -5,10 +5,8 @@
 |---|---|---|
 | OPENROUTER_ADRES / OPENROUTER_MODEL | …/api/v1/chat/completions / openai/gpt-4o-mini | varsayılan sağlayıcı |
 | MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-medium-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
-| MAX_MESAJ | 12 | bir sohbette botun yazacağı en fazla mesaj |
-| VEDA_ESIGI | 9 | bu sayaçtan sonra "toparla" talimatı |
 | SANS | 0.35 | mesaj başına araya girme olasılığı (seyahatte × YOLDA_SANS_CARPANI) |
-| BEKLEME | 3 saat | sohbet bitince kanala girmeme süresi |
+| SOHBET_ZAMAN_ASIMI | 30 dk | bu kadar sessiz kalan sohbet vedasız kapanır |
 | YORUM_SURESI | 2 saat | haber attıktan sonra yorum bekleme |
 | HABER_ARALIGI | 6 saat | haber turu ve 6 saatlik ajanlar |
 | DURTME_ARALIGI / DURTME_SANSI | 1 saat / 0.3 | kendiliğinden laf atma |

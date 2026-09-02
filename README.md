@@ -9,7 +9,7 @@ Rust ile yazıldı, cevapları openrouter üzerinden alıyor.
 
 - bağlanınca son 2 haftanın mesajlarını okur, grubu tanır
 - yeni gelenle tanışır, sohbete girer
-- arada mesajlaşmaya dalar, en fazla 12 mesaj yazıp kaçar, 3 saat o kanala geri gelmez
+- arada mesajlaşmaya dalar; sohbet 30 dk sessiz kalınca vedasız kendiliğinden kapanır
 - saatte bir %30 ihtimalle durup dururken laf atar, eski konulara gönderme yapar
 - 6 saatte bir hacker news + Sözcü gündeminden gruba uygun bir haber atar, 2 saat yorum bekler
 - 4 saatte bir Türkiye gündemini gezer (Sözcü RSS, firecrawl varsa sayfayı okur), kendi görüşünü günlüğüne yazar; kişilik buradan da beslenir
@@ -90,7 +90,7 @@ discord developer portal'da **Message Content** ve **Server Members** intent'ler
 
 `!` ya da `/` ile başlar (`/model` de olur).
 
-- `!sifirla` — o kanaldaki 3 saatlik yasağı ve açık sohbeti sıfırlar. `!sifirla hepsi` tüm kanallar.
+- `!sifirla` — o kanaldaki açık sohbeti sıfırlar. `!sifirla hepsi` tüm kanallar.
 - `!haber` — şimdi haber seç ve at (HN + gündem).
 - `!sorun` — yazılım derdi atıp "nasıl çözerim" diye sorar (kendiliğinden de laf atma turlarının %25'inde, haber kanalına).
 - `!gez` — gündem gezintisini şimdi yap (gundem.md güncellenir).

@@ -28,10 +28,8 @@ const OPENROUTER_ADRES: &str = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODEL: &str = "openai/gpt-4o-mini";
 const MISTRAL_ADRES: &str = "https://api.mistral.ai/v1/chat/completions";
 const MISTRAL_MODEL: &str = "mistral-medium-latest";
-const MAX_MESAJ: u32 = 12; // bir sohbette en fazla kaç mesaj yazar
-const VEDA_ESIGI: u32 = 9; // bu sayıdan sonra konuyu kapatmaya çalışır
+const SOHBET_ZAMAN_ASIMI: Duration = Duration::from_secs(30 * 60); // bu kadar sessiz kalan sohbet kendiliğinden kapanır
 const SANS: f64 = 0.35; // normal mesajlaşmaya %10 ihtimalle dalar
-const BEKLEME: Duration = Duration::from_secs(3 * 60 * 60); // sohbetten kaçınca 3 saat o kanala girmez
 const YORUM_SURESI: Duration = Duration::from_secs(2 * 60 * 60); // haber attıktan sonra 2 saat yorum bekler
 const HABER_ARALIGI: Duration = Duration::from_secs(6 * 60 * 60); // ne sıklıkla hacker news'e bakar (ajanlar da bu turda çalışır)
 const DURTME_ARALIGI: Duration = Duration::from_secs(60 * 60); // ne sıklıkla kendiliğinden laf atmayı dener
@@ -162,7 +160,7 @@ struct Durum {
     // sohbet takibi
     sohbetler: HashMap<ChannelId, Sohbet>,
     mesgul: HashSet<ChannelId>, // şu an cevap üretilen kanallar
-    yasakli: HashMap<ChannelId, Instant>,
+    son_aktivite: HashMap<ChannelId, Instant>, // sohbetin son canlandığı an (zaman aşımı kapatır)
     haber_bekleyen: HashMap<ChannelId, Instant>,
     atilan_haberler: HashSet<u64>,
     taranan: HashSet<GuildId>,
@@ -1158,17 +1156,13 @@ fn sohbet_baslat(d: &mut Durum, kanal: ChannelId, acilis: Option<String>) -> &mu
         s.gecmis.push(asistan(a));
         s.sayac = 1;
     }
+    d.son_aktivite.insert(kanal, Instant::now());
     d.sohbetler.entry(kanal).or_insert(s)
 }
 
 fn sohbet_bitir(d: &mut Durum, kanal: ChannelId) -> Option<Sohbet> {
     d.haber_bekleyen.remove(&kanal);
-    d.yasakli.insert(kanal, Instant::now() + BEKLEME);
     d.sohbetler.remove(&kanal)
-}
-
-fn girebilir_mi(d: &Durum, kanal: ChannelId) -> bool {
-    d.yasakli.get(&kanal).is_none_or(|t| Instant::now() >= *t)
 }
 
 fn yeni_mesaj_var(d: &Durum, kanal: ChannelId, uretilen_gelen: u32) -> bool {
@@ -1194,10 +1188,6 @@ impl Bot {
                     HACK_DEVAM
                 } else if s.hackli == 1 {
                     HACK_CIKIS
-                } else if s.sayac >= MAX_MESAJ - 1 {
-                    SON_MESAJ
-                } else if s.sayac >= VEDA_ESIGI {
-                    VEDA_YAKLASIYOR
                 } else {
                     ""
                 };
@@ -1305,36 +1295,18 @@ impl Bot {
                 }
             };
 
-            let biten = {
+            {
                 let mut d = self.durum();
                 d.mesgul.remove(&kanal);
-                let bitti = match d.sohbetler.get_mut(&kanal) {
-                    Some(s) => {
-                        s.gecmis.push(asistan(cevap));
-                        s.sayac += 1;
-                        s.hackli = s.hackli.saturating_sub(1);
-                        s.sayac >= MAX_MESAJ
-                    }
-                    None => false,
-                };
-                if bitti {
-                    sohbet_bitir(&mut d, kanal)
-                } else {
-                    None
+                if let Some(s) = d.sohbetler.get_mut(&kanal) {
+                    s.gecmis.push(asistan(cevap));
+                    s.sayac += 1;
+                    s.hackli = s.hackli.saturating_sub(1);
                 }
-            };
-
-            // sohbet bitti: günlükçü hafızaya yazar, eleştirmen botu değerlendirir
-            if let Some(s) = biten {
-                let bot_adi = self.durum().bot_adi.clone();
-                let d = dokum(&s.gecmis, &bot_adi);
-                let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
-                self.gunlukcu(d.clone(), "biten sohbet", &kanal_adi).await;
-                self.elestirmen(d).await;
-                self.durum().gelisim.sohbet += 1;
-                self.gelisim_kontrol(ctx).await;
-                return;
+                d.son_aktivite.insert(kanal, Instant::now());
             }
+
+            // sohbeti kapatma yok: sessiz kalırsa zaman aşımı kapatır (uyku tikinde)
             // cevap yazarken yeni mesaj geldiyse bir tur daha; yoksa çık
             let bekleyen = yeni_mesaj_var(&self.durum(), kanal, gelen);
             if !bekleyen {
@@ -1435,6 +1407,47 @@ impl Bot {
             }
         }
         None
+    }
+}
+
+impl Bot {
+    // sessiz kalan sohbetleri kapatır: veda mesajı yok, kanal yasağı yok.
+    // kapanan sohbetin dökümü günlükçüye ve eleştirmene gider (bellek adımında kuyruğa taşınacak)
+    async fn zaman_asimi_kapat(&self, ctx: &Context) {
+        let kapananlar: Vec<(ChannelId, Sohbet)> = {
+            let mut d = self.durum();
+            // sohbeti kalmayan aktivite kayıtlarını temizle
+            let aciklar: HashSet<ChannelId> = d.sohbetler.keys().copied().collect();
+            d.son_aktivite.retain(|kanal, _| aciklar.contains(kanal));
+            let simdi = Instant::now();
+            let kapanacak: Vec<ChannelId> = d
+                .son_aktivite
+                .iter()
+                .filter(|(k, t)| {
+                    !d.mesgul.contains(k) && simdi.duration_since(**t) >= SOHBET_ZAMAN_ASIMI
+                })
+                .map(|(k, _)| *k)
+                .collect();
+            let mut kapananlar = Vec::new();
+            for kanal in kapanacak {
+                if let Some(s) = sohbet_bitir(&mut d, kanal) {
+                    d.son_aktivite.remove(&kanal);
+                    kapananlar.push((kanal, s));
+                }
+            }
+            kapananlar
+        };
+        for (kanal, s) in kapananlar {
+            let bot_adi = self.durum().bot_adi.clone();
+            let dokum_metni = dokum(&s.gecmis, &bot_adi);
+            let kanal_adi = kanal.name(ctx).await.unwrap_or_else(|_| kanal.to_string());
+            log::debug!("sohbet [{kanal}]: zaman aşımıyla sessizce kapandı");
+            self.gunlukcu(dokum_metni.clone(), "biten sohbet", &kanal_adi)
+                .await;
+            self.elestirmen(dokum_metni).await;
+            self.durum().gelisim.sohbet += 1;
+            self.gelisim_kontrol(ctx).await;
+        }
     }
 }
 
@@ -1715,7 +1728,7 @@ impl Bot {
 fn bos_kanal(bot: &Bot) -> Option<(ChannelId, String)> {
     let d = bot.durum();
     let k = d.son_kanal?;
-    if d.sohbetler.contains_key(&k) || !girebilir_mi(&d, k) || d.profil.is_empty() {
+    if d.sohbetler.contains_key(&k) || d.profil.is_empty() {
         return None;
     }
     Some((k, son_mesajlar(&d, 40)))
@@ -1817,6 +1830,7 @@ async fn uyku_dongusu(bot: Arc<Bot>, ctx: Context) {
             uyku::guncelle(&mut d);
         }
         bot.uyku_gecisi(&ctx).await;
+        bot.zaman_asimi_kapat(&ctx).await;
     }
 }
 
@@ -1925,7 +1939,7 @@ impl EventHandler for Handler {
             if uye.user.id.get() == FAVORI {
                 d.favori_adi = Some(isim.clone());
             }
-            if d.sohbetler.contains_key(&kanal) || !girebilir_mi(&d, kanal) {
+            if d.sohbetler.contains_key(&kanal) {
                 return;
             }
         }
@@ -2027,7 +2041,7 @@ impl EventHandler for Handler {
             if seyahat::simdi().is_some() {
                 sans *= seyahat::YOLDA_SANS_CARPANI;
             }
-            if !acik && (etiketlendi || (girebilir_mi(&d, kanal) && rand::random::<f64>() < sans)) {
+            if !acik && (etiketlendi || rand::random::<f64>() < sans) {
                 sohbet_baslat(&mut d, kanal, None);
                 acik = true;
             }
@@ -2038,6 +2052,7 @@ impl EventHandler for Handler {
                 if s.gecmis.len() > SOHBET_BOYU {
                     s.gecmis.drain(..s.gecmis.len() - SOHBET_BOYU);
                 }
+                d.son_aktivite.insert(kanal, Instant::now());
             }
             kanal_not(&mut d, kanal, format!("{isim}: {metin}"));
             acik
