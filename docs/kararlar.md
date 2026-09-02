@@ -248,3 +248,13 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   konular / olaylar+gündem. `!zihin` 5×4000'i kanala dökmek yerine dizin özeti + `/zihin`
   yönlendirmesi verir. Modal gönderimleri toplanmaz, kısa ephemeral onay döner. Sunucu
   komutları her ready'de idempotent kaydedilir (anında görünürler, global gecikmeli değil).
+- **2026-09-02 · HTTP timeout + yeniden deneme + mekanik sertleştirme.** Global 60 sn'lik
+  istemci zaman aşımı uzun düşünme akışlarını kesiyordu: kaldırıldı, yerine
+  `connect_timeout` (15 sn) + `read_timeout` (120 sn, her okumada sıfırlanır → ilk tokeni de
+  kapsar); toplam süre sınırı yok. Geçici hatalarda (ağ, 429, 500/502/503/504) 2 ve 4 sn geri
+  çekilip 2 yeniden deneme (`sor_ham` ve `sor_ham_akis`, akış yalnız açılmadan önce).
+  `reasoning_kapat` artık sağlayıcıya göre: openrouter `reasoning.enabled`, mistral'e parametre
+  gitmez, diğerleri `enable_thinking:false` (ikisini birden yollamak bazı sağlayıcıları bozuyordu).
+  `MesgulGuard` (RAII): panik dahil her çıkışta kanalın meşgul bayrağı bırakılır.
+  `soy` char güvenli (bayt dilimi türkçe adlarda panikletebilirdi) + `kucult` İ→i̇ birleşik
+  noktasını atar. Typing edit döngüsünden çıktı (hız sınırı); model çağrısından önce bir kez.

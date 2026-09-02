@@ -64,6 +64,11 @@ macro_rules! cevap_butcesi {
         }
     };
 }
+// http: toplam süre sınırı yok (uzun düşünme akışları kesilmesin); bağlantı
+// kurulamıyorsa ve veri gelmiyorsa ayrı ayrı kesilir
+const BAGLANTI_ZAMAN_ASIMI: Duration = Duration::from_secs(15); // tcp/tls el sıkışma
+const OKUMA_ZAMAN_ASIMI: Duration = Duration::from_secs(120); // iki veri arası en çok; ilk tokeni de kapsar
+const AI_YENIDEN_DENEME: u32 = 2; // ağ hatası / 429 / 5xx'te toplam deneme sayısı bu + 1
 const FAVORI: u64 = 259669117248864257; // bu kişiyi ne olursa olsun sever
 const GEZGIN_ARALIGI: Duration = Duration::from_secs(4 * 60 * 60); // ne sıklıkla internette gezer
 const RESIM_KLASORU: &str = "resimler"; // şakalarda atılacak görseller
@@ -243,6 +248,23 @@ impl Durum {
     }
 }
 
+// kanalın meşgul bayrağını bırakır: normal dönüş, erken dönüş ve panikte Drop
+// çalışır; bayrak unutulup kanal kalıcı kilitlenemez
+struct MesgulGuard<'a> {
+    durum: &'a Mutex<Durum>,
+    kanal: ChannelId,
+}
+
+impl Drop for MesgulGuard<'_> {
+    fn drop(&mut self) {
+        self.durum
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .mesgul
+            .remove(&self.kanal);
+    }
+}
+
 struct Bot {
     durum: Mutex<Durum>,
     http: reqwest::Client,
@@ -380,23 +402,33 @@ fn dokum(gecmis: &[Mesaj], bot_adi: &str) -> String {
         .join("\n")
 }
 
-// modelin başa ekleyebildiği ad öneki ve tırnakları soyar
+// karşılaştırma için küçük harfe indirir; İ→i̇ dönüşümünün eklediği birleşik
+// noktayı atar ki "ŞAHİN"/"şahin" gibi adlar eşleşsin
+fn kucult(s: &str) -> String {
+    s.to_lowercase().replace('\u{0307}', "")
+}
+
+// modelin başa ekleyebildiği ad öneki ve tırnakları soyar.
+// char güvenli: bayt dilimi türkçe adlarda panikletebilir (İ→i̇ lowercase'de
+// bayt sayısı değişir), onun yerine karakter sayısıyla atlanır
 fn soy(mut metin: String, bot_adi: &str) -> String {
     metin = metin.trim().to_string();
     // "isim: metin" kalıbını taklit edip başına kendi adını koyabiliyor
     let onek = format!("{bot_adi}:");
-    if metin.to_lowercase().starts_with(&onek.to_lowercase()) {
-        // bayt değil karakter say: to_lowercase bazı harflerde (Türkçe İ gibi) bayt uzunluğunu
-        // değiştirir, `onek.len()` (bayt) ile `metin`i kesmek char sınırı dışına düşüp panikleyebilirdi
+    if kucult(&metin).starts_with(&kucult(&onek)) {
+        let karakter = onek.chars().count();
         metin = metin
             .chars()
-            .skip(onek.chars().count())
+            .skip(karakter)
             .collect::<String>()
             .trim()
             .to_string();
     }
-    if metin.len() > 1 && metin.starts_with('"') && metin.ends_with('"') {
-        metin = metin[1..metin.len() - 1].to_string();
+    if metin.chars().count() > 1 && metin.starts_with('"') && metin.ends_with('"') {
+        let mut c = metin.chars();
+        c.next();
+        c.next_back();
+        metin = c.as_str().to_string();
     }
     metin
 }
@@ -409,6 +441,12 @@ fn temizle(metin: String, bot_adi: &str) -> String {
         metin = metin.chars().take(MESAJ_SINIRI).collect();
     }
     metin
+}
+
+// geçici sayılan durum kodları: geri çekilip yeniden denemeye değer
+// (429 hız sınırı, 5xx sunucu tarafı); 401/404 gibi kalıcı hatalar denemeye girmez
+fn durum_denenebilir(d: reqwest::StatusCode) -> bool {
+    matches!(d.as_u16(), 429 | 500 | 502 | 503 | 504)
 }
 
 // hata gövdesini tek satıra indirir
@@ -712,10 +750,12 @@ struct AkisBaglam<'a> {
 }
 
 impl Bot {
-    // düşünme kapalıysa modelin reasoning üretmesini istekte kapatır (token harcamasın);
-    // openrouter "reasoning", qwen tarzı router'lar "enable_thinking" anlar.
-    // alanları gerçekten eklediyse true döner (bazı modeller reasoning'i kapatmaya izin
-    // vermiyor, o zaman çağıran taraf bunu geri alıp bir kez daha dener).
+    // düşünme kapalıysa modelin reasoning üretmesini istekte kapatır (token harcamasın).
+    // her sağlayıcının dili farklı: openrouter "reasoning", qwen tarzı router'lar
+    // "enable_thinking" anlar, mistral'de düğme yok (ikisini birden yollamak bazı
+    // sağlayıcıları bozuyordu, adres bazlı seçilir). Alanları gerçekten eklediyse true
+    // döner (bazı modeller yine de reasoning'i kapatmaya izin vermiyor, çağıran taraf
+    // bunu geri alıp bir kez daha dener).
     fn reasoning_kapat(&self, govde: &mut serde_json::Value) -> bool {
         if self.durum().dusunme != DusunmeKip::Kapali {
             return false;
@@ -723,8 +763,14 @@ impl Bot {
         let Some(o) = govde.as_object_mut() else {
             return false;
         };
-        o.insert("reasoning".into(), serde_json::json!({ "enabled": false }));
-        o.insert("enable_thinking".into(), serde_json::json!(false));
+        let adres = self.api_adres.to_lowercase();
+        if adres.contains("openrouter") {
+            o.insert("reasoning".into(), serde_json::json!({ "enabled": false }));
+        } else if !adres.contains("mistral") {
+            o.insert("enable_thinking".into(), serde_json::json!(false));
+        } else {
+            return false; // mistral: hiçbir alan eklenmedi, geri alacak bir şey yok
+        }
         true
     }
 
@@ -736,55 +782,74 @@ impl Bot {
         }
     }
 
-    // openrouter'a ham istek; her şey buradan geçer.
+    // açıklayıcı hata ile ham istek; her şey buradan geçer. Ağ hatası / 429 / 5xx'te geri
+    // çekilip yeniden dener; bazı modeller (ör. bazı GLM reasoning varyantları) reasoning'i
+    // kapatmaya izin vermiyor ("mandatory"/"cannot be disabled" 400) — o durumda alanları
+    // kaldırıp açık haliyle yeniden dener, model her turda başarısız olup sohbeti tıkamasın.
     // kategori yalnız token metriğinde kırılım için (!durum), isteğe hiçbir etkisi yok.
     async fn sor_ham(
         &self,
         mut govde: serde_json::Value,
         kategori: &'static str,
     ) -> Result<String, Hata> {
-        let kapatildi = self.reasoning_kapat(&mut govde);
-        let cevap = self
-            .http
-            .post(&self.api_adres)
-            .bearer_auth(&self.anahtar)
-            .json(&govde)
-            .send()
-            .await?;
-        let mut durum = cevap.status();
-        let mut govde_metni = cevap.text().await?;
-        // bazı modeller (ör. bazı GLM reasoning varyantları) reasoning'i kapatmaya izin
-        // vermiyor, "mandatory"/"cannot be disabled" diye 400 dönüyor; açık haliyle bir kez
-        // daha dene, model her turda başarısız olup sohbeti tıkamasın
-        if !durum.is_success() && kapatildi && reasoning_zorunlu_hatasi(&govde_metni) {
-            log::warn!("ai: model reasoning kapatılmasına izin vermiyor, açık yeniden deneniyor");
-            Self::reasoning_alanlarini_kaldir(&mut govde);
-            let tekrar = self
+        let mut kapatildi = self.reasoning_kapat(&mut govde);
+        let mut son_hata: Hata = "istek hiç yapılamadı".into();
+        for deneme in 0..=AI_YENIDEN_DENEME {
+            if deneme > 0 {
+                sleep(Duration::from_secs(u64::from(deneme) * 2)).await;
+                log::warn!("ai [sor_ham]: {son_hata} — {}. deneme", deneme + 1);
+            }
+            let cevap = match self
                 .http
                 .post(&self.api_adres)
                 .bearer_auth(&self.anahtar)
                 .json(&govde)
                 .send()
-                .await?;
-            durum = tekrar.status();
-            govde_metni = tekrar.text().await?;
+                .await
+            {
+                Ok(c) => c,
+                Err(e) if e.is_connect() || e.is_timeout() || e.is_request() => {
+                    son_hata = e.into();
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
+            let durum = cevap.status();
+            let govde_metni = cevap.text().await.unwrap_or_default();
+            if !durum.is_success() {
+                // 404 çoğunlukla "bu isimde model yok" demek; gövdedeki mesajı ve modeli göster
+                let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
+                let hata: Hata =
+                    format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into();
+                if deneme < AI_YENIDEN_DENEME && kapatildi && reasoning_zorunlu_hatasi(&govde_metni)
+                {
+                    log::warn!(
+                        "ai [sor_ham]: model reasoning kapatılmasına izin vermiyor, açık yeniden deneniyor"
+                    );
+                    Self::reasoning_alanlarini_kaldir(&mut govde);
+                    kapatildi = false;
+                    son_hata = hata;
+                    continue;
+                }
+                if deneme < AI_YENIDEN_DENEME && durum_denenebilir(durum) {
+                    son_hata = hata;
+                    continue;
+                }
+                return Err(hata);
+            }
+            let yanit: Yanit = serde_json::from_str(&govde_metni)?;
+            if let Some(k) = yanit.usage {
+                self.metrik_ekle(kategori, k);
+            }
+            let metin = yanit
+                .choices
+                .into_iter()
+                .next()
+                .and_then(|s| s.message.content)
+                .ok_or("modelden boş yanıt geldi")?;
+            return Ok(metin.trim().to_string());
         }
-        if !durum.is_success() {
-            // 404 çoğunlukla "bu isimde model yok" demek; gövdedeki mesajı ve modeli göster
-            let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
-            return Err(format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into());
-        }
-        let yanit: Yanit = serde_json::from_str(&govde_metni)?;
-        if let Some(k) = yanit.usage {
-            self.metrik_ekle(kategori, k);
-        }
-        let metin = yanit
-            .choices
-            .into_iter()
-            .next()
-            .and_then(|s| s.message.content)
-            .ok_or("modelden boş yanıt geldi")?;
-        Ok(metin.trim().to_string())
+        Err(son_hata)
     }
 
     async fn sor(
@@ -855,49 +920,63 @@ impl Bot {
         if let Some(t) = butce {
             govde["max_tokens"] = serde_json::json!(t);
         }
-        let kapatildi = self.reasoning_kapat(&mut govde);
-        let mut cevap = self
-            .http
-            .post(&self.api_adres)
-            .bearer_auth(&self.anahtar)
-            .json(&govde)
-            .send()
-            .await?;
-        let mut durum = cevap.status();
-        // bazı modeller reasoning'i kapatmaya izin vermiyor (bkz. sor_ham); açık yeniden dene
-        if !durum.is_success() && kapatildi {
-            let govde_metni = cevap.text().await?;
-            if !reasoning_zorunlu_hatasi(&govde_metni) {
-                let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
-                return Err(
-                    format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into(),
-                );
+        let mut kapatildi = self.reasoning_kapat(&mut govde);
+        // yeniden deneme yalnız akış açılmadan önce: parça gelmeye başladıysa okuyucu dönmüş
+        // olur, sonrası gonder_akis'in yarım-kaldı yoludur
+        let mut son_hata: Hata = "istek hiç yapılamadı".into();
+        for deneme in 0..=AI_YENIDEN_DENEME {
+            if deneme > 0 {
+                sleep(Duration::from_secs(u64::from(deneme) * 2)).await;
+                log::warn!("ai [sor_ham_akis]: {son_hata} — {}. deneme", deneme + 1);
             }
-            log::warn!("ai: model reasoning kapatılmasına izin vermiyor, açık yeniden deneniyor");
-            Self::reasoning_alanlarini_kaldir(&mut govde);
-            cevap = self
+            let cevap = match self
                 .http
                 .post(&self.api_adres)
                 .bearer_auth(&self.anahtar)
                 .json(&govde)
                 .send()
-                .await?;
-            durum = cevap.status();
+                .await
+            {
+                Ok(c) => c,
+                Err(e) if e.is_connect() || e.is_timeout() || e.is_request() => {
+                    son_hata = e.into();
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
+            let durum = cevap.status();
+            if !durum.is_success() {
+                let govde_metni = cevap.text().await.unwrap_or_default();
+                let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
+                let hata: Hata =
+                    format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into();
+                if deneme < AI_YENIDEN_DENEME && kapatildi && reasoning_zorunlu_hatasi(&govde_metni)
+                {
+                    log::warn!(
+                        "ai [sor_ham_akis]: model reasoning kapatılmasına izin vermiyor, açık yeniden deneniyor"
+                    );
+                    Self::reasoning_alanlarini_kaldir(&mut govde);
+                    kapatildi = false;
+                    son_hata = hata;
+                    continue;
+                }
+                if deneme < AI_YENIDEN_DENEME && durum_denenebilir(durum) {
+                    son_hata = hata;
+                    continue;
+                }
+                return Err(hata);
+            }
+            return Ok(AkisOkuyucu {
+                cevap,
+                tampon: Vec::new(),
+                kuyruk: Vec::new(),
+                kullanim: Kullanim::default(),
+                kategori,
+                done: false,
+                bitti: false,
+            });
         }
-        if !durum.is_success() {
-            let govde_metni = cevap.text().await?;
-            let model = govde.get("model").and_then(|m| m.as_str()).unwrap_or("?");
-            return Err(format!("{durum} (model: {model}): {}", kirp_hata(&govde_metni)).into());
-        }
-        Ok(AkisOkuyucu {
-            cevap,
-            tampon: Vec::new(),
-            kuyruk: Vec::new(),
-            kullanim: Kullanim::default(),
-            kategori,
-            done: false,
-            bitti: false,
-        })
+        Err(son_hata)
     }
 
     // sohbet cevabının sistem mesajı: kim konuşuyor, ne konuşuluyor bakıp
@@ -1276,7 +1355,8 @@ async fn yaz_akis(
     yerlesim: &[String],
     yanit: Option<MessageId>,
 ) {
-    let _ = kanal.broadcast_typing(&ctx.http).await;
+    // typing edit döngüsünde yinelenmez: her tur atmak discord hız sınırına takılır;
+    // "yazıyor" göstergesini cevapla, model çağrısından önce bir kez yollar
     for (i, icerik) in yerlesim.iter().enumerate() {
         match gonderilenler.get_mut(i) {
             Some(m) if m.content != *icerik => {
@@ -1454,19 +1534,6 @@ fn yeni_mesaj_var(d: &Durum, kanal: ChannelId, uretilen_gelen: u32) -> bool {
         .is_some_and(|s| s.gelen > uretilen_gelen)
 }
 
-// mesgul bayrağının RAII karşılığı: aradaki herhangi bir .await panikleyip erken
-// dönse bile Drop ile silinir; kanal sonsuza dek "meşgul" kilitli kalmaz.
-struct MesgulKilit<'a> {
-    bot: &'a Bot,
-    kanal: ChannelId,
-}
-
-impl Drop for MesgulKilit<'_> {
-    fn drop(&mut self) {
-        self.bot.durum().mesgul.remove(&self.kanal);
-    }
-}
-
 impl Bot {
     // açık sohbette sıradaki cevabı üretir; aynı kanalda aynı anda tek cevap üretilir,
     // o sırada gelen mesajlar geçmişe eklenir ve bir sonraki cevapta görülür
@@ -1490,7 +1557,11 @@ impl Bot {
                 d.mesgul.insert(kanal);
                 talimat
             };
-            let _kilit = MesgulKilit { bot: self, kanal };
+            // RAII: fonksiyondan her çıkışta (panik dahil) bayrağı bırakır
+            let _mesgul = MesgulGuard {
+                durum: &self.durum,
+                kanal,
+            };
 
             // Kısa bir okuma payı bırak; peş peşe yazılanları tek bağlamda gör.
             sleep(Duration::from_millis(150 + (rand::random::<u64>() % 200))).await;
@@ -1615,6 +1686,8 @@ impl Bot {
                 Ok(AkisSonuc::Bos) => {
                     // akıştan kullanılır bir şey çıkmadı; yeni mesaj geldiyse onu ele al
                     if yeni_mesaj_var(&self.durum(), kanal, gelen) {
+                        // bayrak elle bırakılır: yeni tur üstte yeniden insert eder
+                        drop(_mesgul);
                         continue;
                     }
                     match self.uret(&gecmis, &talimat, butce, "sohbet").await {
@@ -1626,9 +1699,7 @@ impl Bot {
                             self.gonder(ctx, kanal, &c, None, None, yanit).await;
                             c
                         }
-                        Ok(_) => {
-                            return;
-                        }
+                        Ok(_) => return,
                         Err(e) => {
                             log::error!("ai [uret yedek] [{kanal}]: {e}");
                             return;
@@ -2919,11 +2990,12 @@ async fn main() -> Result<(), Hata> {
     log::info!("model: {}", durum.model);
     let bot = Arc::new(Bot {
         durum: Mutex::new(durum),
-        // bağlantı kurma hızlı elensin; toplam süre stream'in sonuna kadar (uzun cevap +
-        // yavaş sağlayıcı) kesmesin diye geniş tutulur (P0: eskiden 60sn stream'i kesebiliyordu)
+        // bağlantı kurma hızlı elensin (BAGLANTI_ZAMAN_ASIMI); toplam süre sınırı yok, yalnız
+        // iki veri arası en çok OKUMA_ZAMAN_ASIMI (P0: eskiden tek 60sn'lik timeout uzun
+        // düşünme akışını ortasında kesebiliyordu)
         http: reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(180))
+            .connect_timeout(BAGLANTI_ZAMAN_ASIMI)
+            .read_timeout(OKUMA_ZAMAN_ASIMI)
             .build()?,
         api_adres: api_adres.to_string(),
         anahtar,
@@ -3164,17 +3236,6 @@ mod test {
     }
 
     #[test]
-    fn soy_onek_soyar() {
-        assert_eq!(soy("Emin: naber".into(), "Emin"), "naber");
-        assert_eq!(soy("\"naber\"".into(), "Emin"), "naber");
-        // Türkçe büyük İ küçültülünce bayt uzunluğu değişir (İ -> i̇); panik yerine
-        // düzgün kesilmeli
-        assert_eq!(soy("İhsan: naber".into(), "İhsan"), "naber");
-        // adı geçmiyorsa dokunulmaz
-        assert_eq!(soy("naber".into(), "Emin"), "naber");
-    }
-
-    #[test]
     fn ruh_hali_ayiklanir() {
         assert_eq!(
             ruh_hali_ayikla(r#"{"durum": "kafa karışıklığı", "yogunluk": 6}"#),
@@ -3322,5 +3383,34 @@ mod test {
         }
         assert_eq!(dusunce, "önce düşün");
         assert_eq!(metin, "Güneş bugün güzel");
+    }
+
+    #[test]
+    fn soy_ad_onekini_alir() {
+        assert_eq!(soy("cicikus: selam".into(), "cicikus"), "selam");
+        // büyük/küçük harf duyarsız
+        assert_eq!(soy("Cicikus: selam".into(), "cicikus"), "selam");
+        // önek yoksa metin aynen kalır
+        assert_eq!(soy("selam".into(), "cicikus"), "selam");
+    }
+
+    #[test]
+    fn soy_turkce_adlarda_paniklemez() {
+        // İ→i̇ lowercase'de bayt sayısı değişir; bayt dilimi burada paniklerdi
+        assert_eq!(soy("Çöp: selam".into(), "çöp"), "selam");
+        assert_eq!(soy("İsim: merhaba".into(), "İsim"), "merhaba");
+        assert_eq!(soy("ŞAHİN: tamam".into(), "şahin"), "tamam");
+    }
+
+    #[test]
+    fn soy_tirnak_soyar() {
+        assert_eq!(soy("\"selam\"".into(), "bot"), "selam");
+        assert_eq!(soy("\"".into(), "bot"), "\""); // tek tırnak kalır
+        assert_eq!(soy("\"selam".into(), "bot"), "\"selam"); // kapanmamışsa dokunma
+    }
+
+    #[test]
+    fn soy_birlesik_kalip() {
+        assert_eq!(soy("bot: \"selam dünya\"".into(), "bot"), "selam dünya");
     }
 }

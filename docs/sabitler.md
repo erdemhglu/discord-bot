@@ -19,6 +19,8 @@
 | SOHBET_BOYU | 20 | modele giden sohbet geçmişi |
 | MESAJ_SINIRI | 1900 | Discord 2000 sınırına pay |
 | AKIS_DUZENLEME | 1200 ms | stream'de iki düzenleme arası asgari süre (Discord edit sınırı) |
+| BAGLANTI_ZAMAN_ASIMI / OKUMA_ZAMAN_ASIMI | 15 sn / 120 sn | http: el sıkışma / iki veri arası (ilk tokeni kapsar). Toplam süre sınırı yok, uzun düşünme akışı kesilmez |
+| AI_YENIDEN_DENEME | 2 | ağ hatası / 429 / 5xx'te ek deneme sayısı (toplam bu + 1) |
 | `cevap_butcesi!()` (makro) / CEVAP_TAVANI | debug `Some(2000)` / release `Some(3000)` | sohbet cevabı token bütçesi; ikisinde de üst sınır var, release'de yalnız tekrar/döngü gibi kaçak durumları keser |
 | FAVORI | 259669117248864257 | her zaman sevilen kullanıcı id |
 | GEZGIN_ARALIGI | 4 saat | gündem gezintisi |
@@ -44,7 +46,7 @@ bayramı 2026: 19 Mar 4g / 2027: 8 Mar, 23 Nisan 3g, 19 Mayıs 3g, kurban 2026: 
 `gonder` kendi mesaj tamponu 50 · `bekleyen_etiketler` 20 · `getir` kişi ≤4/1200, konu ≤2/800,
 olay 8, ham satır 12/200, anahtar ≤40, ≥2 eşleşme · `gecmisi_oku` sayfa 100 · haberci HN 12 +
 RSS 12 · gezgin rss 20, sayfa ≤3 · yoldan mesaj günde 1, %25 · hoca son 200 satır · profilci 600 ·
-gözlem 300 · hack giriş max_tokens 150 · http client connect_timeout 10sn / timeout 180sn
+gözlem 300 · hack giriş max_tokens 150
 
 ## `durum/taranan.md`
 `gecmisi_oku` (14 günlük geçmiş taraması) daha önce taranmış sunucu id'lerini burada tutar;

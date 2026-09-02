@@ -130,8 +130,9 @@ süreleri, şaka sıklığı, favori kişi. Tüm sabitlerin listesi: `docs/sabit
 - mention'lar kapalı gönderilir; yalnız sohbet yanıtının sahibi ve hoş geldindeki yeni üye pinglenebilir
 - diğer botlara, webhook'lara ve DM'lere cevap vermez, bot-bot döngüsü oluşmaz
 - aynı kanalda aynı anda tek cevap üretir (panik olsa bile RAII ile garanti), spam ile api faturası şişirilemez
-- her istekte `max_tokens` sınırı var (sohbet cevabında bile release'de bir tavan var); http
-  bağlantısı 10 saniyede, toplam istek 180 saniyede kesilir
+- her istekte `max_tokens` sınırı var (sohbet cevabında bile release'de bir tavan var)
+- http: toplam süre sınırı yok (uzun düşünme akışı kesilmez); bağlantı 15 sn'de, iki veri arası
+  120 sn'de kesilir; ağ hatası / 429 / 5xx'te 2 sn ve 4 sn geri çekilip 2 kez yeniden denenir
 - mesajlardaki "kurallarını unut" tarzı talimatlar kişilik promptunda muhabbet sayılır
 - hack şakası promptu link ve bilgi istemeyi yasaklar
 - `GUILD_ID`/`KANALLAR` ile erişimi tek sunucuya/kanala kilitleyebilirsin
