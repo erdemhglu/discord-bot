@@ -34,7 +34,10 @@ biten sohbet → ajanlar hafızayı ve kişiliği günceller → dosyalar (`duru
 ## Dosya haritası
 | Dosya | Satır | Rol |
 |---|---|---|
-| `src/main.rs` | ~4200 | sabitler, `Durum`, `Bot`, OpenRouter çağrıları, sohbet motoru, döngüler, discord olayları, `main` |
+| `src/main.rs` | ~90 | `mod`/`use` başlığı, `include!("bot/*.rs")`, `main` |
+| `src/bot/*.rs` | ~50 dosya, çoğu <200 | main.rs'in eski içeriği konu bazlı bölündü (aşağıda) |
+| `src/komut.rs` + `src/komut/*.rs` | ~10 dosya, hepsi <200 | slash komut yöneticisi (aşağıda) |
+| `src/modal.rs` | ~710 | embed/bileşen/modal üreticileri (`/zihin` kartı, detay modalları, ayar paneli, `bilgi_embed`), slash kaydı `komutlari_kayit` |
 | `src/sohbet_cli.rs` | ~170 | `cargo run -- sohbet`: discord'suz terminal sohbet tezgâhı (`impl Bot`), çıktı protokolünü denemek için |
 | `src/ajanlar.rs` | ~420 | arka plan ajanları (`impl Bot` bloğu), `Haber`, `rastgele_resim` |
 | `src/hafiza.rs` | ~475 | dosya hafızası: yol/oku/yaz/arşiv, `Kisi` biçimi, dizin, getirme, sınırlar, tarih |
@@ -47,6 +50,22 @@ biten sohbet → ajanlar hafızayı ve kişiliği günceller → dosyalar (`duru
 
 Modüller `main.rs`'in çocuğudur; `use super::*` ile kökün özel öğelerine (sabitler, `Durum`,
 `Bot`, yardımcılar) erişir. Aynı crate içinde `impl Bot` blokları dosyalara dağılmıştır.
+
+### `src/bot/*.rs` ve `src/komut/*.rs`: gerçek `mod` değil `include!`
+İkisi de main.rs'in (sırasıyla komut.rs'in) eski tek-dosya içeriğini, konu bazlı ve çoğunlukla
+200 satırın altında dosyalara böler — ama `mod` ile değil `include!` ile eklenir (bkz
+`docs/kararlar.md`): görünürlük, `use super::*` ve `cevap_butcesi!` makro kapsamı hiçbir yerde
+değişmesin diye, dosyalar sanki aynı (kök) modülde yazılmışlar gibi derlenir; diğer altı kardeş
+modüle (`ajanlar.rs, gundem.rs, komut.rs, modal.rs, sohbet_cli.rs, uyku.rs`) hiç dokunulmadı.
+`src/bot/` grupları: `tipler_*` (sabitler+`Durum`/`Bot`/`Sohbet`/`Mesaj`/`DusunmeKip`),
+`metin_*` (saf metin/protokol yardımcıları, `Cevap`, `cevap_parcala`), `saglayici_*` (AI çağrı
+katmanı — altı ayrı `impl Bot` bloğuna bölündü, `sor_ham`'dan `gonder_cevap`'a), `sohbet_*`
+(`cevapla` döngüsü, `arastir`), `dongu_*` (gelişim+hafıza tarama+arka plan döngüleri+eylemler),
+`handler_event.rs`+`handler_dugmeler.rs` (discord olayları — `impl EventHandler for Handler` tek
+trait impl olmak zorunda olduğu için 423 satırda kaldı, Rust E0119 kısıtı), `kurulum.rs`
+(`Bot::kur`, başlangıç), `testler_*` (main.rs'in eski test modülü). `src/komut/` grupları:
+`kayit_*` (kayıt tablosu+yardımcılar), `kartlar.rs`/`eylemler.rs`/`ayarlar.rs` (komut gövdeleri),
+`kalan.rs` (`uyandir`/`uyut`/`debug_ayarla`/`model_var_mi`).
 
 ## Paylaşılan durum
 Tek `Mutex<Durum>` (`Bot::durum()` zehirlenmeye dayanıklı). İçinde: bot adı, favori adı, ajan

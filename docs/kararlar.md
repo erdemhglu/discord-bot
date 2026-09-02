@@ -489,3 +489,78 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   bayt bellekten ek olarak gidiyor (iki kanalda aynı anda `!zihin` aynı dosyaya yarışıyordu); ruh hali
   chip'i HashMap sırasına değil en son canlanan sohbete bakıyor. Gerçek glif ölçümü (skrifa) yapılmadı,
   bekleyen listesinde.
+
+- **2026-09-02 · Panel görseli terk edildi, `zihin_gorsel.rs` tamamen silindi.** Emin: "kötü duruyor
+  ama embed düzgün olsun sığmayan kısımlar için buton koy kullanıcıya modal açılsın" — panel PNG'si
+  yukarıdaki iki kararın (görsel + resvg) tam tersini istiyordu. `/zihin` zaten embed+buton+select+modal
+  yapısını taşıyordu (`modal::zihin_embedleri/zihin_bilesenleri`); bunu tekrar üretmek yerine tek yol
+  bırakıldı. SVG çizimi, gömülü Inter fontları (`fonts/`), `resvg` bağımlılığı, `cargo run -- zihin`
+  CLI'ı ve 6 test tamamen kaldırıldı — panel için ayrı bir görsel katman artık yok.
+- **2026-09-02 · Komutlar `!`/metin yerine yalnız slash, tek kayıt tablosunda.** Emin: "bir komut
+  yöneticisi hazırlayıp tüm komutları onun altına taşı ve tüm komutlar düz text yerine embed çıktısı
+  versin", sonra: "ünlem komutlarını tamamen devre dışı bırak sadece slash commands ile çalışsın bot".
+  `Bot::komut` (tek büyük `match`, her kol kendi `soyle()` düz metnini yazıyordu) ve `Handler::message`
+  içindeki `!`/`/` metin yakalama bloğu kaldırıldı. Yerine `komut::KomutTanimi` tablosu: ad, açıklama,
+  Discord seçenekleri (`CreateCommandOption`) ve çalıştırıcı (`fn(&Bot,&Context,&CommandInteraction)
+  -> Pin<Box<dyn Future<...> + Send>>`, `komut_gir!` makrosuyla kayıt edilir) tek yerde. Kayıt
+  (`modal::komutlari_kayit`) ve dispatch (`interaction_create`) aynı tablodan okur — komut adı iki
+  yerde elle tutulmaz. Metin cevabı gerektiren her komut artık `modal::bilgi_embed` ile embed döner
+  (düz `content` yok). Discord interaction'ları ilk yanıtı 3 sn'de ister; ağ/model çağrısı yapan
+  komutlar (`haber/sorun/gez/saka/hack/ajanlar/uyan/uyu/zihin test/model id değişimi`) önce `ertele`
+  (`CreateInteractionResponse::Defer`) ile anında onay verir, işi bitince `sonucu_bildir`
+  (`edit_response`) ile kısa bir sonuç embed'i yazar; asıl içerik (haber/şaka/vb.) zaten kendi
+  `Bot::gonder` çağrısıyla kanala gidiyordu, değişmedi. Eski text-komut'ların hiçbirinde argüman/yetki
+  mantığı değişmedi (ör. `/model id` hâlâ yalnız FAVORI, `/dusunme kip` hâlâ aynı `DusunmeKip::arg_ile`
+  dizgelerini kabul ediyor — slash seçenek değerleri kasıtlı olarak bunlarla birebir aynı tutuldu).
+- **2026-09-02 · `main.rs` (4695 satır) `src/bot/*.rs`'e bölündü, `mod` değil `include!` ile.**
+  Emin: "main.rs'teki fonksiyonları ayrı bir klasöre taşıyıp alakalı olanları dosya dosya
+  bölebilirsin". Gerçek `mod` kullanımı denendi ama vazgeçildi: Rust görünürlüğü modül **ağacına**
+  göre çalışır, "aynı dosya" ya da "aynı crate" yetmez — `Durum`/`Bot` gibi struct'ları kardeş bir
+  modüle taşımak neredeyse her alanı/metodu `pub(crate)` yapmayı, ayrıca `ajanlar.rs, gundem.rs,
+  komut.rs, modal.rs, sohbet_cli.rs, uyku.rs`'nin `use super::*` importlarını güncellemeyi
+  gerektirirdi — derleme kontrolü olmadan (kullanıcı isteği: ara build almadan hızlı ilerle) bu
+  kadar geniş, hataya açık bir değişikliği güvenle yapmak mümkün değildi. `include!("bot/x.rs")`
+  seçildi: metni derleme anında olduğu yere yapıştırır, modül sınırı YOKTUR — sonuç, görünürlük/
+  `use super::*`/`cevap_butcesi!` makro kapsamı dahil, orijinal tek dosyayla birebir aynı davranır;
+  diğer 6 dosyaya hiç dokunulmadı. Bölünme konu bazlı 7 dosya: `tipler` (sabitler+struct'lar),
+  `metin` (saf metin/protokol yardımcıları), `saglayici` (AI çağrı+gönderim katmanı — ilk planda
+  ayrı olacak "gönderim" katmanı aynı `impl Bot` bloğu içinde iç içe geçtiği için tek dosyada
+  bırakıldı), `sohbet` (`cevapla` döngüsü), `dongu` (gelişim+hafıza tarama+arka plan döngüleri+
+  eylemler — bunlar da metinde birbirine geçmiş haldeydi, ayırmak orta-blok cerrahi gerektirirdi),
+  `handler` (discord event handler), `kurulum` (`Bot::kur` + başlangıç). Testler önce main.rs'te
+  bırakıldı, sonra aşağıdaki "200 satır" turunda `src/bot/testler_*.rs`'e taşındı. Tek doğrulama:
+  sonda bir kez `cargo check` + `cargo test` + `cargo clippy` + `cargo fmt` — hepsi temiz, 75 test.
+- **2026-09-02 · 200 satır kuralı: yukarıdaki 7 dosya + `komut.rs` daha ince dilimlere bölündü.**
+  Emin: "main'i bölmemize rağmen 700 satır demek ki daha fazla bölmemiz lazım" ve "200 satırdan
+  uzun dosya olmasa daha iyi olur". Aynı `include!` deseni tekrarlandı, iki ek teknik zorunlulukla:
+  (1) tek bir dev `impl Bot` bloğunu (AI çağrı katmanı, `saglayici.rs`) parçalara ayırırken her
+  parça KENDİ BAŞINA dengeli bir öğe kümesi olmalı — `include!` bir impl bloğunun içine "yarım"
+  metin (yalnız açılış ya da yalnız kapanış parantezi) alamıyor (`non-impl item macro in impl item
+  position` hatası); çözüm, altı ayrı `impl Bot { ... }` bloğuna bölüp her birini üst seviyede
+  `include!` etmek (Rust inherent impl'in tekrar tekrar açılmasına izin veriyor). (2) `impl
+  EventHandler for Handler` ise TEK blok olmak zorunda (aynı trait+tip için ikinci impl E0119
+  derleme hatası) — bu yüzden `handler_event.rs` (struct+ready+guild_create+
+  guild_member_addition+message+interaction_create) 423 satırda kaldı, bölünmedi. Benzer şekilde
+  tek bir fonksiyonun ortasından kesmek okunurluğu bozacağı için iki dosya da 200'ü hafif aştı:
+  `sohbet_cevapla.rs` (261, tek `cevapla` metodu) ve `testler_3.rs` (204, test gruplaması). Toplam
+  ~50 yeni dosya (`src/bot/*.rs`, `src/komut/*.rs`); doğrulama yine sonda tek sefer (`cargo check`
+  + `test` + `clippy` + `fmt`), 75 test yeşil.
+- **2026-09-02 · `RESIM_ANALIZI` (.env, açılışta sabit).** Emin: "fotoğraf tarama .env üzerinden
+  açılıp kapatılabilsin ve bir daha komutla değiştirilemesin". `Bot.resim_analizi: bool` alanı
+  eklendi (`Durum`'a değil `Bot`'a — kasıtlı: `Durum` komutlarla değişebilen alanları taşıyor,
+  `Bot` süreç ömrü boyunca sabit ayarları taşıyor, `guild_id`/`izinli_kanallar`/`debug_kanali` gibi).
+  Yalnız `Bot::kur()`'da okunur (`kapali/off/hayir/0` → false, yoksa varsayılan true); hiçbir slash
+  komut/buton bu alana yazmaz, değiştirmenin tek yolu süreci yeniden başlatmak. `message`
+  handler'ında kapalıyken ek taraması hiç çalışmaz (`resim` her zaman `None`), mesaj sanki hiç
+  görsel eki yokmuş gibi işlenir — bot kendi ürettiği şaka görselleri (`saka_yap`/`resimci`) bundan
+  etkilenmez, o ayrı bir özellik.
+- **2026-09-02 · Token/performans genel taraması: yeni değişiklik gerekmedi.** Emin: "token
+  kullanımını optimize et". `sistem_metni` zaten sabit (kişilik+huy+profil+dizin+gündem+kendim+
+  düzeltmeler, cache_control'lü) / değişken (getirilenler+saat+görev) olarak ikiye ayrılmış ve
+  mini çağrılar (isteklilik/hedef_sec/ruh_hali) aynı sabit bloğu paylaşıyor (bkz üstteki "Token
+  optimizasyonu" kaydı). Arka plan ajanları (`analiz()` — profilci/gunlukcu/hoca/elestirmen/
+  gezgin_sec) zaten kişiliksiz küçük `ANALIST` sistemiyle çalışıyor, ağır `kisilik.md`'yi hiç
+  taşımıyor; bütçeler (20-1200 token) görev boyutuna göre küçük tutulmuş. Canlı telemetri (gerçek
+  trafik altında hangi kategorinin ne kadar yaktığı) olmadan körlemesine ek "optimizasyon" yapmak
+  muhtemelen ya etkisiz ya da mevcut ince ayarı bozar riski taşır — somut bir darboğaz (ör.
+  belirli bir komutun/akışın ölçülmüş maliyeti) bildirilirse ona göre bakılacak.

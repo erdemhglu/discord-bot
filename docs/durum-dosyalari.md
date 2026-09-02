@@ -15,9 +15,9 @@
 | `olaylar/YYYY-AA.md` | gunlukcu, ozetleyici | `getir` (son 8), dizin | >6000 → eski %60 satır 3-5 satıra; taşınanlar `arsiv/olaylar/YYYY-AA.md` |
 | `arsiv/…` | arsivle | insan | yalnız eklenir, `## tarih öncesi` başlıklı |
 | `kanallar/<id>.md` | `kanal_not` (her mesaj, bot dahil) | açılış, `sohbet_baslat` tohumu | son 60 satır, her yazımda dosya baştan yazılır |
-| `model.md` | `!model` | açılış (`main`, env MODEL'i ezer) | tek satır model kimliği |
-| `dusunme.md` | `!düşünme göster/gizle/sessiz/kapat` | açılış (`Durum::yukle`; dosya yoksa göster) | `goster`, `gizle`, `sessiz` ya da `kapali` |
-| `debug.md` | `!debug aç/kapat`, ayar paneli | açılış (`Durum::yukle`; dosya yoksa kapalı) | `acik` ya da `kapali`; açıkken karar izleri kanala düşer |
+| `model.md` | `/model` | açılış (`main`, env MODEL'i ezer) | tek satır model kimliği |
+| `dusunme.md` | `/dusunme kip:göster/gizle/sessiz/kapat` | açılış (`Durum::yukle`; dosya yoksa göster) | `goster`, `gizle`, `sessiz` ya da `kapali` |
+| `debug.md` | `/debug durum:aç/kapat`, ayar paneli | açılış (`Durum::yukle`; dosya yoksa kapalı) | `acik` ya da `kapali`; açıkken karar izleri kanala düşer |
 | `gelisim.md` | gelisim_kontrol, isim_sec | açılış (`gelisim::yukle`) | `dogum: unix` `sohbet: n` `mesaj: n` `evre: i` `isim: ad` satırları |
 
 ## Biçimler

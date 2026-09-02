@@ -17,11 +17,10 @@ arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Pr
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 79 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli, zihin görseli, yanıt çözümü)
+cargo test             # 75 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli, komut tablosu, yanıt çözümü)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
-cargo run -- zihin     # discord'suz zihin panelini durum/zihin.png'ye yazar (tasarimi gormek/test icin)
-cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR, DEBUG_KANALI isteğe bağlı
+cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI, GUILD_ID, KANALLAR, DEBUG_KANALI, RESIM_ANALIZI isteğe bağlı
 cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, yalnız model anahtarı); çıktı protokolünü denemek için
 ```
 
@@ -71,6 +70,12 @@ cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, y
     önce `dev/ilerleme.md` ve `dev/yol-haritasi.md` okunur; her anlamlı adımda (commit
     ölçeğinde) `dev/ilerleme.md`'ye kronolojik not düşülür, plan değişirse `yol-haritasi.md`
     güncellenir.
+11. **Bot yalnız slash (`/`) komutlarla yönetilir**, `!`/metin komut yok. Komutlar tek kayıt
+    tablosunda (`komut::tanimlar()`, src/komut.rs): ad, açıklama, Discord seçenekleri ve
+    çalıştırıcı bir arada; `modal::komutlari_kayit` bu tablodan Discord'a kayıt çıkarır,
+    `interaction_create` (main.rs) `Interaction::Command`'ı isme göre tabloda bulup çalıştırır.
+    Her komut embed döner (düz metin yok); 3 sn'yi aşabilecek komutlar (ağ/model çağrısı yapanlar)
+    önce `ertele` ile erteleyip `sonucu_bildir` ile sonucu düzenler.
 
 ## Durum klasörü (çalışma zamanı, git'e girmez)
 `durum/INDEX.md` işaretçi · `kisiler/` `konular/` `olaylar/` içerik · `arsiv/` taşan ·
@@ -78,10 +83,10 @@ cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, y
 
 ## Bilinen açıklar / doğrulanmamış
 - Canlı Discord akışı hiç test edilmedi (token yok). Serenity çağrıları derleyiciden geçti.
-- **`!zihin` görseli canlı Discord'da görülmedi.** PNG yerelde üretildi ve göze bakıldı
-  (`cargo run -- zihin`), ama ek olarak gönderilmesi, Discord'un koyu temasındaki görünümü
-  ve telefonda okunurluğu doğrulanmadı. Metin genişliği Inter'de harf/em oranıyla tahmin
-  ediliyor (gerçek glif ölçümü değil); alışılmadık metinlerde sarma erken/geç olabilir.
+- **Slash komut tablosu (`komut::tanimlar()`) canlı Discord'da hiç görülmedi.** Kayıt
+  (`komutlari_kayit`), seçenekler (choice/min/max), erteleme+düzenleme akışı (`ertele` /
+  `sonucu_bildir`, 3 sn sınırı) ve embed çıktıları yalnız derleyici+birim testleriyle
+  doğrulandı; gerçek Discord istemcisinde seçenek adları/görünümü kontrol edilmedi.
 - Stream + thinking yalnızca birim testleriyle doğrulandı (sahte SSE sunucusu); canlı edit
   temposu (1,2 sn) Discord'ta ayrıca görülmedi.
 - Thinking yalnız model üretirse görünür (`reasoning` / `reasoning_content`); gpt-4o-mini
@@ -107,4 +112,4 @@ cargo run -- sohbet    # discord'suz terminal sohbet tezgâhı (token istemez, y
 - CLI sohbet modu (`cargo run -- sohbet`) gerçek model anahtarıyla denenmedi (bu makinede
   anahtar yok): anahtarsız hata yolu ve birim testleri dışında **doğrulanmadı**.
 - Reasoning zorunlu model (glm-5.3-flash) için ajan dayanıklılığı (bütçe ×2, effort=low, düşünceden JSON) canlıda
-  doğrulanmadı; `!zihin test` ile denenir. Debug modu ve ayar paneli butonları canlı Discord'da görülmedi.
+  doğrulanmadı; `/zihin test:true` ile denenir. Debug modu ve ayar paneli butonları canlı Discord'da görülmedi.

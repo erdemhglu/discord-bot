@@ -13,9 +13,6 @@ dotenvy = "0.15"
 rand = "0.8"
 base64 = "0.22"
 log = "0.4"
-# svg -> png rasterize (saf rust; sistemde chrome/tarayici gerekmez). raster-images
-# ozelligi kapali: panelde gomulu jpeg/gif yok, kod suruklemeye gerek yok
-resvg = { version = "0.48", default-features = false, features = ["text", "system-fonts"] }
 
 [profile.release]
 strip = true

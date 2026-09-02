@@ -27,6 +27,7 @@ const RENK_ZIHIN: u32 = 0x5865F2;
 const RENK_DURUM: u32 = 0x57F287;
 const RENK_YARDIM: u32 = 0xEB459E;
 const RENK_AYAR: u32 = 0xFEE75C;
+const RENK_BILGI: u32 = 0x99AAB5;
 
 pub struct Bolum {
     pub etiket: String,
@@ -73,34 +74,6 @@ fn ay_adi(ay: &str) -> String {
         }
         _ => ay.to_string(),
     }
-}
-
-// ---------- genel durum satırları (!durum ve /durum ortak) ----------
-
-pub fn durum_metni(d: &Durum) -> String {
-    let g = &d.gelisim;
-    let m = &d.metrik;
-    let ozet = format!(
-        "sürüm: {} · evre: {} ({}. gün, {} sohbet, {} mesaj) · model: {} · {} · düşünme: {} · debug: {} · seyahat: {} · token: {} çağrı, {} giriş ({} önbellek) + {} çıkış",
-        surum_metni(),
-        gelisim::evre(g).ad,
-        gelisim::gun(g) + 1,
-        g.sohbet,
-        g.mesaj,
-        d.model,
-        if uyku::uyanik_mi(d) { "uyanık" } else { "uyuyor" },
-        d.dusunme.ad(),
-        if d.debug { "açık" } else { "kapalı" },
-        seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
-        m.cagri,
-        m.giris_token,
-        m.onbellek_token,
-        m.cikis_token,
-    );
-    if m.kategoriler.is_empty() {
-        return ozet;
-    }
-    format!("{ozet}\ntoken kırılımı: {}", token_kirilimi(m))
 }
 
 // kategoriler toplam tokene göre sıralı: "sohbet: 120 giriş + 80 çıkış · ..."
@@ -209,6 +182,15 @@ pub fn zihin_embedleri(d: &Durum) -> Vec<CreateEmbed> {
             d.bot_adi,
             hafiza::tarih()
         )))]
+}
+
+// komutların kısa onay/durum yanıtı: düz metin yerine hep bu gider (ör. "haber bulamadım",
+// "tamam, <model>", "debug açık"); komut.rs'teki yanit_bilgi/sonucu_bildir bunu sarar
+pub fn bilgi_embed(baslik: &str, aciklama: &str) -> CreateEmbed {
+    CreateEmbed::new()
+        .title(baslik)
+        .description(sigdir(aciklama, ALAN_SINIRI))
+        .color(RENK_BILGI)
 }
 
 // boş bölme kartta "—" olarak görünür; silik ama yapı bozulmaz
@@ -527,7 +509,7 @@ pub fn yardim_mesaji() -> CreateInteractionResponseMessage {
                 .description(komut::YARDIM)
                 .field(
                     "Arayüz",
-                    "/durum ve /zihin bu kartları açar; /zihin'deki menü ve butonlar detay modallarına götürür.",
+                    "bot yalnız slash (/) komutlarla yönetilir; /zihin'deki menü ve butonlar detay modallarına götürür.",
                     false,
                 ),
         )
@@ -619,22 +601,18 @@ pub fn ayarlar_mesaji(d: &Durum, gizli: bool) -> CreateInteractionResponseMessag
 // ---------- slash kaydı ----------
 
 // sunucu komutları: her ready'de çağrılır, discord üstüne yazar (idempotent);
-// sunucu komutu anında görünür olur, global komut gecikmeli
+// sunucu komutu anında görünür olur, global komut gecikmeli. Liste komut.rs::tanimlar()
+// tablosundan çıkar — tek kaynak, elle iki yerde tutulmaz.
 pub async fn komutlari_kayit(http: &Http, guild: GuildId) -> Result<(), Hata> {
-    guild
-        .set_commands(
-            http,
-            vec![
-                CreateCommand::new("durum")
-                    .description("Botun şu anki halini kart olarak gösterir"),
-                CreateCommand::new("yardim").description("Komut listesini kart olarak gösterir"),
-                CreateCommand::new("zihin")
-                    .description("Botun bildiklerini interaktif kart + menü/butonlarla gösterir"),
-                CreateCommand::new("ayarlar")
-                    .description("Butonlu ayar paneli: düşünme kipi, debug, uyku"),
-            ],
-        )
-        .await?;
+    let komutlar: Vec<CreateCommand> = komut::tanimlar()
+        .iter()
+        .map(|k| {
+            CreateCommand::new(k.ad)
+                .description(k.aciklama)
+                .set_options((k.secenekler)())
+        })
+        .collect();
+    guild.set_commands(http, komutlar).await?;
     Ok(())
 }
 
@@ -673,21 +651,6 @@ mod test {
         .collect();
         assert_eq!(dolu.len(), 1);
         assert_eq!(dolu[0].etiket, "B");
-    }
-
-    #[test]
-    fn durum_metni_sayac_tasir() {
-        let d = Durum {
-            model: "test-model".into(),
-            gelisim: gelisim::Gelisim {
-                mesaj: 7,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let m = durum_metni(&d);
-        assert!(m.contains("test-model"));
-        assert!(m.contains("7 mesaj"));
     }
 
     #[test]

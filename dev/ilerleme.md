@@ -4,6 +4,62 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · main.rs + komut.rs ~50 dosyaya bölündü (200 satır kuralı), RESIM_ANALIZI eklendi
+Önceki kaydın devamı, aynı oturum. Emin: "main.rs'teki fonksiyonları ayrı bir klasöre taşıyıp
+alakalı olanları dosya dosya bölebilirsin" → "komutları da ayrı dosyalara böl" → "200 satırdan
+uzun dosya olmasa daha iyi olur". Ayrıntı ve teknik zorunluluklar (impl bloğu bölme kısıtları,
+E0119): `docs/kararlar.md`.
+- `src/bot/` ve `src/komut/` altında `include!` (gerçek `mod` değil) ile ~50 küçük dosya; 3'ü
+  yapısal zorunlulukla 200 satırı aşıyor (`handler_event.rs` 423 — tek trait impl zorunluluğu,
+  `sohbet_cevapla.rs` 261 — tek fonksiyon, `testler_3.rs` 204 — test gruplaması).
+- **`RESIM_ANALIZI` (.env)**: Emin "fotoğraf tarama .env üzerinden açılıp kapatılabilsin ve bir
+  daha komutla değiştirilemesin" dedi. `Bot.resim_analizi: bool`, yalnız `Bot::kur()`'da okunur,
+  hiçbir komut yazmaz; kapalıyken `message` handler'ı ek görseline hiç bakmaz.
+- Token/performans genel taraması yapıldı (Emin: "token kullanımını optimize et"), somut bir
+  darboğaz görülmedi (ayrıntı kararlar.md) — değişiklik yapılmadı.
+- Bu turda kullanıcı hızdan rahatsız oldu ("5dk çalışıyon 20dk not yazıyorsun"); ara `cargo build`
+  çağrıları durduruldu, doğrulama yalnız fazın sonunda tek sefer yapıldı (`cargo check`/`test`/
+  `clippy`/`fmt`) — bkz `~/.claude/.../memory/feedback_build_cadence.md`.
+- Doğrulama: 75 test, clippy 0 uyarı, fmt temiz.
+
+## 2026-09-02 · Panel görseli terk edildi, bot tamamen slash komutlara geçti
+Emin sırayla: "bu zihin komutu fotoğrafı nasıl oluşturuyor ai ile mi" (yanıt: hayır, elle SVG+resvg)
+→ "öyle yapacağına embedli yap kötü duruyor ama embed düzgün olsun sığmayan kısımlar için buton koy
+kullanıcıya modal açılsın" → "bir komut yöneticisi hazırlayıp tüm komutları onun altına taşı ve tüm
+komutlar düz text yerine embed çıktısı versin" → "ünlem komutlarını tamamen devre dışı bırak sadece
+slash commands ile çalışsın bot". Plan onayı: eski PNG kodu tamamen silinsin, kalan `!` komutların
+hepsi slash'a taşınsın (metin-only reaksiyon-only ayrımı slash'ta zaten yok, her interaction bir
+yanıt zorunlu kılıyor).
+- **`zihin_gorsel.rs` tamamen silindi** (SVG çizim, gömülü Inter fontları `fonts/`, `resvg`
+  bağımlılığı `Cargo.toml`'dan, `cargo run -- zihin` CLI'ı, 6 test). `/zihin` zaten embed+buton+
+  select+modal taşıyordu (`modal::zihin_embedleri/zihin_bilesenleri`); tek yol o kaldı.
+- **`Bot::komut` (tek büyük `match`) ve `Handler::message`'daki `!`/`/` metin yakalama bloğu
+  kaldırıldı.** Yerine `komut::KomutTanimi` kayıt tablosu (`src/komut.rs`): ad, açıklama, Discord
+  seçenekleri (`CreateCommandOption`) ve çalıştırıcı (`komut_gir!` makrosuyla `fn(&Bot,&Context,
+  &CommandInteraction) -> Pin<Box<dyn Future<...>+Send>>`) tek yerde. `modal::komutlari_kayit`
+  (kayıt) ve `interaction_create` (dispatch) aynı tablodan okur.
+- 12 eski `!` komutu (`sifirla, haber, sorun, gez, saka, hack, ajanlar, uyan, uyu, dusunme, model,
+  debug`) birebir işlevsel karşılıklarıyla slash'a taşındı; `zihin test` `/zihin`'in `test:Boolean`
+  seçeneği oldu. Discord ilk yanıtı 3 sn'de ister: ağ/model çağrısı yapan komutlar (`haber/sorun/
+  gez/saka/hack/ajanlar/uyan/uyu/zihin test/model id değişimi`) `ertele` (`Defer`) ile anında onay
+  verip `sonucu_bildir` (`edit_response`) ile sonucu düzenler; asıl içerik zaten `Bot::gonder`
+  çağrısıyla kanala gidiyordu, değişmedi.
+- Metin cevabı gerektiren her komut artık `modal::bilgi_embed` ile embed döner (düz `content` yok).
+  Kullanılmaz kalan `modal::durum_metni` ve `Bot::gonder_ekli` silindi.
+- **İlk derlemede AGENTS.md kural-1 hatası çıktı**: `modal::durum_mesaji(&bot.durum())` gibi
+  ifadeler `MutexGuard`'ı `.await`'e taşıyordu (`komut_gir!` future'ı `Send` istiyor); `let yanit =
+  ...; yanit_gonder(..., yanit).await;` şeklinde ayrı `let` satırına alınarak düzeltildi (guard
+  `;`de düşer).
+- Docs senkronu: AGENTS.md (hızlı komutlar, kural 11 eklendi, bilinen açıklar), docs/moduller.md,
+  docs/akislar.md, docs/durum-dosyalari.md, docs/sabitler.md, docs/mimari.md (dosya haritasına
+  komut.rs/modal.rs eklendi), docs/kararlar.md'ye iki yeni karar eklendi (append-only, eski
+  resvg/panel kararları silinmedi — o zamanki gerekçe hâlâ geçerli, yalnız üstüne yenisi geldi).
+- Doğrulama: 75 test (79 − 6 zihin_gorsel + 3 komut tablosu − 1 `durum_metni_sayac_tasir`, çünkü
+  `durum_metni` kalktı), clippy 0 uyarı, fmt temiz. **Doğrulanmadı**: hiçbir slash komut (yeni 12
+  dahil) canlı Discord'da hiç görülmedi.
+- Faz 3 (main.rs → `src/bot/` altında konu bazlı dosyalara bölme) plana dahildi ama bu oturumda
+  henüz yapılmadı — dev/yol-haritasi.md'ye açık madde olarak düşüldü.
+
 ## 2026-09-02 · Reasoning dayanıklılığı, !zihin test, debug modu, ayar paneli, zihin görseli düzeltmeleri
 - `sor_ham`: mandatory-reasoning yeniden denemesinde bütçe max(2×, 1500) + openrouter `reasoning.effort=low`;
   content boşsa JSON bekleyen kategorilerde düşünce alanındaki JSON içerik (`yanit_icerigi`); hata mesajı

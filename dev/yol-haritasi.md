@@ -83,17 +83,25 @@ Kalan risk (canlıda görülecek): emoji tepkisi rate limit davranışı, satır
 kanaldaki temposu, `-` susmasının sıklığı (model fazla susarsa prompt ayarlanır),
 `gonder_satirlar` gecikme sabitleri (ölçülmedi).
 
-## Zihin panel görseli (2026-09-02) — TAMAMLANDI
-`!zihin` embed kart yerine PNG panel atıyor (`src/zihin_gorsel.rs`, SVG → resvg → PNG).
-Gerekçe ve alternatifler (headless Chrome neden değil): docs/kararlar.md.
-Bekleyen uçlar:
-- **Kişi detay görseli.** `/zihin` menüsünden seçilen kişi için tek kişilik panel (bildikleri,
-  son olaylar, puan geçmişi). Şu an o detay modalda metin olarak duruyor.
-- **Açık tema.** Palet `zihin_gorsel.rs` başındaki `C_*` sabitlerinde tek yerde; açık tema
-  ikinci bir palet + `!zihin acik` argümanıyla eklenebilir.
-- **Gerçek glif ölçümü.** Şimdilik harf/em oranı tahmini. `fontdb`/`ttf-parser` ile gerçek
-  advance okunabilir; tahmin yukarı yuvarladığı için taşma değil, boşluk israfı riski var.
-- Görsel canlı Discord'da doğrulanmalı (ek gönderimi, koyu temada görünüm, telefonda okunurluk).
+## Zihin panel görseli (2026-09-02) — TERK EDİLDİ, `zihin_gorsel.rs` silindi
+`!zihin` bir süre embed yerine PNG panel atıyordu (`src/zihin_gorsel.rs`, SVG → resvg → PNG).
+Aynı gün kullanıcı geri döndü ("kötü duruyor, embed düzgün olsun") — panel tamamen kaldırıldı,
+`/zihin`'in embed+buton+select+modal yapısı tek yol oldu. Aşağıdaki bekleyen uçlar artık
+**geçersiz** (kod yok): kişi detay görseli, açık tema, gerçek glif ölçümü. Gerekçe: docs/kararlar.md
+("Panel görseli terk edildi" kaydı).
+
+## Komutlar slash'a taşındı (2026-09-02) — TAMAMLANDI (Faz 1+2), Faz 3 açık
+Kullanıcı: "bir komut yöneticisi hazırlayıp tüm komutları onun altına taşı ve tüm komutlar düz
+text yerine embed çıktısı versin", sonra "ünlem komutlarını tamamen devre dışı bırak sadece slash
+commands ile çalışsın bot". Plan: `dev/ilerleme.md`'nin "Panel görseli terk edildi, bot tamamen
+slash komutlara geçti" kaydında ayrıntılı.
+- **Faz 1 — TAMAMLANDI**: panel görseli kaldırıldı (yukarı bak).
+- **Faz 2 — TAMAMLANDI**: `Bot::komut` + `!`/metin yakalama bloğu kalktı; `komut::KomutTanimi`
+  kayıt tablosu (`src/komut.rs`) kondu, 12 eski `!` komutu slash'a taşındı, hepsi embed döner.
+- **Faz 3 — TAMAMLANDI** (gerçek `mod` değil `include!` ile — bkz docs/kararlar.md): `main.rs`
+  (4695 satır) ve sonra `komut.rs` (578 satır) `src/bot/` ve `src/komut/` altında ~50 küçük
+  dosyaya (çoğu <200 satır) bölündü. `pub(crate)` gerekmedi, diğer 6 kardeş dosyaya hiç
+  dokunulmadı — `include!` görünürlüğü/`use super::*`'ı hiç değiştirmiyor.
 
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
 - **`reaction_add` olayı yok:** bot tepki verir ama kendi mesajına gelen tepkiyi görmez
@@ -116,5 +124,5 @@ Bekleyen uçlar:
 - Bellek kuyruğu bellek içinde; süreç çökerse işlenmemiş kuyruk kaybolur (kabul).
 - Uyanış ajanı yanlış kişiyi seçebilir → fallback: son mesaj / etiketli.
 - `.env`, `durum/`, `bot.log` git dışı (kişisel veri). `resimler/` yalnız `.gitkeep`.
-- **Zihin görseli:** gerçek glif ölçümü (skrifa ile advance), test tahmini kendine karşı doğruluyor; `konu_sayisi` 30 tavanı, olay sayısı yalnız son 3 ay (etiket dürüstleştirilebilir).
-- **Reasoning:** glm-5.3-flash ile canlı doğrulama (`!zihin test`), effort=low'un gerçekten düşünceyi kısıp kısmadığı.
+- **Reasoning:** glm-5.3-flash ile canlı doğrulama (`/zihin test:true`), effort=low'un gerçekten düşünceyi kısıp kısmadığı.
+- **Slash komutlar:** hiçbiri (yeni 12 dahil) canlı Discord'da hiç görülmedi; seçenek/choice görünümü, `ertele`+`sonucu_bildir` akışı doğrulanmalı.

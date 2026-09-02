@@ -2,7 +2,10 @@
 
 ## Bir mesaj geldi
 0. Her mesaj (bot dahil, `gonder` üstünden) kanalın geçmişine düşer: `kanal_not` → bellek (60 satır) + `durum/kanallar/<id>.md`. Yeni sohbet açılırken son 10 satır tohum olur (`sohbet_baslat`), böylece sohbet bitmiş ya da bot yeniden başlamış olsa da bağlam kaybolmaz.
-0. **Ham** metin (resim işareti eklenmeden önceki `content_safe` çıktısı) `!` ya da `/` ile başlıyorsa `komut.rs::Bot::komut`: sifirla · haber · sorun · gez · saka · hack · ajanlar · uyan · uyu · durum · düşünme · model · yardım/help. Tanınan komut işlenir ve mesaj sohbete girmez; tanınmayan komut normal mesaj sayılır. `model <id>` yalnız FAVORI, OpenRouter listesinde doğrulanır. `düşünme göster/gizle/sessiz/kapat` düşünme kipini değiştirir (`durum/dusunme.md`): göster=spoiler'da, gizle="Düşünüyorum..." sonrası cevap, sessiz=arka planda düşünür ama hiç iz göstermez (placeholder/sayaç/buton yok), kapat=istekler reasoning'siz.
+0. **Komutlar bu akışa hiç girmez.** Bot yalnız slash (`/`) komutlarla yönetilir; `Handler::message`
+   artık metni komut diye ayrıştırmaz, her mesaj doğrudan aşağıdaki adımlara girer. Slash komutların
+   akışı ayrı: Discord `Interaction::Command` gönderir, `interaction_create` (main.rs)
+   `komut::tanimlar()` tablosunda ada bakıp ilgili çalıştırıcıyı çağırır — bkz "Slash komutlar" bölümü.
 1. `Handler::message`: bot/webhook/DM → çık; `GUILD_ID`/`KANALLAR` ayarlıysa dışarıdaki sunucu/kanal → çık. `content_safe` (mention'lar `@ad`, `@everyone` zararsız).
 1b. **Resim eki:** `msg.attachments` içinde `content_type`'ı `image/` ile başlayan ilk ekin URL'i alınır. Erken çıkış artık "metin boş" değil "metin de ek de yok": sırf görsel atılmış mesaj da işlenir. Hafızaya/kanal notuna/sohbet satırına giden metin işaretlenir: metin varsa `[resim] <metin>`, yoksa `[resim attı]`. URL yalnız sohbet geçmişindeki `Mesaj.resim` alanına konur ve **yalnız en son kullanıcı mesajında** kalır (yeni satır eklenirken eskilerin `resim`'i `None` olur: discord cdn linki ömürlü, eski görseli her turda yollamak token yakar). `mesaj_json` bu alanı görürse istek gövdesinde `content` düz metin değil `[{text},{image_url}]` dizisi olur (ajanlar.rs `resimci` ile aynı biçim).
 2. Kilit içinde: etiketlendi mi? (mention listesi ∪ yanıtlanan mesaj botun ∪ metinde bot adı)
@@ -112,24 +115,25 @@ döngüler bu kipte hiç çalışmaz. (Tek istisna: `Bot::kur()` canlı yolla or
 `durum/{kisiler,konular,olaylar,arsiv,kanallar}` ve `resimler/` klasörlerini oluşturur.) **Doğrulanmadı:** gerçek model anahtarı bu makinede yok, canlı
 cevap alışverişi görülmedi (bkz. AGENTS.md "Bilinen açıklar").
 
-## Komut arayüzü (slash → embed kart → detay modalı)
-`ready` → her sunucuya `/durum` `/yardim` `/zihin` kaydı (idempotent) → kullanıcı slash çalıştırır →
-`interaction_create(Command)` → ephemeral **embed kart** (`durum_mesaji`/`yardim_mesaji`/`zihin_mesaji`),
-yalnız çağırana görünür.
+## Slash komutlar (komut yöneticisi → embed → detay modalı)
+`ready` → her sunucuya kayıt (`modal::komutlari_kayit`, idempotent): liste `komut::tanimlar()`
+tablosundan çıkar (ad/açıklama/seçenekler tek kaynak, elle iki yerde tutulmaz) → kullanıcı slash
+çalıştırır → `interaction_create(Command)` → tabloda `c.data.name` eşleşmesi bulunur, ilgili
+çalıştırıcı çağrılır. Her komut **embed** döner, düz metin yok:
+- Yerel/hızlı komutlar (`durum, yardim, ayarlar, zihin` varsayılan görünüm, `sifirla, dusunme,
+  model` sorgu, `debug`) doğrudan `CreateInteractionResponse::Message` ile yanıtlar
+  (`yanit_gonder`/`yanit_bilgi`, embed `modal::bilgi_embed`).
+- Ağ/model çağrısı yapan komutlar (`haber, sorun, gez, saka, hack, ajanlar, uyan, uyu, zihin
+  test:true, model id değişimi`) Discord'un 3 sn'lik ilk yanıt sınırını aşabileceği için önce
+  `ertele` (`Defer`) ile anında onay verir, iş bitince `sonucu_bildir` (`edit_response`) ile kısa
+  bir sonuç embed'i yazar — asıl içerik (haber/şaka/vb.) zaten kendi `Bot::gonder` çağrısıyla
+  kanala gidiyordu, buradaki yalnız bir "tamam" notu.
+
 `/zihin` kartı: üç sütun (Kişiler/Konular/Olaylar) + üstte kişi select menüsü, altta Konular/Olaylar/Bot özeti butonları.
 Menüden kişi seç ya da butona bas → `interaction_create(Component)` → ilgili **detay modalı**
 (`modal_kisi` / `modal_konular` / `modal_olaylar` / `modal_ozet`); her bölüm kendi etiketli alanında, tek kutuya boca yok.
 Kullanıcı modal'ı gönderirse → `interaction_create(Modal)` → kısa ephemeral onay; girdi toplanmaz.
-Paralel düz metin: `!durum` ortak `durum_metni`; `!yardım` aynen. `!zihin` artık kart değil **görsel** atar (aşağı bak).
-
-## !zihin görsel yolu (panel ekran görüntüsü)
-`!zihin` → `zihin_gorsel::zihin_verisi(&durum())` kilit altındaki alanları kopyalar, **guard satır
-sonunda düşer** → `spawn_blocking`: `dosyalari_oku` (durum/ okumaları) → `zihin_svg` (yerleşim, metin
-sarma, XML kaçışı) → `resvg` ile 2x PNG → `durum/zihin.png` (her seferinde üstüne) → `gonder(...,
-dosya: Some(&yol), ...)` tek satır başlıkla ("zihnim, {tarih}").
-Üretim ya da yazma patlarsa: hata `warn`'lanır ve eski `zihin_embedleri` kartı gönderilir — `!zihin`
-boş dönmez. Etkileşimli detay (kişi menüsü, bölüm butonları, modallar) `/zihin`'de kalır.
-Aynı görsel Discord'suz da üretilir: `cargo run -- zihin`.
+`/zihin test:true` eski panel-teşhis yolunun yerini alır (aşağıda "Zihin zinciri" bölümü).
 
 ## Sunucuya bağlanınca
 `guild_create` (sunucu başına bir kez) → arka planda: 14 gün geriye tarama (izinli kanallar, 100'lük sayfalar) → ham hafıza son 2000 → profilci → hoca (huy boşsa). Yeniden bağlanmada tekrar taranmaz.
@@ -149,7 +153,7 @@ uyanık ∧ seyahatte değil ∧ boş kanal ∧ `resimler/` dolu → %30 hack (`
 rss 20 → seçim (`GEZGIN_SEC`, huy+profil) → ≤3 sayfa (`sayfa_oku`: firecrawl ya da düz) → `uret(GEZGIN_NOT)` botun kendi günlüğü → `gundem.md` (12 giriş, eskisi arşiv) → `Durum.gundem` son 3 → her cevabın "GÜNDEM" bölümü ve hoca girdisi.
 
 ## Uyku (dakikada bir)
-`!uyan`: aktif planın bitişine kadar `uyanik_zorla` (planı silmek işe yaramaz, dakika sonra yeniden kurulup uyutur). `!uyu [saat]`: geçici plan, zorlama sıfırlanır.
+`/uyan`: aktif planın bitişine kadar `uyanik_zorla` (planı silmek işe yaramaz, dakika sonra yeniden kurulup uyutur). `/uyu [saat]`: geçici plan, zorlama sıfırlanır.
 `guncelle`: dün+bugün için plan yoksa kur (gergin ise %20, değilse %7 uykusuz gece). Uyanık→uyudu / uyudu→uyandı geçişi loglanır. Uyku hali konuşma promptuna karakter bahanesi olarak girmez.
 **Uyurken dinleme sürer:** mesajlar ham hafızaya girer; `bellek_dongusu` 2 saatte bir gece gözlemi yapıp zihne işler; haber turu uyurken haber seçer ama atmaz, `stok_haber`'e koyar.
 **Uyanınca:** bekleyen etiket varsa `UYANDIM` ile kesin dönüş (hata durumunda liste geri konur, kaybolmaz). Etiket yoksa `uyanis.md` ajanı gece mesajlarını değerlendirir (`{"ilgi":0-10,"konu"}`); ilgi ≥5 ise `uyanis-cevap.md` ile son konuşulan kanala sabah sözü. Stok haber uyanık ilk turda "sabah haberi" olarak atılır.
@@ -176,23 +180,23 @@ aynı kuyruktan geçer.
 `zaman_asimi_kapat` → info log `zihin: sohbet kapandı [kanal] (30 dk sessiz) → kuyruk (n), günlükçü 10 dk içinde`
 → `bellek_dongusu` (10 dk) → `gunlukcu` → info `zihin: günlükçü [kaynak]: k kişi, m konu, o olay yazıldı`
 ya da warn `zihin: günlükçü başarısız [kaynak]: <sebep>`. `gunlukcu` artık `Result<GunlukcuOzet, Hata>` döner.
-`!zihin test`: kanalın son 30 satırını hemen günlükçüye verir, sonucu tek mesajla yazar (40 dk beklemeden).
+`/zihin test:true`: kanalın son 30 satırını hemen günlükçüye verir, sonucu tek mesajla yazar (40 dk beklemeden).
 Reasoning zorunlu modelde (glm-5.3-flash) `sor_ham`: 400 "mandatory" → alanlar kaldırılır + openrouter'da
 `reasoning.effort=low` + bütçe max(2×, 1500); 200 ama content boş → JSON bekleyen kategorilerde
 (gunlukcu, isteklilik, hedef_sec, ruh_hali, uyanis) düşünce alanındaki `{…}` içerik sayılır (warn log),
 düzyazı çağrısında sayılmaz; yine boşsa bütçe büyütülüp bir kez daha denenir; hata mesajı kategori/model/
 bütçe/düşünce uzunluğunu içerir.
 
-## Debug modu (`!debug`, ayar paneli)
+## Debug modu (`/debug`, ayar paneli)
 `Durum.debug` açıkken `debug_not` tek satır (⚙ …, ≤300 kr) DEBUG_KANALI'na, yoksa mesajın kanalına yazar
 ve info loglar; hafızaya/kanal notuna girmez. İzler: mesaj kararı (`etiket` / `diyalog sürüyor` /
 `isteklilik p/eşik · sebep: … → cevap|sus` / `2 dk sınırı` / `yedek zar`), cevapla turu (`ruh hali`,
 `hedef`, `soru tavanı`, `n satır gönderildi · tepki X` / `sus (-)` / `akış boş → yedek uret`),
 `sohbet kapandı (30 dk sessiz)`.
 
-## Ayar paneli (`!ayarlar`, `/ayarlar`)
+## Ayar paneli (`/ayarlar`)
 Embed (sürüm, model, düşünme, debug, uyku, seyahat) + butonlar: düşünme göster/gizle/sessiz/kapat
 (etkin olan Primary), debug aç/kapat, uyandır / uyut (8 saat). Buton → `interaction_create(Component)`
 `ayar_*` → `Handler::ayar_dugmesi`: komutlarla aynı yollar (`DusunmeKip` + dusunme.md, `debug_ayarla`,
-`uyandir`/`uyut` + `uyku_gecisi`) → `UpdateMessage` ile panel yerinde yenilenir. `/ayarlar` ephemeral,
-`!ayarlar` kanalda herkese görünür.
+`uyandir`/`uyut` + `uyku_gecisi`) → `UpdateMessage` ile panel yerinde yenilenir. Yanıt ephemeral
+(yalnız çağırana görünür).

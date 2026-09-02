@@ -3,7 +3,7 @@
 ## src/main.rs
 | Sabit | Değer | Anlam |
 |---|---|---|
-| SURUM / SURUM_COMMIT / SURUM_TARIH | Cargo.toml sürümü / build.rs'in git'ten aldığı commit (+ = derlemede commit'lenmemiş değişiklik vardı) / derleme tarihi | `surum_metni()`: !durum, /durum ve açılış duyurusu |
+| SURUM / SURUM_COMMIT / SURUM_TARIH | Cargo.toml sürümü / build.rs'in git'ten aldığı commit (+ = derlemede commit'lenmemiş değişiklik vardı) / derleme tarihi | `surum_metni()`: /durum ve açılış duyurusu |
 | OPENROUTER_ADRES / OPENROUTER_MODEL | …/api/v1/chat/completions / openai/gpt-4o-mini | varsayılan sağlayıcı |
 | MISTRAL_ADRES / MISTRAL_MODEL | api.mistral.ai/v1/chat/completions / mistral-medium-latest | MISTRAL_KEY varsa ya da SAGLAYICI=mistral |
 | SANS | 0.35 | yedek zar: isteklilik çağrısı başarısızsa araya girme olasılığı |
@@ -66,7 +66,9 @@ API_ADRES (openai uyumlu chat/completions adresi; seçilen sağlayıcının adre
 FIRECRAWL_KEY (yoksa düz indirme) · HABER_KANALI (kanal id; yoksa sistem kanalı / ilk metin kanalı) ·
 GUILD_ID (tek sunucu id; ayarlıysa bot yalnız bu sunucuda çalışır) ·
 KANALLAR (virgüllü kanal id listesi; ayarlıysa bot yalnız bu kanallarda çalışır) ·
-DEBUG_KANALI (kanal id; `!debug` açıkken karar izleri buraya, yoksa mesajın kanalına) ·
+DEBUG_KANALI (kanal id; `/debug` açıkken karar izleri buraya, yoksa mesajın kanalına) ·
+RESIM_ANALIZI (varsayılan açık; `kapali/off/hayir/0` ekli fotoğrafları okumayı kapatır — yalnız
+açılışta okunur, hiçbir slash komutla çalışırken değiştirilemez, `Bot.resim_analizi`) ·
 LOG_SEVIYE (error/warn/info/debug/trace, varsayılan info) · LOG_RENK (on/off; varsayılan: terminalde açık, dosyada kapalı)
 
 ## src/gelisim.rs
