@@ -17,9 +17,7 @@ arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Pr
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 71 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli)
-
-cargo test             # 58 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, zihin gorseli)
+cargo test             # 77 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef, onbellek, çıktı protokolü, sohbet_cli, zihin görseli)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
 cargo run -- zihin     # discord'suz zihin panelini durum/zihin.png'ye yazar (tasarimi gormek/test icin)

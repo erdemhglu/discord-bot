@@ -136,9 +136,6 @@ oluşturur; dosya içeriği yazılmaz). Çıktı protokolü olduğu gibi görün
 - konuşmalar `durum/kanallar/<id>.md`'de kalır; sohbet bitse ya da bot yeniden başlasa da son 10 satırla devam eder
 - `!uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `!uyu [saat]` — test için uyutur (varsayılan 8 saat).
 - `!durum` (sürüm dahil) — evre, sayaçlar, model, uyku, düşünme kipi, seyahat, token metriği (kaç çağrı, giriş/önbellek/çıkış, çağrı tipine göre en çok yakanlar).
-- `!zihin` — zihin kartını (kişiler/konular/olaylar) kanala yollar; interaktif detay `/zihin`'de.
-
-- `!durum` — evre, sayaçlar, model, uyku, düşünme kipi, seyahat, token metriği (kaç çağrı, giriş/önbellek/çıkış, çağrı tipine göre en çok yakanlar).
 - `!zihin` — zihnini panel görseli (PNG) olarak kanala atar: sayaç şeridi, kişiler, olaylar, konular, gündem, kendim, huyum. Görsel üretilemezse eski embed karta düşer. Etkileşimli detay `/zihin`'de.
 - `!düşünme` — düşünme kipi. `göster`: düşünürken "Düşünüyorum...", cevapla birlikte thinking hem spoiler hem kod bloğunda. `gizle`: düşünürken canlı kelime sayacı ("Şu ana kadar N kelime düşündüm"), thinking mesajda görünmez, cevap sonunda "Düşünce Sürecini Göster" butonu — tıklayana yalnız ona görünen kod bloğu açılır. `kapat`: istekler reasoning'siz atılır. Seçim `durum/dusunme.md`'de kalır; `aç` = göster.
 - `!yardım` / `!help` — komut listesi.
