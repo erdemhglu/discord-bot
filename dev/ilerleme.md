@@ -4,6 +4,12 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · Adım 7 · final: docs + doğrulama
+- AGENTS.md tazelendi (test sayısı, uyku kuralı, id bazlı kişiler, yeni açık noktalar).
+- Tüm adımların docs güncellemeleri tamam (akislar, moduller, sabitler, kararlar, promptlar,
+  durum-dosyalari, README).
+- Doğrulama: 34 test, clippy 0 uyarı, release build tamam.
+
 ## 2026-09-02 · Adım 6 · uyku modu: dinle + biriktir + uyanınca değerlendir
 - Uyurken mesajlar ham hafızaya zaten giriyordu; artık `bellek_dongusu` 2 saatte bir gece
   gözlemi yapıp zihne işliyor (`son_gece_gozlem` işaretli).

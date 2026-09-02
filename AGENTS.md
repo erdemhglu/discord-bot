@@ -13,7 +13,7 @@ arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Pr
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 12 birim test (hafiza, gundem, seyahat)
+cargo test             # 34 birim test (hafiza, gundem, seyahat, stream, isteklilik, hedef)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
 cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, SAGLAYICI, API_ADRES, FIRECRAWL_KEY, HABER_KANALI isteğe bağlı
@@ -42,7 +42,8 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
    `cevap_butcesi!()` makrosunda: release'de max_tokens gitmez, debug'da kapak var; diğer
    çağrılarda max_tokens sabit. Model ne derse desin favori +10.
 3. **Mention'lar kapalı gider** (`CreateAllowedMentions::new()`), yalnız hoş geldin pingler.
-4. **Botlara, webhook'lara, DM'lere cevap yok.** Uyurken cevap yok (etiket bekletilir).
+4. **Botlara, webhook'lara, DM'lere cevap yok.** Uyurken yazmaz ama dinler: mesajlar zihne
+   işlenir, uyanınca gece yazılanlar değerlendirilir (etiket varsa kesin dönüş).
 5. **Hiçbir hafıza silinmez**: sınırı aşan dosya özetlenir, ham parça `durum/arsiv/`'e gider.
 6. **Kişilikle konuşan tek yol `Bot::uret` / `Bot::uret_akis`**, analiz yapan tek fonksiyon
    `Bot::analiz`. Ajanlar kişiliksizdir. Yeni bir "konuşma" mutlaka `uret`'ten (sohbet cevabı
@@ -69,7 +70,10 @@ cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY
 - Thinking yalnız model üretirse görünür (`reasoning` / `reasoning_content`); gpt-4o-mini
   üretmez, o modelde bugünkü davranış aynen sürer.
 - gpt-4o-mini görsel yorumu (resimci) canlıda görülmedi; başarısızsa metin yedeğine düşer.
-- Kişi dosyaları görünen ada göre; aynı görünen adlı iki kişi çakışır.
+- Kişi dosyaları id bazlı (`kisiler/<id>.md`); isim→id çevrilemeyen kayıt o tur atlanır
+  (`Durum.ad_id`). Eski slug dosyaları okunmaz.
+- İsteklilik/hedef/uyanış mini çağrıları yalnız birim testleriyle doğrulandı; canlı davranış
+  eşikleri (ISTEK_ESIGI=6, ilgi≥5) ayarlanmak isteyebilir.
 - Anahtar kelime eşleme düz alt-dize; kök bulma yok.
 - Bayram tarihleri 2026-2027 için elle yazılı (`src/seyahat.rs`), sonraki yıllar eklenmeli.
 - Takma ad değiştirme (isim seçme) botun sunucuda CHANGE_NICKNAME iznine bağlı; yoksa log'a düşer, isim yine kullanılır.

@@ -19,8 +19,8 @@ Mini model çağrısı (`isteklilik.md`), eşik 6 (evre ±1, seyahat +2), 2 dk r
 ### Adım 6 · Uyku modu — TAMAMLANDI
 Gece gözlemi (2 saat), stok haber + sabah haberi, uyanış değerlendirmesi (`uyanis.md`),
 etiket listesi hata kaybına karşı geri konur, üniversite haber önceliği.
-### Adım 7 · Final — sürüyor
-docs kapanış, tam doğrulama, push.
+### Adım 7 · Final — TAMAMLANDI
+Tüm adımlar bitti; docs + doğrulama + push tamam. Açık kalanlar aşağıdaki "Bekleyen" listesinde.
 ### Adım 3 · Zihin id bazlı + zaman damgası + bellek döngüsü
 - `kisiler/<id>.md`: id, kullanici_adi, gorunen_ad, eski_adlar + mevcut alanlar.
   Temiz başlangıç (eski slug dosyalarına dokunulmaz).
