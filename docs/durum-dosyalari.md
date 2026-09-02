@@ -16,7 +16,7 @@
 | `arsiv/…` | arsivle | insan | yalnız eklenir, `## tarih öncesi` başlıklı |
 | `kanallar/<id>.md` | `kanal_not` (her mesaj, bot dahil) | açılış, `sohbet_baslat` tohumu | son 60 satır, her yazımda dosya baştan yazılır |
 | `model.md` | `!model` | açılış (`main`, env MODEL'i ezer) | tek satır model kimliği |
-| `dusunme.md` | `!düşünme göster/gizle/kapat` | açılış (`Durum::yukle`; dosya yoksa göster) | `goster`, `gizle` ya da `kapali` |
+| `dusunme.md` | `!düşünme göster/gizle/sessiz/kapat` | açılış (`Durum::yukle`; dosya yoksa göster) | `goster`, `gizle`, `sessiz` ya da `kapali` |
 | `gelisim.md` | gelisim_kontrol, isim_sec | açılış (`gelisim::yukle`) | `dogum: unix` `sohbet: n` `mesaj: n` `evre: i` `isim: ad` satırları |
 
 ## Biçimler

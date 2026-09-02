@@ -4,6 +4,17 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-02 · İkinci uzak tur merge'ü (PR #3+#4, kimlik hizalaması)
+- Uzaktan gelenler aynen alındı: `DusunmeKip::Sessiz` (4. kip: arka planda düşünür, hiç iz
+  yok), `reasoning_kapat(herhalukarda)` (arka plan ajanları kipten bağımsız reasoning kapatır —
+  küçük bütçeler düşünmeye gidip `content: null` dönüyordu), `REASONING_ZORUNLU_TABAN=500` +
+  boş yanıtta bütçe yükseltip yeniden deneme, kisilik.md sunucu kuralları hizalaması
+  (taciz/hakaret teşviki yok, SINIRLAR bölümü) + kimlik İTÜ fizik, haber-sec tutarlılığı.
+- Çakışmalar yalnız docs'taydı (ilerleme.md, kararlar.md) — kronolojik birleştirildi;
+  main.rs/komut.rs/moduller.md otomatik temiz birleşti. Yerelin sıcak yol temizliği ve
+  `cevap_ver = acik && katil` düzeltmesi korundu.
+- Doğrulama: 51 test, clippy 0 uyarı, fmt temiz.
+
 ## 2026-09-02 · PR #2 merge'ü + düzeltmeler + sıcak yol tahsis temizliği
 - Uzak PR (token optimizasyonu, çok sağlayıcılı genellik, tartışma davranışı, prod-hazırlık:
   kategori metriği, reasoning-mandatory geri dönüşü, cache genelliği, ruh hali, GUILD_ID/KANALLAR,
@@ -19,6 +30,107 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
   `getir` bütçe sayacı + konu tek okuma, `dizin_yenile` hafif başlık çözümleyici,
   `konu_ekle` tek kilit bölgesi, `sohbet_sistemi` contains tahsissiz.
 - Doğrulama: 50 test, clippy 0 uyarı, fmt temiz, release build tamam.
+
+## 2026-09-02 · Kişilik promptunun tamamı elden geçirildi
+
+Aynı oturumda önceki kişilik düzeltmesinin devamı; kullanıcı sırayla ek düzeltmeler istedi,
+sonunda "kisilik.md nin her satirini elden geçir" dedi — satır satır gözden geçirdim.
+
+- **Yakınlık artık kişiye göre**: açılış paragrafı "herkesle asker arkadaşı gibisin" yerine
+  "kiminle ne kadar samimi olacağına o kişinin sana nasıl hitap ettiğine ve geçmişine göre
+  karar verirsin" oldu — kullanıcı bunu ayrıca belirtti (herkesle aynı laubalilik yanlıştı).
+  İNSANLARA KARŞI TAVRIN'a da "az tanıdığın biriyle ilk mesajdan laubali olmazsın" bulgusu
+  eklendi ki iki bölüm birbiriyle tutarlı olsun.
+- **Kimlik değişti**: Nişantaşı Üniversitesi → İstanbul Teknik Üniversitesi, fizik öğrencisi
+  (kullanıcı isteği: "daha iyi bir kimlik"). Beyaz Tofaş detayı bu sırada kaldırıldı (dosya
+  üstünde elle yapılan bir ara düzenleme yarım cümle bırakmıştı — "Bunları" diye plural bir
+  referansın karşılığı kalmamıştı, tekile çevirip düzelttim). `promptlar/haber-sec.md`'deki
+  "üniversiteyle ilgili habere öncelik ver" kuralı da İTÜ'ye güncellendi (aksi halde kişilik ve
+  haber seçimi farklı okuldan söz ederdi).
+- Diğer bölümler (NASIL YAZARSIN, MUHABBET, İSTEK GELİNCE YAPARSIN, YASAK KALIPLAR, NE YAPMAZSIN,
+  RUH HALİN, KANDIRILMAZSIN) gözden geçirildi, risk ya da tutarsızlık bulunmadı; TAKINTILARIN
+  (ICE hayranlığı gag'i) kasıtlı bir önceki karar olduğu için dokunulmadı, ayrıca not edildi.
+- Kod değişmedi (yalnız prompt metni), `include_str!` ile derleme + 47 test doğrulandı.
+
+---
+
+## 2026-09-02 · Kişilik promptu: taciz/hakaret teşviki çıkarıldı, "aq/amk/mk" yasaklandı
+
+Kullanıcı: `promptlar/kisilik.md`'de aşırı saçma/laubali yerler var, millete küfür ediyor —
+kendi paylaştığı sunucu kurallarına (taciz, hakaret, düşmanlık, NSFW, siyasi propaganda vb.
+Seviye 0-3) uydur dedi. Ek istek: "aq", "amk", "mk" gibi kısaltılmış küfürler de yasaklansın,
+küfür edecekse tam yazsın.
+
+- **LAF SOKULUNCA**: "kişinin dosyasındaki bir zaafına vurursun" ve "küfürle/aşağılamayla
+  gelene küfürle/aşağılamayla" karşılık verme talimatı kaldırıldı. Sivri dilli/altta kalmama
+  kaldı; hedef gösterme, zaaf/travma/aile istismarı açıkça yasaklandı.
+- **DOĞALLIK**: "aq"/"amk"/"mk" kısaltmaları yasaklandı — küfür edecekse kelimeyi tam yazar;
+  küfür yalnız dolgu/tepki ünlemi, kişiye yöneltilen hakaret değil.
+- Yeni **SINIRLAR** bölümü: hakaret/taciz/düşmanlık, ırkçılık/cinsiyetçilik/homofobi/transfobi,
+  NSFW/yasadışı içerik, kişisel veri, siyasi/dini propaganda, kasıtlı yanlış bilgi, spam/flood,
+  öfke patlaması — kullanıcının yapıştırdığı sunucu kural setinin kısa özeti. Bu dosya çekirdek
+  (hoca'nın yazdığı huy.md bunu geçersiz kılamaz, mevcut ICE-hayranlığı sınırıyla aynı prensip).
+- Kod değişmedi (yalnız prompt metni), derleme `include_str!` ile doğrulandı, 47 test geçti.
+
+---
+
+## 2026-09-02 · Reasoning zorunlu modelde küçük bütçe artık tabana çıkarılıyor
+
+Kullanıcı canlı log yapıştırdı: bir önceki turda `sor_ham`'ı kipten bağımsız reasoning
+kapatacak şekilde düzelttim, ama bu model/endpoint (`z-ai/glm-5.3-flash`, openrouter)
+reasoning'i **hiç** kapatmaya izin vermiyor ("Reasoning is mandatory ... cannot be disabled").
+Kod bu hatayı yakalayıp alanları kaldırıp açık haliyle yeniden deniyordu (önceki turdan kalan
+davranış) ama bütçeye dokunmuyordu: `gezgin_sec` gibi 20 token bütçeli mini-çağrılarda reasoning
+yine tüm bütçeyi yiyor, bu sefer 200 dönüp `content: null` bırakıyordu — mandatory-hata yolunun
+dışında kaldığı için doğrudan "modelden boş yanıt geldi" hatasıyla çıkıyordu.
+
+- `REASONING_ZORUNLU_TABAN=500` + `Bot::butce_tabanini_uygula(govde, taban)`: `max_tokens`
+  varsa ve tabanın altındaysa yükseltir, bütçesiz çağrıya dokunmaz.
+- `sor_ham`: mandatory-reasoning yeniden denemesinde bütçe tabana çıkarılır. Ayrıca 200 dönüp
+  içerik boş/null gelmesi artık anında hata değil — bütçe tabana çıkarılıp bir kez daha denenir
+  (`AI_YENIDEN_DENEME` tükenince pes edilir).
+- `sor_ham_akis`: mandatory-reasoning dalında aynı bütçe tabanı uygulanır (boş-içerik retry'ı
+  stream tarafında yok, `gonder_akis` zaten kısa/boş cevabı ayrıca ele alıyor).
+- Doğrulama: 47 test (`butce_taban_altindaysa_yukselir` yeni), clippy 0 uyarı, `cargo fmt`,
+  debug build.
+
+---
+
+## 2026-09-02 · Düşünme kipine "sessiz" eklendi (4. kip)
+
+Kullanıcı isteği: "gizle" modunda bile düşünürken 'X kelime düşünüldü' yazıyor, bunu hiç
+göstermeyen — buton bile eklemeyen — ama arka planda gerçekten düşünen bir kip istiyorum.
+
+- `DusunmeKip` dördüncü varyant `Sessiz` aldı. `reasoning_kapat`'ta Kapali sayılmadığı için
+  stream isteğinde reasoning normal istenir (kapatılmaz, model gerçekten düşünür).
+- `gonder_akis`: dusunce yalnız Goster/Gizle kiplerinde biriktirilir; Sessiz'de hiç toplanmaz.
+- `akis_gorunum`: düşünme fazında (cevap boş) Sessiz de Kapali gibi boş vektör döner — mesaj
+  cevap gelene kadar hiç açılmaz. Cevap başladığında da yalnız cevap gider, buton eklenmez
+  (`kip == Gizle` koşulu zaten Sessiz'i dışarıda bırakıyor).
+- `!düşünme` yardım metni ve komut çıktısı güncellendi: `göster/gizle/sessiz/kapat`.
+- Doğrulama: 46 test (2 yeni assert `Sessiz` için genişletildi), clippy 0 uyarı, `cargo fmt`,
+  debug build.
+
+---
+
+## 2026-09-02 · Arka plan ajanlarında sessiz "boş yanıt" hatası çözüldü
+
+Önceki turda "bu kod tarafında tam çözülebilecek bir şey değil" denen ihtimal gerçekleşti:
+canlı loglarda profilci/hoca/günlükçü/gezgin art arda "modelden boş yanıt geldi" hatası
+veriyordu, `kisiler/konular/olaylar` bu yüzden boş kalmıştı.
+
+- **Kök neden**: `reasoning_kapat` yalnızca kullanıcının global düşünme kipi `Kapali` ise
+  reasoning'i kapatıyordu. Kip `gizle` iken kapatılmıyordu — ama `sor_ham` (stream olmayan,
+  arka plan ajanlarının yolu) `reasoning_content` alanını zaten hiç okumaz/göstermez. Reasoning
+  zorunlu model (glm-5.3-flash), bu ajanların küçük `max_tokens` bütçelerini (20-1200) tamamen
+  düşünmeye harcayıp `content: null` döndürüyordu.
+- **Düzeltme**: `reasoning_kapat` artık `herhalukarda: bool` parametresi alıyor. `sor_ham`
+  (arka plan ajanları + non-stream sohbet) kullanıcı kipine bakmaksızın her zaman `true` geçip
+  reasoning'i kapatıyor. `sor_ham_akis` (stream, sohbet) hâlâ kullanıcı kipine bakıyor (`false`)
+  çünkü orada `gizle`/`göster` gerçekten gösterilen bir şeye karşılık geliyor (sayaç/tam metin).
+- Doğrulama: 46 test, clippy 0 uyarı, `cargo fmt`, debug build.
+
+---
 
 ## 2026-09-02 · Hafıza sertleştirme + döngü bekçisi + tarama sırası
 - `hafiza::yaz` atomik (geçici + rename) + `YAZMA_KILIDI` ile tek sıradan; `ekle` gerçek append
