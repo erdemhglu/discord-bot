@@ -1,9 +1,10 @@
 // Prompts live as markdown under prompts/<dil>/ and get embedded at compile time (the
-// filenames and content stay Turkish on purpose — see AGENTS.md). To change the text, edit
-// the .md file and rebuild. Which language's set is served at runtime is decided once by
-// `Lang::current()` (see lang.rs) and never changes for the life of the process. Only `tr`
-// is filled in today; a new language is a new `prompts/<dil>/` folder (every file `tr/` has)
-// plus one match arm in `get` below.
+// filenames stay Turkish on purpose — see AGENTS.md; content is per-language, tr's is
+// Turkish, en's is English). To change the text, edit the .md file and rebuild. Which
+// language's set is served at runtime is decided once by `Lang::current()` (see lang.rs)
+// and never changes for the life of the process. `tr` and `en` are both filled in; a new
+// language is a new `prompts/<dil>/` folder (every file `tr/` has) plus one match arm in
+// `get` below.
 
 use crate::lang::Lang;
 
@@ -39,6 +40,40 @@ mod tr {
     pub const NAME_ANNOUNCE: &str = include_str!("../prompts/tr/isim-duyuru.md");
     pub const PROBLEM: &str = include_str!("../prompts/tr/sorun.md");
     pub const MOOD: &str = include_str!("../prompts/tr/ruh-hali.md");
+}
+
+mod en {
+    pub const PERSONALITY: &str = include_str!("../prompts/en/kisilik.md");
+    pub const FAVORITE_LINE: &str = include_str!("../prompts/en/favori-satiri.md");
+    pub const WELCOME: &str = include_str!("../prompts/en/hos-geldin.md");
+    pub const OUT_OF_THE_BLUE: &str = include_str!("../prompts/en/durup-dururken.md");
+    pub const NEWS_INTRO: &str = include_str!("../prompts/en/haber-tanit.md");
+    pub const ANALYST: &str = include_str!("../prompts/en/analist.md");
+    pub const WILLINGNESS: &str = include_str!("../prompts/en/isteklilik.md");
+    pub const TARGET_PICK: &str = include_str!("../prompts/en/hedef-sec.md");
+    pub const WAKING: &str = include_str!("../prompts/en/uyanis.md");
+    pub const WAKING_REPLY: &str = include_str!("../prompts/en/uyanis-cevap.md");
+    pub const PROFILE_EXTRACT: &str = include_str!("../prompts/en/profil-cikar.md");
+    pub const NEWS_PICK: &str = include_str!("../prompts/en/haber-sec.md");
+    pub const COACH: &str = include_str!("../prompts/en/hoca.md");
+    pub const CRITIC: &str = include_str!("../prompts/en/elestirmen.md");
+    pub const IMAGE_POST: &str = include_str!("../prompts/en/resim-at.md");
+    pub const HACK_ENTER: &str = include_str!("../prompts/en/hack-giris.md");
+    pub const HACK_CONTINUE: &str = include_str!("../prompts/en/hack-devam.md");
+    pub const HACK_EXIT: &str = include_str!("../prompts/en/hack-cikis.md");
+    pub const DIARIST: &str = include_str!("../prompts/en/gunlukcu.md");
+    pub const SUMMARIZER_PERSON: &str = include_str!("../prompts/en/ozetleyici-kisi.md");
+    pub const SUMMARIZER_TOPIC: &str = include_str!("../prompts/en/ozetleyici-konu.md");
+    pub const SUMMARIZER_EVENTS: &str = include_str!("../prompts/en/ozetleyici-olaylar.md");
+    pub const WANDERER_PICK: &str = include_str!("../prompts/en/gezgin-sec.md");
+    pub const WANDERER_NOTE: &str = include_str!("../prompts/en/gezgin-not.md");
+    pub const WOKE_UP: &str = include_str!("../prompts/en/uyandim.md");
+    pub const ON_THE_WAY: &str = include_str!("../prompts/en/yolda.md");
+    pub const LEAVING: &str = include_str!("../prompts/en/gidiyorum.md");
+    pub const NAME_PICK: &str = include_str!("../prompts/en/isim-sec.md");
+    pub const NAME_ANNOUNCE: &str = include_str!("../prompts/en/isim-duyuru.md");
+    pub const PROBLEM: &str = include_str!("../prompts/en/sorun.md");
+    pub const MOOD: &str = include_str!("../prompts/en/ruh-hali.md");
 }
 
 /// One language's full prompt set. Every field is a prompt constant, unchanged in meaning
@@ -112,6 +147,40 @@ const TR: Prompts = Prompts {
     mood: tr::MOOD,
 };
 
+const EN: Prompts = Prompts {
+    personality: en::PERSONALITY,
+    favorite_line: en::FAVORITE_LINE,
+    welcome: en::WELCOME,
+    out_of_the_blue: en::OUT_OF_THE_BLUE,
+    news_intro: en::NEWS_INTRO,
+    analyst: en::ANALYST,
+    willingness: en::WILLINGNESS,
+    target_pick: en::TARGET_PICK,
+    waking: en::WAKING,
+    waking_reply: en::WAKING_REPLY,
+    profile_extract: en::PROFILE_EXTRACT,
+    news_pick: en::NEWS_PICK,
+    coach: en::COACH,
+    critic: en::CRITIC,
+    image_post: en::IMAGE_POST,
+    hack_enter: en::HACK_ENTER,
+    hack_continue: en::HACK_CONTINUE,
+    hack_exit: en::HACK_EXIT,
+    diarist: en::DIARIST,
+    summarizer_person: en::SUMMARIZER_PERSON,
+    summarizer_topic: en::SUMMARIZER_TOPIC,
+    summarizer_events: en::SUMMARIZER_EVENTS,
+    wanderer_pick: en::WANDERER_PICK,
+    wanderer_note: en::WANDERER_NOTE,
+    woke_up: en::WOKE_UP,
+    on_the_way: en::ON_THE_WAY,
+    leaving: en::LEAVING,
+    name_pick: en::NAME_PICK,
+    name_announce: en::NAME_ANNOUNCE,
+    problem: en::PROBLEM,
+    mood: en::MOOD,
+};
+
 /// Input: `lang: Lang`. Output: `&'static Prompts` — the compiled-in prompt set for that
 /// language. Used by: `current` below (the call sites throughout src/bot/*.rs, agents.rs,
 /// agenda.rs all go through `current`, never this directly — kept separate for the unit
@@ -119,6 +188,7 @@ const TR: Prompts = Prompts {
 fn get(lang: Lang) -> &'static Prompts {
     match lang {
         Lang::Tr => &TR,
+        Lang::En => &EN,
     }
 }
 
@@ -134,13 +204,15 @@ mod test {
     use super::*;
 
     /// Verifies every field actually loaded a non-empty file (a typo'd include_str! path
-    /// would fail to compile, but an accidentally-empty .md wouldn't).
+    /// would fail to compile, but an accidentally-empty .md wouldn't) — for every language.
     #[test]
-    fn tr_prompts_are_not_empty() {
-        let p = get(Lang::Tr);
-        assert!(!p.personality.is_empty());
-        assert!(!p.favorite_line.is_empty());
-        assert!(!p.welcome.is_empty());
-        assert!(!p.mood.is_empty());
+    fn prompts_are_not_empty() {
+        for lang in [Lang::Tr, Lang::En] {
+            let p = get(lang);
+            assert!(!p.personality.is_empty());
+            assert!(!p.favorite_line.is_empty());
+            assert!(!p.welcome.is_empty());
+            assert!(!p.mood.is_empty());
+        }
     }
 }

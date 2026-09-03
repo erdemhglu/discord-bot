@@ -103,8 +103,8 @@ Live as markdown under `prompts/<dil>/`, embedded into the build with `include_s
 Editing the text and rebuilding is enough. Core rules are in `kisilik.md`, each agent has its
 own file. Which language is served — both these prompts and every Discord-facing string
 (slash command names/descriptions, embeds, buttons; `langs/<dil>.json`) — is picked once at
-startup from `BOT_LANG` (`.env`, default `tr`). Only `tr` is filled in today; adding a
-language is a new `prompts/<dil>/` + `langs/<dil>.json` pair, no code change.
+startup from `BOT_LANG` (`.env`, default `tr`). `tr` and `en` are both filled in; adding
+another language is a new `prompts/<dil>/` + `langs/<dil>.json` pair, no code change.
 
 ## setup
 

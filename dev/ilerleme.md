@@ -4,6 +4,40 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-03 · İngilizce dolduruldu: prompts/en/*.md (31) + langs/en.json (158 anahtar)
+Kullanıcı: "langs ve markdownların ingilizce çevirilerinide ekle dursun projede" — çok dilli
+altyapı zaten vardı (bkz aşağıdaki iki kayıt), yalnız `tr` doluydu; bu turda `en` elle çevrildi.
+- 31 prompt dosyası (`kisilik.md` dahil, 182 satır) elle çevrildi; Türkçe'ye özgü örnekler
+  (argo kaçış kalıpları, "aq/amk/mk" gibi kısaltılmış küfür örneği) birebir çevrilmedi, aynı
+  işlevi gören İngilizce eşdeğerleriyle değiştirildi. Kimlik (İTÜ fizik) ve siyasi görüş
+  (Erdoğan/AKP/TRT) içerik olarak aynı kaldı, yalnız dili değişti.
+  **Değişmeyen**: `gunlukcu.md`/`hedef-sec.md`/`isteklilik.md`/`ruh-hali.md`/`uyanis.md`'nin
+  JSON şemaları — alan adları (`olay`, `kisiler`, `isim`, `puan_degisimi`, `not`, `bilgiler`,
+  `etiketler`, `konular`, `ad`, `kendim`, `hedef`, `puan`, `sebep`, `durum`, `yogunluk`,
+  `ilgi`, `konu`, `kim`) İngilizce promptta da Türkçe bırakıldı — Rust'taki `Record`/
+  `PersonRecord`/`TopicRecord`/vb. struct'ları hâlâ bu adları `#[serde]` ile bekliyor,
+  çevrilirse model doğru JSON üretse bile deserialize hatası verir.
+- `langs/en.json`: 158 anahtarın hepsi çevrildi (tr.json ile anahtar kümesi ve her değerin
+  `{placeholder}` kümesi birebir eşleşiyor, script ile doğrulandı). Slash komut adları da
+  çevrildi (`durum→status`, `yardim→help`, `zihin→mind`, `sifirla→reset`, `haber→news`,
+  `sorun→problem`, `gez→wander`, `saka→prank`, `ajanlar→agents`, `uyan→wake`, `uyu→sleep`,
+  `dusunme→thinking`; `hack`/`model`/`debug` aynı kaldı) — komut SEÇENEKLERİNİN değerleri
+  (`goster`/`gizle`/`sessiz`/`kapat`, `ac`/`kapat`) hiç çevrilmedi, bunlar `ThinkingMode::
+  from_arg`'ın eşleştirdiği sabit bir protokol; yalnız görünen etiketler İngilizce.
+- `src/lang.rs`: `Lang::En` eklendi, `parse("en")` tanır. `src/prompts.rs`/`src/strings.rs`:
+  `en` alt modülü + `match` kolu (aynı `Lang::Tr` deseni).
+- Test: `cargo test` içinde iki dilin aynı süreçte paylaştığı global `Lang::current()`
+  yüzünden `t()`/`prompts::current()` üzerinden `en`'i doğrudan test edemedim (hangi test
+  önce çalışırsa o dili kilitliyor) — bunun yerine `prompts::get(Lang::En)` ve
+  `strings::table(Lang::En)`'i doğrudan çağıran testler eklendi (global'i atlıyor).
+  Gerçek süreç düzeyinde doğrulama: `BOT_LANG=en cargo run -- chat` çalıştırıldı, loga
+  "language: En" düştü, panik olmadı (tüm 31 dosya + JSON derlendi/ayrıştı).
+- Doğrulanmadı: gerçek bir modelle İngilizce cevap üretimi hiç denenmedi; İngilizce metnin
+  Discord embed/buton boyut sınırlarına uyup uymadığı kontrol edilmedi (aynı boşluk zaten
+  tr için de vardı). Bkz AGENTS.md "Bilinen açıklar".
+- Doğrulama: 86 test (85→86), clippy 0 uyarı, fmt temiz.
+
+## 2026-09-03 · durum/ markdown → redb (`durum/hafiza.redb`) + migrator
 ## 2026-09-03 · durum/ markdown → redb (`durum/hafiza.redb`) + migrator
 Kullanıcı: "bot tüm hafızasını durum altında markdown ile saklamak yerine redb kullansın" →
 "ayrıca bu redb geçişinde bir migrator lazım" → "bi planla redb olmak zorunda değil karar

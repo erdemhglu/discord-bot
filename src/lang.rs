@@ -14,17 +14,19 @@ use std::sync::OnceLock;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Lang {
     Tr,
+    En,
 }
 
 static CURRENT: OnceLock<Lang> = OnceLock::new();
 
 impl Lang {
     /// Input: `raw: &str` — `BOT_LANG`'s raw value. Output: `Lang` — empty/`"tr"` (any case)
-    /// selects Turkish; anything else falls back to Turkish with a warning (today only `tr`
-    /// is filled in, see AGENTS.md). Used by: `current` below.
+    /// selects Turkish, `"en"` selects English; anything else falls back to Turkish with a
+    /// warning. Used by: `current` below.
     fn parse(raw: &str) -> Lang {
         match raw.trim().to_lowercase().as_str() {
             "" | "tr" => Lang::Tr,
+            "en" => Lang::En,
             other => {
                 log::warn!("unknown BOT_LANG '{other}', falling back to tr");
                 Lang::Tr
@@ -45,13 +47,16 @@ impl Lang {
 mod test {
     use super::*;
 
-    /// Verifies `parse` accepts "tr" case-insensitively and falls back to it for anything else.
+    /// Verifies `parse` accepts "tr"/"en" case-insensitively and falls back to tr for anything else.
     #[test]
-    fn parse_falls_back_to_tr() {
+    fn parse_recognizes_known_languages_falls_back_to_tr() {
         assert_eq!(Lang::parse(""), Lang::Tr);
         assert_eq!(Lang::parse("tr"), Lang::Tr);
         assert_eq!(Lang::parse("TR"), Lang::Tr);
-        assert_eq!(Lang::parse("en"), Lang::Tr);
         assert_eq!(Lang::parse("  tr  "), Lang::Tr);
+        assert_eq!(Lang::parse("en"), Lang::En);
+        assert_eq!(Lang::parse("EN"), Lang::En);
+        assert_eq!(Lang::parse("  en  "), Lang::En);
+        assert_eq!(Lang::parse("de"), Lang::Tr);
     }
 }

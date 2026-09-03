@@ -90,7 +90,7 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
     (`src/lang.rs`'nin `Lang::current()`'ı, ilk çağrıda okunur ve önbelleğe alınır; `LANG`
     değil — çoğu kabuk `LANG`'ı zaten işletim sistemi yereli için ayarlar). Kişilik/ajan
     promptları `prompts/<dil>/`'den (`prompts::current()`), Discord'a çıkan her şey
-    `langs/<dil>.json`'den (`strings::t(anahtar)`) gelir. Bugün yalnız `tr` dolu; yeni dil eklemek
+    `langs/<dil>.json`'den (`strings::t(anahtar)`) gelir. `tr` ve `en` dolu; yeni dil eklemek
     bu iki dizine birer dosya eklemek + `prompts.rs`/`strings.rs`'e birer `match` kolu.
 
 ## Durum klasörü (çalışma zamanı, git'e girmez)
@@ -149,6 +149,17 @@ bir `durum/` ağacından geçiş `cargo run -- migrate-durum` ile (`src/migrate.
   boyut sınırlarına (`modal.rs`'nin `LABEL_LIMIT`/`FIELD_LIMIT` vb.) uyduğu yalnız statik
   olarak (aynı uzunlukta Türkçe metin) doğrulandı, canlı render edilmedi. İkinci bir dil
   eklendiğinde bu sınırlara o dilin metinleriyle de uyulduğu ayrıca kontrol edilmeli.
+- **2026-09-03: `en` (İngilizce) dolduruldu — `prompts/en/*.md` (31 dosya) ve `langs/en.json`
+  (158 anahtar), elle çevrildi.** JSON alan adları (Record/PersonRecord/TopicRecord'un
+  `olay`/`kisiler`/`isim`/`puan_degisimi`/`not`/`bilgiler`/`etiketler`/`konular`/`ad`/`kendim`
+  anahtarları) İngilizce promptlarda da Türkçe bırakıldı — Rust struct'ları hâlâ bu adları
+  bekliyor, çevrilirse JSON çözülemez. Slash komut adları da çevrildi (`durum→status`,
+  `dusunme→thinking` vb.); komut seçeneklerinin değerleri (`goster`/`gizle`/`ac`/`kapat` gibi)
+  hiç çevrilmedi, yalnız görünen etiketler. `BOT_LANG=en` ile `cargo run -- chat` çalıştırılıp
+  loga "language: En" düştüğü ve panik olmadığı elle doğrulandı (bkz `dev/ilerleme.md`); gerçek
+  bir modelle İngilizce cevap üretimi hiç denenmedi — yalnız derleyici + 86 birim test + clippy.
+  İngilizce metnin Discord embed/buton boyut sınırlarına uyduğu da doğrulanmadı (yukarıdaki
+  madde).
 - **2026-09-03: `durum/` markdown dosyalarından `durum/hafiza.redb`'e geçildi.** Bu ortamda
   gerçek üretim `durum/` verisi yok (boş, hiç canlı çalıştırılmamış); geçiş yalnız 85 birim
   test + elle kurulmuş uydurma bir dosya ağacı üzerinde `migrate-durum` çalıştırıp

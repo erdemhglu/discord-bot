@@ -7,7 +7,7 @@ include_str!(...); }` — her dil kendi alt modülü, hepsi tek bir `Prompts` st
 ilk satırı `# Başlık` da modele gider. Yer tutucular `.replace("{x}", ..)` ile kodda dolar;
 doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken kodu da güncelle.
 (`prompts/` altındaki dosya adları ve içerikleri bilerek Türkçe bırakıldı — botun kişiliği,
-bkz AGENTS.md madde 8. Rust tarafı aşağıda İngilizce. Bugün yalnız `tr/` dolu.)
+bkz AGENTS.md madde 8. Rust tarafı aşağıda İngilizce. `tr/` ve `en/` dolu.)
 
 Discord'a çıkan metin (slash komut adı/açıklaması, embed, buton, `/yardim`'in metni) ayrı bir
 sistemde: `langs/<dil>.json` — düz `{"anahtar": "değer"}`, `src/strings.rs`'nin `t(anahtar)`'ı
