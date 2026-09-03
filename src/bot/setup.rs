@@ -1,0 +1,161 @@
+// ---------- startup ----------
+
+/// Input: `name: &str` — an environment variable name. Output: `Result<String, BotError>` —
+/// the trimmed value, or an error naming which variable is missing/empty. Used by:
+/// `Bot::setup` below, `main` (for `DISCORD_TOKEN`).
+fn setting(name: &str) -> Result<String, BotError> {
+    match std::env::var(name) {
+        Ok(v) if !v.trim().is_empty() => Ok(v.trim().to_string()),
+        _ => Err(format!("{name} is missing, check .env").into()),
+    }
+}
+
+impl Bot {
+    // picks the provider from environment variables (main loads .env), opens the state
+    // directories, loads state from disk, and assembles the bot. Doesn't connect to
+    // Discord, doesn't need a token: both main and chat CLI mode go through this.
+    /// Assembles a ready-to-use `Bot` from `.env`/disk state, without touching Discord.
+    /// Input: none (reads environment variables and `durum/` files). Output:
+    /// `Result<Arc<Bot>, BotError>`. Uses: `setting`, `State::load`, `sleep::update`,
+    /// `memory::read`. Used by: `main` (both the Discord path and `cargo run -- chat`).
+    fn setup() -> Result<Arc<Bot>, BotError> {
+        // provider choice: PROVIDER=mistral forces it; otherwise whichever key is set,
+        // openrouter if both are
+        let provider = std::env::var("PROVIDER").unwrap_or_default().to_lowercase();
+        let (api_url, key, default_model) = if provider == "mistral"
+            || (setting("OPENROUTER_KEY").is_err() && setting("MISTRAL_KEY").is_ok())
+        {
+            (MISTRAL_URL, setting("MISTRAL_KEY")?, MISTRAL_MODEL)
+        } else {
+            (OPENROUTER_URL, setting("OPENROUTER_KEY")?, OPENROUTER_MODEL)
+        };
+        let model = setting("MODEL").unwrap_or_else(|_| default_model.to_string());
+        // API_URL, if set, overrides the provider's default endpoint: for pointing an
+        // OpenAI-compatible request at your own router (e.g. a local network one)
+        let api_url = match std::env::var("API_URL") {
+            Ok(v) if !v.trim().is_empty() => v.trim().to_string(),
+            _ => api_url.to_string(),
+        };
+        log::info!("provider: {api_url} · model: {model}");
+        // read once at startup only; no command/button toggles it, and it stays fixed until the process restarts
+        let image_analysis = !matches!(
+            std::env::var("IMAGE_ANALYSIS").unwrap_or_default().trim(),
+            "kapali" | "kapalı" | "off" | "hayir" | "hayır" | "0"
+        );
+        log::info!(
+            "image analysis: {}",
+            if image_analysis { "on" } else { "off" }
+        );
+        let news_channel = match std::env::var("NEWS_CHANNEL") {
+            Ok(v) if !v.trim().is_empty() => Some(ChannelId::new(v.trim().parse()?)),
+            _ => None,
+        };
+        // both optional: if unset, the bot behaves as before and runs in every server/channel it can reach
+        let guild_id = match std::env::var("GUILD_ID") {
+            Ok(v) if !v.trim().is_empty() => Some(GuildId::new(v.trim().parse()?)),
+            _ => None,
+        };
+        let allowed_channels = match std::env::var("CHANNELS") {
+            Ok(v) if !v.trim().is_empty() => {
+                let mut s = HashSet::new();
+                for part in v.split(',') {
+                    let part = part.trim();
+                    if part.is_empty() {
+                        continue;
+                    }
+                    s.insert(ChannelId::new(part.parse()?));
+                }
+                Some(s)
+            }
+            _ => None,
+        };
+        for k in ["kisiler", "konular", "olaylar", "arsiv", "kanallar"] {
+            std::fs::create_dir_all(PathBuf::from(STATE_DIR).join(k))?;
+        }
+        std::fs::create_dir_all(IMAGE_DIR)?;
+
+        let mut state = State::load();
+        sleep::update(&mut state);
+        let selected = memory::read("model.md");
+        state.model = if selected.trim().is_empty() {
+            model
+        } else {
+            selected.trim().to_string()
+        };
+        log::info!("model: {}", state.model);
+        Ok(Arc::new(Bot {
+            state: Mutex::new(state),
+            // let a failed connection attempt fail fast (CONNECT_TIMEOUT); no overall
+            // time limit, only a per-chunk cap of READ_TIMEOUT (P0: a single 60s timeout
+            // used to be able to cut off a long thinking stream mid-way)
+            http: reqwest::Client::builder()
+                .connect_timeout(CONNECT_TIMEOUT)
+                .read_timeout(READ_TIMEOUT)
+                .build()?,
+            api_url,
+            key,
+            news_channel,
+            firecrawl: std::env::var("FIRECRAWL_KEY")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            guild_id,
+            allowed_channels,
+            debug_channel: std::env::var("DEBUG_CHANNEL")
+                .ok()
+                .and_then(|v| v.trim().parse::<u64>().ok())
+                .map(ChannelId::new),
+            image_analysis,
+            reasoning_mandatory_models: Mutex::new(HashSet::new()),
+        }))
+    }
+
+    // debug mode: the decision trace as a single line. If off, nothing happens (the
+    // caller only builds the format! while debug is on). Not written to memory or the
+    // channel note — the bot shouldn't mistake it for its own words — and since it's a
+    // bot message, it doesn't reach the message handler either
+    /// Input: `&self`; `ctx: &Context`; `channel: ChannelId`; `text: String`. Output: none
+    /// (no-op if `self.state().debug` is false). Uses: `self.debug_channel`,
+    /// `modal::info_embed`. Used by: `debug_trace` below, the only caller.
+    async fn debug_note(&self, ctx: &Context, channel: ChannelId, text: String) {
+        if !self.state().debug {
+            return;
+        }
+        log::info!("debug [{channel}]: {text}");
+        let target = self.debug_channel.unwrap_or(channel);
+        let body: String = text.chars().take(300).collect();
+        let msg = CreateMessage::new().embed(modal::info_embed("⚙ Debug", &body));
+        if let Err(e) = target.send_message(&ctx.http, msg).await {
+            log::warn!("couldn't send debug line ({target}): {e}");
+        }
+    }
+
+    // sends several traces as a single line; silent if there's nothing to trace or debug is off
+    /// Input: `&self`; `ctx: &Context`; `channel: ChannelId`; `enabled: bool`; `trace:
+    /// &[String]` — this turn's decision notes. Output: none. Uses: `debug_note` above.
+    /// Used by: `Bot::reply` (`chat_reply.rs`), `Handler::message` (`handler_event.rs`).
+    async fn debug_trace(&self, ctx: &Context, channel: ChannelId, enabled: bool, trace: &[String]) {
+        if enabled && !trace.is_empty() {
+            self.debug_note(ctx, channel, trace.join(" · ")).await;
+        }
+    }
+}
+
+/// Input: none. Output: none — resolves once ctrl-c or (on Unix) SIGTERM is received.
+/// Used by: `main`'s shutdown-handling `tokio::spawn`, the only caller.
+async fn wait_for_shutdown() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    #[cfg(unix)]
+    {
+        let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("signal");
+        tokio::select! {
+            _ = ctrl_c => {},
+            _ = term.recv() => {},
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = ctrl_c.await;
+    }
+}

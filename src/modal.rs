@@ -1,280 +1,316 @@
-// Komut arayüzü: slash komutlar embed kartlarıyla açılır (web sayfası gibi
-// bölümlü, okunaklı), detaylar etiketli modal alanlarına dağıtılır — tek
-// metin kutusuna her şey boca edilmez.
+// Command interface: slash commands open as embed cards (sectioned and readable, like a
+// web page), details are spread across labeled modal fields — nothing gets dumped into a
+// single text box.
 
 use super::*;
 
-const MODAL_SINIR: usize = 4000; // discord TextInput value üst sınırı
-const ALAN_SINIRI: usize = 1024; // discord embed field value üst sınırı
-const ETIKET_SINIRI: usize = 45; // modal başlık/etiket, menü seçenek etiketi
-const ACIKLAMA_SINIRI: usize = 100; // menü seçenek açıklaması
-const KISI_MENU_SINIRI: usize = 25; // discord select menü seçenek üst sınırı
-const KIRPMA_NOTU: &str = "\n… (sığmadı, kırpıldı)";
+const MODAL_LIMIT: usize = 4000; // discord TextInput value upper bound
+const FIELD_LIMIT: usize = 1024; // discord embed field value upper bound
+const LABEL_LIMIT: usize = 45; // modal title/label, select-menu option label
+const DESCRIPTION_LIMIT: usize = 100; // select-menu option description
+const PERSON_MENU_LIMIT: usize = 25; // discord select-menu option upper bound
+const TRIM_NOTE: &str = "\n… (sığmadı, kırpıldı)";
 
-// bileşen kimlikleri
-pub const ZIHIN_KISI_SEC: &str = "zihin_kisi_sec";
-pub const ZIHIN_KONULAR: &str = "zihin_konular";
-pub const ZIHIN_OLAYLAR: &str = "zihin_olaylar";
-pub const ZIHIN_OZET: &str = "zihin_ozet";
-// ayar paneli: düşünme kipi butonlarının kimliği "ayar_dusunme:<kip dosya değeri>"
-pub const AYAR_DUSUNME: &str = "ayar_dusunme:";
-pub const AYAR_DEBUG: &str = "ayar_debug";
-pub const AYAR_UYAN: &str = "ayar_uyan";
-pub const AYAR_UYU: &str = "ayar_uyu";
+// component ids
+pub const MIND_PERSON_PICK: &str = "mind_person_pick";
+pub const MIND_TOPICS: &str = "mind_topics";
+pub const MIND_EVENTS: &str = "mind_events";
+pub const MIND_SUMMARY: &str = "mind_summary";
+// settings panel: the thinking-mode buttons' id is "setting_thinking:<mode file value>"
+pub const SETTING_THINKING: &str = "setting_thinking:";
+pub const SETTING_DEBUG: &str = "setting_debug";
+pub const SETTING_WAKE: &str = "setting_wake";
+pub const SETTING_SLEEP: &str = "setting_sleep";
 
-// embed vurgu renkleri
-const RENK_ZIHIN: u32 = 0x5865F2;
-const RENK_DURUM: u32 = 0x57F287;
-const RENK_YARDIM: u32 = 0xEB459E;
-const RENK_AYAR: u32 = 0xFEE75C;
-const RENK_BILGI: u32 = 0x99AAB5;
+// embed accent colors
+const COLOR_MIND: u32 = 0x5865F2;
+const COLOR_STATUS: u32 = 0x57F287;
+const COLOR_HELP: u32 = 0xEB459E;
+const COLOR_SETTINGS: u32 = 0xFEE75C;
+const COLOR_INFO: u32 = 0x99AAB5;
 
-pub struct Bolum {
-    pub etiket: String,
+/// One labeled field of a detail modal. Holds `label` (field title), `custom_id` (unique
+/// within the modal, unused after submission — see `handler_event.rs`'s `interaction_create`
+/// `Modal` arm), `content` (fitted to `MODAL_LIMIT` by `new` below). Built by `person_modal`/
+/// `topics_modal`/`events_modal`/`summary_modal` below; consumed by `build_modal` below.
+pub struct Section {
+    pub label: String,
     pub custom_id: String,
-    pub icerik: String,
+    pub content: String,
 }
 
-impl Bolum {
-    fn new(etiket: impl Into<String>, custom_id: impl Into<String>, icerik: String) -> Self {
+impl Section {
+    /// Input: `label`/`custom_id: impl Into<String>`; `content: String`. Output: `Self`,
+    /// with `content` fitted to `MODAL_LIMIT`. Uses: `fit_to_limit`. Used by every modal
+    /// builder below.
+    fn new(label: impl Into<String>, custom_id: impl Into<String>, content: String) -> Self {
         Self {
-            etiket: etiket.into(),
+            label: label.into(),
             custom_id: custom_id.into(),
-            icerik: sigdir(&icerik, MODAL_SINIR),
+            content: fit_to_limit(&content, MODAL_LIMIT),
         }
     }
 }
 
-// sınır aşımı son satır/boşluk hizasında kesilir + not; gövde hep sınıra sığar
-fn sigdir(metin: &str, sinir: usize) -> String {
-    if metin.chars().count() <= sinir {
-        return metin.to_string();
+// text over the limit is cut at the last line break/space + a note; the body always fits within the limit
+/// Input: `text: &str`; `limit: usize`. Output: `String` — `text` unchanged if it fits,
+/// else cut at the last line break/space within `limit` and a trailing `TRIM_NOTE`
+/// appended (the total is always `<= limit`). Uses: `TRIM_NOTE`. Used by: `Section::new`
+/// above, `info_embed`/`dash_if_empty`/`status_message` below.
+fn fit_to_limit(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        return text.to_string();
     }
-    let mut s: String = metin
+    let mut s: String = text
         .chars()
-        .take(sinir - KIRPMA_NOTU.chars().count())
+        .take(limit - TRIM_NOTE.chars().count())
         .collect();
-    if let Some(son) = s.rfind(['\n', ' ']) {
-        s.truncate(son);
+    if let Some(end) = s.rfind(['\n', ' ']) {
+        s.truncate(end);
     }
-    s.push_str(KIRPMA_NOTU);
+    s.push_str(TRIM_NOTE);
     s
 }
 
-// "2026-09" → "Eylül 2026"; çözülemezse girdi aynen döner
-fn ay_adi(ay: &str) -> String {
-    const AYLAR: [&str; 12] = [
+// "2026-09" -> "Eylül 2026"; returns the input unchanged if it can't be parsed
+/// Input: `month: &str` — `"YYYY-MM"`. Output: `String` — a Turkish `"<Month> YYYY"` label,
+/// or `month` unchanged if it doesn't parse. Used by: `events_modal` below.
+fn month_name(month: &str) -> String {
+    const MONTHS: [&str; 12] = [
         "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim",
         "Kasım", "Aralık",
     ];
-    let mut parca = ay.splitn(2, '-');
-    match (parca.next(), parca.next()) {
-        (Some(yil), Some(a)) if (1..=12).contains(&a.parse::<usize>().unwrap_or(0)) => {
-            format!("{} {}", AYLAR[a.parse::<usize>().unwrap_or(1) - 1], yil)
+    let mut parts = month.splitn(2, '-');
+    match (parts.next(), parts.next()) {
+        (Some(year), Some(m)) if (1..=12).contains(&m.parse::<usize>().unwrap_or(0)) => {
+            format!("{} {}", MONTHS[m.parse::<usize>().unwrap_or(1) - 1], year)
         }
-        _ => ay.to_string(),
+        _ => month.to_string(),
     }
 }
 
-// kategoriler toplam tokene göre sıralı: "sohbet: 120 giriş + 80 çıkış · ..."
-fn token_kirilimi(m: &Metrik) -> String {
+// categories sorted by total tokens: "sohbet: 120 giriş + 80 çıkış · ..."
+/// Input: `metrics: &Metrics`. Output: `String` — `metrics.categories` sorted by total
+/// tokens descending, joined `" · "`. Used by: `summary_modal`/`status_message` below.
+fn token_breakdown(metrics: &Metrics) -> String {
     use std::fmt::Write as _;
-    let mut sirali: Vec<(&'static str, &Kullanim)> =
-        m.kategoriler.iter().map(|(ad, k)| (*ad, k)).collect();
-    sirali.sort_by_key(|(_, k)| std::cmp::Reverse(k.prompt_tokens + k.completion_tokens));
-    let mut satirlar = String::new();
-    for (i, (ad, k)) in sirali.iter().enumerate() {
+    let mut sorted: Vec<(&'static str, &Usage)> = metrics
+        .categories
+        .iter()
+        .map(|(tag, k)| (*tag, k))
+        .collect();
+    sorted.sort_by_key(|(_, k)| std::cmp::Reverse(k.prompt_tokens + k.completion_tokens));
+    let mut lines = String::new();
+    for (i, (tag, k)) in sorted.iter().enumerate() {
         if i > 0 {
-            satirlar.push_str(" · ");
+            lines.push_str(" · ");
         }
         let _ = write!(
-            satirlar,
-            "{ad}: {} giriş + {} çıkış",
+            lines,
+            "{tag}: {} giriş + {} çıkış",
             k.prompt_tokens, k.completion_tokens
         );
     }
-    satirlar
+    lines
 }
 
-// ---------- /zihin: embed kart + menü/buton ----------
+// ---------- /zihin: embed card + menu/buttons ----------
 
-// zihin kartı: üç sütun (kişiler / konular / olaylar) + alt bilgide sayaçlar
-pub fn zihin_embedleri(d: &Durum) -> Vec<CreateEmbed> {
-    let kisiler = hafiza::kisi_dokumleri();
-    let konular = hafiza::konu_dokumleri();
-    let olaylar = hafiza::olay_aylari(3);
-    let olay_sayisi: usize = olaylar.iter().map(|(_, s)| s.len()).sum();
+// the mind card: three columns (people / topics / events) + counters in the footer
+/// Input: `state: &State`. Output: `Vec<CreateEmbed>` — a single-element vec (one embed).
+/// Uses: `memory::person_summaries`/`topic_summaries`/`event_months`/`trim`, `growth::stage`/
+/// `days`, `dash_if_empty`. Used by: `mind_message` below.
+pub fn mind_embeds(state: &State) -> Vec<CreateEmbed> {
+    let people = memory::person_summaries();
+    let topics = memory::topic_summaries();
+    let events = memory::event_months(3);
+    let event_count: usize = events.iter().map(|(_, s)| s.len()).sum();
 
-    let mut kisi_satirlari = String::new();
-    for k in kisiler.iter().take(8) {
-        kisi_satirlari += &format!("**{}** ({:+})", k.isim, k.puan);
-        if !k.etiket.is_empty() {
-            kisi_satirlari += &format!(" · {}", k.etiket.join(", "));
+    let mut people_lines = String::new();
+    for p in people.iter().take(8) {
+        people_lines += &format!("**{}** ({:+})", p.name, p.score);
+        if !p.tags.is_empty() {
+            people_lines += &format!(" · {}", p.tags.join(", "));
         }
-        kisi_satirlari.push('\n');
+        people_lines.push('\n');
     }
 
-    let mut konu_satirlari = String::new();
-    for (ad, son) in konular.iter().take(8) {
-        konu_satirlari += &format!("**{ad}**");
-        if !son.is_empty() {
-            konu_satirlari += &format!(" · son: {son}");
+    let mut topic_lines = String::new();
+    for (name, latest) in topics.iter().take(8) {
+        topic_lines += &format!("**{name}**");
+        if !latest.is_empty() {
+            topic_lines += &format!(" · son: {latest}");
         }
-        konu_satirlari.push('\n');
+        topic_lines.push('\n');
     }
 
-    // en yeni olaylar: en yeni aydan geriye doğru her ayın sonu; gösterim
-    // kronolojik olsun diye eski aylar öne alınır
-    let mut parcalar: Vec<Vec<&str>> = Vec::new();
-    let mut toplam = 0usize;
-    for (_, s) in olaylar.iter() {
-        if toplam >= 5 {
+    // most recent events: the end of each month working backward from the newest; older
+    // months are put first so the display reads chronologically
+    let mut chunks: Vec<Vec<&str>> = Vec::new();
+    let mut total = 0usize;
+    for (_, s) in events.iter() {
+        if total >= 5 {
             break;
         }
-        let alinacak = (5 - toplam).min(s.len());
-        toplam += alinacak;
-        let n = s.len();
-        parcalar.push(
+        let take_n = (5 - total).min(s.len());
+        total += take_n;
+        let len = s.len();
+        chunks.push(
             s.iter()
-                .skip(n.saturating_sub(alinacak))
+                .skip(len.saturating_sub(take_n))
                 .map(|x| x.as_str())
                 .collect(),
         );
     }
-    parcalar.reverse();
-    let mut olay_satirlari = String::new();
-    for parca in parcalar {
-        for o in parca {
-            // "- tarih saat #kanal: metin" → okunur tek satır
-            olay_satirlari += &hafiza::kirp(o.trim_start_matches("- "), 90);
-            olay_satirlari.push('\n');
+    chunks.reverse();
+    let mut event_lines = String::new();
+    for chunk in chunks {
+        for item in chunk {
+            // "- date time #channel: text" -> a readable single line
+            event_lines += &memory::trim(item.trim_start_matches("- "), 90);
+            event_lines.push('\n');
         }
     }
 
-    let g = &d.gelisim;
+    let growth = &state.growth;
     vec![CreateEmbed::new()
         .title("Zihin")
-        .color(RENK_ZIHIN)
+        .color(COLOR_MIND)
         .description(format!(
             "{} · {}. gün · {} · {}",
-            gelisim::evre(g).ad,
-            gelisim::gun(g) + 1,
-            d.model,
-            d.dusunme.ad(),
+            growth::stage(growth).name,
+            growth::days(growth) + 1,
+            state.model,
+            state.thinking_mode.label(),
         ))
         .field(
-            format!("Kişiler ({})", kisiler.len()),
-            bos_yoksa(&kisi_satirlari),
+            format!("Kişiler ({})", people.len()),
+            dash_if_empty(&people_lines),
             true,
         )
         .field(
-            format!("Konular ({})", konular.len()),
-            bos_yoksa(&konu_satirlari),
+            format!("Konular ({})", topics.len()),
+            dash_if_empty(&topic_lines),
             true,
         )
         .field(
-            format!("Olaylar ({olay_sayisi})"),
-            bos_yoksa(&olay_satirlari),
+            format!("Olaylar ({event_count})"),
+            dash_if_empty(&event_lines),
             true,
         )
         .footer(CreateEmbedFooter::new(format!(
             "{} · {}",
-            d.bot_adi,
-            hafiza::tarih()
+            state.bot_name,
+            memory::date()
         )))]
 }
 
-// komutların kısa onay/durum yanıtı: düz metin yerine hep bu gider (ör. "haber bulamadım",
-// "tamam, <model>", "debug açık"); komut.rs'teki yanit_bilgi/sonucu_bildir bunu sarar
-pub fn bilgi_embed(baslik: &str, aciklama: &str) -> CreateEmbed {
+// the short acknowledgment/status reply for commands: this always goes out instead of
+// plain text (e.g. "haber bulamadım", "tamam, <model>", "debug açık"); wrapped by
+// reply_info/report_result in command.rs
+/// Input: `title`/`description: &str`. Output: `CreateEmbed`. Uses: `fit_to_limit`. Used
+/// by: `command/registration_helpers.rs`'s `reply_info`/`report_result`, `cycle_news.rs`'s
+/// `run_prank`, `handler_event.rs`'s `guild_create`.
+pub fn info_embed(title: &str, description: &str) -> CreateEmbed {
     CreateEmbed::new()
-        .title(baslik)
-        .description(sigdir(aciklama, ALAN_SINIRI))
-        .color(RENK_BILGI)
+        .title(title)
+        .description(fit_to_limit(description, FIELD_LIMIT))
+        .color(COLOR_INFO)
 }
 
-// boş bölme kartta "—" olarak görünür; silik ama yapı bozulmaz
-fn bos_yoksa(s: &str) -> String {
+// an empty section shows as "—" on the card: faint, but the layout doesn't break
+/// Input: `s: &str`. Output: `String` — `"—"` if `s` is blank, else `fit_to_limit(s,
+/// FIELD_LIMIT)`. Used by: `mind_embeds` above.
+fn dash_if_empty(s: &str) -> String {
     let t = s.trim();
     if t.is_empty() {
         "—".to_string()
     } else {
-        sigdir(t, ALAN_SINIRI)
+        fit_to_limit(t, FIELD_LIMIT)
     }
 }
 
-// kişi detay menüsü: son değişenler, etiket ad + puan, açıklama etiketler/not
-fn kisi_secenekleri() -> Vec<CreateSelectMenuOption> {
-    hafiza::kisi_dokumleri()
+// person detail menu: most recently changed, label name + score, description holds tags/note
+/// Input: none. Output: `Vec<CreateSelectMenuOption>` — up to `PERSON_MENU_LIMIT` options.
+/// Uses: `memory::person_summaries`/`trim`. Used by: `mind_components` below.
+fn person_options() -> Vec<CreateSelectMenuOption> {
+    memory::person_summaries()
         .into_iter()
-        .take(KISI_MENU_SINIRI)
-        .map(|k| {
-            let mut aciklama: Vec<String> = Vec::new();
-            if !k.etiket.is_empty() {
-                aciklama.push(k.etiket.join(", "));
+        .take(PERSON_MENU_LIMIT)
+        .map(|p| {
+            let mut description: Vec<String> = Vec::new();
+            if !p.tags.is_empty() {
+                description.push(p.tags.join(", "));
             }
-            if !k.not.is_empty() {
-                aciklama.push(k.not.clone());
+            if !p.note.is_empty() {
+                description.push(p.note.clone());
             }
-            let secenek = CreateSelectMenuOption::new(
-                hafiza::kirp(&format!("{} ({:+})", k.isim, k.puan), ETIKET_SINIRI),
-                k.id.to_string(),
+            let option = CreateSelectMenuOption::new(
+                memory::trim(&format!("{} ({:+})", p.name, p.score), LABEL_LIMIT),
+                p.id.to_string(),
             );
-            // discord description alanı verilirse boş olamaz (min uzunluk 1); etiket/not
-            // yoksa alan hiç eklenmez, "Invalid Form Body" ile tüm menüyü düşürüyordu
-            let aciklama = aciklama.join(" · ");
-            if aciklama.trim().is_empty() {
-                secenek
+            // discord's description field can't be empty once given (min length 1); if
+            // there are no tags/note, the field is left off entirely — otherwise it dropped
+            // the whole menu with "Invalid Form Body"
+            let description = description.join(" · ");
+            if description.trim().is_empty() {
+                option
             } else {
-                secenek.description(hafiza::kirp(&aciklama, ACIKLAMA_SINIRI))
+                option.description(memory::trim(&description, DESCRIPTION_LIMIT))
             }
         })
         .collect()
 }
 
-pub fn zihin_bilesenleri() -> Vec<CreateActionRow> {
-    let mut satirlar: Vec<CreateActionRow> = Vec::new();
-    let secenekler = kisi_secenekleri();
-    if !secenekler.is_empty() {
-        satirlar.push(CreateActionRow::SelectMenu(
-            CreateSelectMenu::new(
-                ZIHIN_KISI_SEC,
-                CreateSelectMenuKind::String {
-                    options: secenekler,
-                },
-            )
-            .placeholder("Kişi detayı seç…"),
+/// Input: none. Output: `Vec<CreateActionRow>` — the person select-menu row (if any people
+/// exist) plus the Topics/Events/Bot-summary button row. Uses: `person_options`,
+/// `MIND_PERSON_PICK`/`MIND_TOPICS`/`MIND_EVENTS`/`MIND_SUMMARY`. Used by: `mind_message`
+/// below.
+pub fn mind_components() -> Vec<CreateActionRow> {
+    let mut rows: Vec<CreateActionRow> = Vec::new();
+    let options = person_options();
+    if !options.is_empty() {
+        rows.push(CreateActionRow::SelectMenu(
+            CreateSelectMenu::new(MIND_PERSON_PICK, CreateSelectMenuKind::String { options })
+                .placeholder("Kişi detayı seç…"),
         ));
     }
-    satirlar.push(CreateActionRow::Buttons(vec![
-        CreateButton::new(ZIHIN_KONULAR)
+    rows.push(CreateActionRow::Buttons(vec![
+        CreateButton::new(MIND_TOPICS)
             .label("Konular")
             .style(ButtonStyle::Secondary),
-        CreateButton::new(ZIHIN_OLAYLAR)
+        CreateButton::new(MIND_EVENTS)
             .label("Olaylar")
             .style(ButtonStyle::Secondary),
-        CreateButton::new(ZIHIN_OZET)
+        CreateButton::new(MIND_SUMMARY)
             .label("Bot özeti")
             .style(ButtonStyle::Secondary),
     ]));
-    satirlar
+    rows
 }
 
-pub fn zihin_mesaji(d: &Durum) -> CreateInteractionResponseMessage {
+/// Input: `state: &State`. Output: `CreateInteractionResponseMessage` — the ephemeral
+/// `/zihin` reply. Uses: `mind_embeds`, `mind_components`. Used by: `Bot::cmd_mind`
+/// (`command/cards.rs`), the only caller.
+pub fn mind_message(state: &State) -> CreateInteractionResponseMessage {
     CreateInteractionResponseMessage::new()
         .ephemeral(true)
-        .embeds(zihin_embedleri(d))
-        .components(zihin_bilesenleri())
+        .embeds(mind_embeds(state))
+        .components(mind_components())
 }
 
-// ---------- detay modalları: her konu kendi etiketli alanında ----------
+// ---------- detail modals: each topic in its own labeled field ----------
 
-fn modal_olustur(baslik: &str, custom_id: &str, bolumler: Vec<Bolum>) -> CreateModal {
-    let dolu: Vec<Bolum> = bolumler
+/// Input: `title`/`custom_id: &str`; `sections: Vec<Section>` (consumed). Output:
+/// `CreateModal` — one `InputText` field per non-empty section, or a single "(henüz boş)"
+/// placeholder field if all were empty. Uses: `memory::trim`. Used by:
+/// `person_modal`/`topics_modal`/`events_modal`/`summary_modal` below.
+fn build_modal(title: &str, custom_id: &str, sections: Vec<Section>) -> CreateModal {
+    let filled: Vec<Section> = sections
         .into_iter()
-        .filter(|b| !b.icerik.trim().is_empty())
+        .filter(|b| !b.content.trim().is_empty())
         .collect();
-    let satirlar = if dolu.is_empty() {
+    let rows = if filled.is_empty() {
         vec![CreateActionRow::InputText(
             CreateInputText::new(
                 InputTextStyle::Paragraph,
@@ -285,15 +321,16 @@ fn modal_olustur(baslik: &str, custom_id: &str, bolumler: Vec<Bolum>) -> CreateM
             .required(false),
         )]
     } else {
-        dolu.into_iter()
+        filled
+            .into_iter()
             .map(|b| {
                 CreateActionRow::InputText(
                     CreateInputText::new(
                         InputTextStyle::Paragraph,
-                        hafiza::kirp(&b.etiket, ETIKET_SINIRI),
+                        memory::trim(&b.label, LABEL_LIMIT),
                         b.custom_id,
                     )
-                    .value(b.icerik)
+                    .value(b.content)
                     .required(false),
                 )
             })
@@ -301,177 +338,198 @@ fn modal_olustur(baslik: &str, custom_id: &str, bolumler: Vec<Bolum>) -> CreateM
     };
     CreateModal::new(
         custom_id,
-        baslik.chars().take(ETIKET_SINIRI).collect::<String>(),
+        title.chars().take(LABEL_LIMIT).collect::<String>(),
     )
-    .components(satirlar)
+    .components(rows)
 }
 
-// kişi kartı: kimlik / izlenim / etiketler / bildikleri / son olaylar ayrı alanlarda
-pub fn modal_kisi(id: u64) -> CreateModal {
-    let k = hafiza::kisi_oku(id);
-    let baslik = if k.isim.is_empty() {
+// person card: identity / impression / tags / facts / recent events in separate fields
+/// Input: `id: u64` — a Discord user id. Output: `CreateModal`. Uses:
+/// `memory::read_person`, `Section::new`, `build_modal`. Used by:
+/// `Handler::interaction_create` (`handler_event.rs`), for the `MIND_PERSON_PICK` select.
+pub fn person_modal(id: u64) -> CreateModal {
+    let p = memory::read_person(id);
+    let title = if p.name.is_empty() {
         "bilinmeyen".to_string()
     } else {
-        k.isim.clone()
+        p.name.clone()
     };
-    let mut bolumler: Vec<Bolum> = Vec::new();
+    let mut sections: Vec<Section> = Vec::new();
 
-    let mut kimlik = format!("{}\nid: {}", k.isim, k.id);
-    if !k.kullanici_adi.is_empty() {
-        kimlik += &format!("\nkullanıcı adı: {}", k.kullanici_adi);
+    let mut identity = format!("{}\nid: {}", p.name, p.id);
+    if !p.username.is_empty() {
+        identity += &format!("\nkullanıcı adı: {}", p.username);
     }
-    if !k.eski_adlar.is_empty() {
-        kimlik += &format!("\nönceki adları: {}", k.eski_adlar.join(", "));
+    if !p.previous_names.is_empty() {
+        identity += &format!("\nönceki adları: {}", p.previous_names.join(", "));
     }
-    bolumler.push(Bolum::new("Kimlik", "kisi_kimlik", kimlik));
+    sections.push(Section::new("Kimlik", "person_identity", identity));
 
-    let mut izlenim = format!("puan: {:+}", k.puan);
-    if !k.not.is_empty() {
-        izlenim += &format!("\n{}", k.not);
+    let mut impression = format!("puan: {:+}", p.score);
+    if !p.note.is_empty() {
+        impression += &format!("\n{}", p.note);
     }
-    bolumler.push(Bolum::new("İzlenim", "kisi_izlenim", izlenim));
+    sections.push(Section::new("İzlenim", "person_impression", impression));
 
-    if !k.etiket.is_empty() {
-        bolumler.push(Bolum::new(
-            "Etiketler",
-            "kisi_etiketler",
-            k.etiket.join(" · "),
-        ));
+    if !p.tags.is_empty() {
+        sections.push(Section::new("Etiketler", "person_tags", p.tags.join(" · ")));
     }
-    if !k.bilgiler.is_empty() {
-        let n = k.bilgiler.len();
-        let liste: Vec<&str> = k
-            .bilgiler
+    if !p.facts.is_empty() {
+        let n = p.facts.len();
+        let list: Vec<&str> = p
+            .facts
             .iter()
             .skip(n.saturating_sub(8))
             .map(|s| s.as_str())
             .collect();
-        bolumler.push(Bolum::new("Bildikleri", "kisi_bilgiler", liste.join("\n")));
+        sections.push(Section::new("Bildikleri", "person_facts", list.join("\n")));
     }
-    if !k.olaylar.is_empty() {
-        let n = k.olaylar.len();
-        let liste: Vec<&str> = k
-            .olaylar
+    if !p.events.is_empty() {
+        let n = p.events.len();
+        let list: Vec<&str> = p
+            .events
             .iter()
             .skip(n.saturating_sub(5))
             .map(|s| s.as_str())
             .collect();
-        bolumler.push(Bolum::new("Son olaylar", "kisi_olaylar", liste.join("\n")));
+        sections.push(Section::new(
+            "Son olaylar",
+            "person_events",
+            list.join("\n"),
+        ));
     }
-    modal_olustur(&baslik, &format!("zihin_kisi_{id}"), bolumler)
+    build_modal(&title, &format!("mind_person_{id}"), sections)
 }
 
-// konular: son değişenler notlarıyla, kalanı ad listesi
-pub fn modal_konular() -> CreateModal {
-    let konular = hafiza::konu_dokumleri();
-    let mut bolumler: Vec<Bolum> = Vec::new();
-    let son: Vec<String> = konular
+// topics: most recently changed with their notes, the rest as a plain name list
+/// Input: none. Output: `CreateModal`. Uses: `memory::topic_summaries`, `Section::new`,
+/// `build_modal`. Used by: `Handler::interaction_create` (`handler_event.rs`), for the
+/// `MIND_TOPICS` button.
+pub fn topics_modal() -> CreateModal {
+    let topics = memory::topic_summaries();
+    let mut sections: Vec<Section> = Vec::new();
+    let recent: Vec<String> = topics
         .iter()
         .take(15)
-        .map(|(ad, not)| {
-            if not.is_empty() {
-                format!("- {ad}")
+        .map(|(name, note)| {
+            if note.is_empty() {
+                format!("- {name}")
             } else {
-                format!("- {ad} · son: {not}")
+                format!("- {name} · son: {note}")
             }
         })
         .collect();
-    bolumler.push(Bolum::new("Son değişenler", "konular_son", son.join("\n")));
-    if konular.len() > 15 {
-        let diger: Vec<&str> = konular[15..].iter().map(|(ad, _)| ad.as_str()).collect();
-        bolumler.push(Bolum::new(
+    sections.push(Section::new(
+        "Son değişenler",
+        "topics_recent",
+        recent.join("\n"),
+    ));
+    if topics.len() > 15 {
+        let other: Vec<&str> = topics[15..].iter().map(|(name, _)| name.as_str()).collect();
+        sections.push(Section::new(
             "Diğer konular",
-            "konular_diger",
-            diger.join(" · "),
+            "topics_other",
+            other.join(" · "),
         ));
     }
-    modal_olustur("Konular", "modal_konular", bolumler)
+    build_modal("Konular", "topics_modal", sections)
 }
 
-// olaylar: ay başına bir alan, her ayın son kayıtları
-pub fn modal_olaylar() -> CreateModal {
-    let mut bolumler: Vec<Bolum> = Vec::new();
-    for (ay, satirlar) in hafiza::olay_aylari(3) {
-        if satirlar.is_empty() {
+// events: one field per month, each month's most recent entries
+/// Input: none. Output: `CreateModal`. Uses: `memory::event_months`, `month_name`,
+/// `Section::new`, `build_modal`. Used by: `Handler::interaction_create`
+/// (`handler_event.rs`), for the `MIND_EVENTS` button.
+pub fn events_modal() -> CreateModal {
+    let mut sections: Vec<Section> = Vec::new();
+    for (month, lines) in memory::event_months(3) {
+        if lines.is_empty() {
             continue;
         }
-        let n = satirlar.len();
-        let goster: Vec<&str> = satirlar
+        let n = lines.len();
+        let shown: Vec<&str> = lines
             .iter()
             .skip(n.saturating_sub(10))
             .map(|s| s.as_str())
             .collect();
-        bolumler.push(Bolum::new(
-            ay_adi(&ay),
-            format!("olaylar_{ay}"),
-            goster.join("\n"),
+        sections.push(Section::new(
+            month_name(&month),
+            format!("events_{month}"),
+            shown.join("\n"),
         ));
     }
-    modal_olustur("Olaylar", "modal_olaylar", bolumler)
+    build_modal("Olaylar", "events_modal", sections)
 }
 
-// bot özeti: durum / token / kendim / gündem ayrı alanlarda
-pub fn modal_ozet(d: &Durum) -> CreateModal {
-    let g = &d.gelisim;
-    let m = &d.metrik;
-    let durum = format!(
+// bot summary: status / tokens / myself / agenda in separate fields
+/// Input: `state: &State`. Output: `CreateModal`. Uses: `growth::stage`/`days`,
+/// `sleep::is_awake`, `travel::now`, `token_breakdown`, `memory::trim`, `Section::new`,
+/// `build_modal`. Used by: `Handler::interaction_create` (`handler_event.rs`), for the
+/// `MIND_SUMMARY` button.
+pub fn summary_modal(state: &State) -> CreateModal {
+    let growth = &state.growth;
+    let metrics = &state.metrics;
+    let status = format!(
         "evre: {} ({}. gün)\nsohbet: {} · mesaj: {}\nmodel: {}\nuyku: {} · düşünme: {}\nseyahat: {}",
-        gelisim::evre(g).ad,
-        gelisim::gun(g) + 1,
-        g.sohbet,
-        g.mesaj,
-        d.model,
-        if uyku::uyanik_mi(d) { "uyanık" } else { "uyuyor" },
-        d.dusunme.ad(),
-        seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
+        growth::stage(growth).name,
+        growth::days(growth) + 1,
+        growth.chats,
+        growth.messages,
+        state.model,
+        if sleep::is_awake(state) { "uyanık" } else { "uyuyor" },
+        state.thinking_mode.label(),
+        travel::now().map(|s| s.place).unwrap_or("yok"),
     );
-    let mut token = format!(
+    let mut token_text = format!(
         "{} çağrı · {} giriş ({} önbellek) + {} çıkış",
-        m.cagri, m.giris_token, m.onbellek_token, m.cikis_token
+        metrics.calls, metrics.input_tokens, metrics.cache_tokens, metrics.output_tokens
     );
-    if !m.kategoriler.is_empty() {
-        token += &format!("\nkırılım: {}", token_kirilimi(m));
+    if !metrics.categories.is_empty() {
+        token_text += &format!("\nkırılım: {}", token_breakdown(metrics));
     }
-    let mut bolumler = vec![
-        Bolum::new("Durum", "ozet_durum", durum),
-        Bolum::new("Token", "ozet_token", token),
+    let mut sections = vec![
+        Section::new("Durum", "summary_status", status),
+        Section::new("Token", "summary_tokens", token_text),
     ];
-    if !d.kendim.trim().is_empty() {
-        let son: Vec<&str> = d.kendim.lines().rev().take(4).collect();
-        bolumler.push(Bolum::new(
+    if !state.myself.trim().is_empty() {
+        let recent: Vec<&str> = state.myself.lines().rev().take(4).collect();
+        sections.push(Section::new(
             "Kendim",
-            "ozet_kendim",
-            son.into_iter().rev().collect::<Vec<_>>().join("\n"),
+            "summary_myself",
+            recent.into_iter().rev().collect::<Vec<_>>().join("\n"),
         ));
     }
-    if !d.gundem.trim().is_empty() {
-        bolumler.push(Bolum::new(
+    if !state.agenda.trim().is_empty() {
+        sections.push(Section::new(
             "Gündem",
-            "ozet_gundem",
-            hafiza::kirp(&d.gundem, 1000),
+            "summary_agenda",
+            memory::trim(&state.agenda, 1000),
         ));
     }
-    modal_olustur("Bot özeti", "modal_ozet", bolumler)
+    build_modal("Bot özeti", "summary_modal", sections)
 }
 
-// ---------- /durum ve /yardim ----------
+// ---------- /durum and /yardim ----------
 
-pub fn durum_mesaji(d: &Durum) -> CreateInteractionResponseMessage {
-    let m = &d.metrik;
-    let g = &d.gelisim;
-    let mut e = CreateEmbed::new()
+/// Input: `state: &State`. Output: `CreateInteractionResponseMessage` — the ephemeral
+/// `/durum` reply. Uses: `growth::stage`/`days`, `sleep::is_awake`, `travel::now`,
+/// `version_text`, `token_breakdown`, `fit_to_limit`. Used by: `Bot::cmd_status`
+/// (`command/cards.rs`), the only caller.
+pub fn status_message(state: &State) -> CreateInteractionResponseMessage {
+    let metrics = &state.metrics;
+    let growth = &state.growth;
+    let mut embed = CreateEmbed::new()
         .title("Durum")
-        .color(RENK_DURUM)
+        .color(COLOR_STATUS)
         .field(
             "Genel",
             format!(
                 "sürüm: {}\nevre: {} ({}. gün)\nsohbet: {} · mesaj: {}\nmodel: {}",
-                surum_metni(),
-                gelisim::evre(g).ad,
-                gelisim::gun(g) + 1,
-                g.sohbet,
-                g.mesaj,
-                d.model,
+                version_text(),
+                growth::stage(growth).name,
+                growth::days(growth) + 1,
+                growth.chats,
+                growth.messages,
+                state.model,
             ),
             true,
         )
@@ -479,14 +537,14 @@ pub fn durum_mesaji(d: &Durum) -> CreateInteractionResponseMessage {
             "Hal",
             format!(
                 "uyku: {}\ndüşünme: {}\ndebug: {}\nseyahat: {}",
-                if uyku::uyanik_mi(d) {
+                if sleep::is_awake(state) {
                     "uyanık"
                 } else {
                     "uyuyor"
                 },
-                d.dusunme.ad(),
-                if d.debug { "açık" } else { "kapalı" },
-                seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
+                state.thinking_mode.label(),
+                if state.debug { "açık" } else { "kapalı" },
+                travel::now().map(|s| s.place).unwrap_or("yok"),
             ),
             true,
         )
@@ -494,26 +552,33 @@ pub fn durum_mesaji(d: &Durum) -> CreateInteractionResponseMessage {
             "Token",
             format!(
                 "{} çağrı · {} giriş ({} önbellek) + {} çıkış",
-                m.cagri, m.giris_token, m.onbellek_token, m.cikis_token
+                metrics.calls, metrics.input_tokens, metrics.cache_tokens, metrics.output_tokens
             ),
             false,
         );
-    if !m.kategoriler.is_empty() {
-        e = e.field("Kırılım", sigdir(&token_kirilimi(m), ALAN_SINIRI), false);
+    if !metrics.categories.is_empty() {
+        embed = embed.field(
+            "Kırılım",
+            fit_to_limit(&token_breakdown(metrics), FIELD_LIMIT),
+            false,
+        );
     }
     CreateInteractionResponseMessage::new()
         .ephemeral(true)
-        .embed(e)
+        .embed(embed)
 }
 
-pub fn yardim_mesaji() -> CreateInteractionResponseMessage {
+/// Input: none. Output: `CreateInteractionResponseMessage` — the ephemeral `/yardim` reply.
+/// Uses: `command::HELP` (`command/registration_table.rs`). Used by: `Bot::cmd_help`
+/// (`command/cards.rs`), the only caller.
+pub fn help_message() -> CreateInteractionResponseMessage {
     CreateInteractionResponseMessage::new()
         .ephemeral(true)
         .embed(
             CreateEmbed::new()
                 .title("Yardım")
-                .color(RENK_YARDIM)
-                .description(komut::YARDIM)
+                .color(COLOR_HELP)
+                .description(command::HELP)
                 .field(
                     "Arayüz",
                     "bot yalnız slash (/) komutlarla yönetilir; /zihin'deki menü ve butonlar detay modallarına götürür.",
@@ -522,11 +587,13 @@ pub fn yardim_mesaji() -> CreateInteractionResponseMessage {
         )
 }
 
-// ---------- ayar paneli (butonlu) ----------
+// ---------- settings panel (buttons) ----------
 
-pub fn ayarlar_embed(d: &Durum) -> CreateEmbed {
-    let uyku = if uyku::uyanik_mi(d) {
-        if d.uyanik_zorla > simdi_unix() {
+/// Input: `state: &State`. Output: `CreateEmbed` — the settings panel's description/footer.
+/// Uses: `sleep::is_awake`, `version_text`, `travel::now`. Used by: `settings_message` below.
+pub fn settings_embed(state: &State) -> CreateEmbed {
+    let sleep_status = if sleep::is_awake(state) {
+        if state.forced_awake_until > now_unix() {
             "uyanık (zorla, !uyan)"
         } else {
             "uyanık"
@@ -536,90 +603,101 @@ pub fn ayarlar_embed(d: &Durum) -> CreateEmbed {
     };
     CreateEmbed::new()
         .title("Ayarlar")
-        .color(RENK_AYAR)
+        .color(COLOR_SETTINGS)
         .description(format!(
             "sürüm: {}\nmodel: {} (`!model <id>`, yalnız favori)\ndüşünme: **{}**\ndebug: **{}**\nuyku: **{}**\nseyahat: {}",
-            surum_metni(),
-            d.model,
-            d.dusunme.ad(),
-            if d.debug { "açık" } else { "kapalı" },
-            uyku,
-            seyahat::simdi().map(|s| s.yer).unwrap_or("yok"),
+            version_text(),
+            state.model,
+            state.thinking_mode.label(),
+            if state.debug { "açık" } else { "kapalı" },
+            sleep_status,
+            travel::now().map(|s| s.place).unwrap_or("yok"),
         ))
         .footer(CreateEmbedFooter::new(
             "butona bas, panel yerinde yenilenir · göster: düşünce spoiler'da · gizle: düşünüyorum… · sessiz: iz yok · kapat: reasoning'siz",
         ))
 }
 
-pub fn ayarlar_bilesenleri(d: &Durum) -> Vec<CreateActionRow> {
-    let kipler = [
-        (DusunmeKip::Goster, "göster"),
-        (DusunmeKip::Gizle, "gizle"),
-        (DusunmeKip::Sessiz, "sessiz"),
-        (DusunmeKip::Kapali, "kapat"),
+/// Input: `state: &State`. Output: `Vec<CreateActionRow>` — the thinking-mode button row
+/// (highlighting the active mode) plus the debug/wake/sleep button row. Uses:
+/// `ThinkingMode::file_value`, `SETTING_THINKING`/`SETTING_DEBUG`/`SETTING_WAKE`/
+/// `SETTING_SLEEP`, `sleep::is_awake`. Used by: `settings_message` below.
+pub fn settings_components(state: &State) -> Vec<CreateActionRow> {
+    let modes = [
+        (ThinkingMode::Show, "göster"),
+        (ThinkingMode::Hide, "gizle"),
+        (ThinkingMode::Silent, "sessiz"),
+        (ThinkingMode::Off, "kapat"),
     ];
-    let dusunme: Vec<CreateButton> = kipler
+    let thinking_buttons: Vec<CreateButton> = modes
         .iter()
-        .map(|(kip, etiket)| {
-            CreateButton::new(format!("{AYAR_DUSUNME}{}", kip.dosya_degeri()))
-                .label(format!("düşünme: {etiket}"))
-                .style(if *kip == d.dusunme {
+        .map(|(mode, label)| {
+            CreateButton::new(format!("{SETTING_THINKING}{}", mode.file_value()))
+                .label(format!("düşünme: {label}"))
+                .style(if *mode == state.thinking_mode {
                     ButtonStyle::Primary
                 } else {
                     ButtonStyle::Secondary
                 })
         })
         .collect();
-    let uyanik = uyku::uyanik_mi(d);
+    let awake = sleep::is_awake(state);
     vec![
-        CreateActionRow::Buttons(dusunme),
+        CreateActionRow::Buttons(thinking_buttons),
         CreateActionRow::Buttons(vec![
-            CreateButton::new(AYAR_DEBUG)
-                .label(if d.debug {
+            CreateButton::new(SETTING_DEBUG)
+                .label(if state.debug {
                     "debug: açık"
                 } else {
                     "debug: kapalı"
                 })
-                .style(if d.debug {
+                .style(if state.debug {
                     ButtonStyle::Success
                 } else {
                     ButtonStyle::Secondary
                 }),
-            CreateButton::new(AYAR_UYAN)
+            CreateButton::new(SETTING_WAKE)
                 .label("uyandır")
                 .style(ButtonStyle::Secondary)
-                .disabled(uyanik),
-            CreateButton::new(AYAR_UYU)
+                .disabled(awake),
+            CreateButton::new(SETTING_SLEEP)
                 .label("uyut (8 saat)")
                 .style(ButtonStyle::Secondary)
-                .disabled(!uyanik),
+                .disabled(!awake),
         ]),
     ]
 }
 
-// /ayarlar (ephemeral) ve buton sonrası yerinde yenileme (UpdateMessage) aynı gövde
-pub fn ayarlar_mesaji(d: &Durum, gizli: bool) -> CreateInteractionResponseMessage {
+// /ayarlar (ephemeral) and the in-place refresh after a button press (UpdateMessage) share this body
+/// Input: `state: &State`; `ephemeral: bool`. Output: `CreateInteractionResponseMessage`.
+/// Uses: `settings_embed`, `settings_components`. Used by: `Bot::cmd_settings`
+/// (`command/cards.rs`, `/ayarlar`), `Handler::setting_button` (`handler_buttons.rs`,
+/// panel refresh).
+pub fn settings_message(state: &State, ephemeral: bool) -> CreateInteractionResponseMessage {
     CreateInteractionResponseMessage::new()
-        .ephemeral(gizli)
-        .embed(ayarlar_embed(d))
-        .components(ayarlar_bilesenleri(d))
+        .ephemeral(ephemeral)
+        .embed(settings_embed(state))
+        .components(settings_components(state))
 }
 
-// ---------- slash kaydı ----------
+// ---------- slash registration ----------
 
-// sunucu komutları: her ready'de çağrılır, discord üstüne yazar (idempotent);
-// sunucu komutu anında görünür olur, global komut gecikmeli. Liste komut.rs::tanimlar()
-// tablosundan çıkar — tek kaynak, elle iki yerde tutulmaz.
-pub async fn komutlari_kayit(http: &Http, guild: GuildId) -> Result<(), Hata> {
-    let komutlar: Vec<CreateCommand> = komut::tanimlar()
+// guild commands: called on every ready, overwrites what's on Discord (idempotent); a
+// guild command shows up instantly, a global command is delayed. The list comes from
+// command.rs's definitions() table — a single source, never kept in two places by hand.
+/// Input: `http: &Http`; `guild: GuildId`. Output: `Result<(), BotError>`. Uses:
+/// `command::definitions`. Used by: `Handler::ready` (`handler_event.rs`), once per guild
+/// on every connect/reconnect.
+pub async fn register_commands(http: &Http, guild: GuildId) -> Result<(), BotError> {
+    let commands: Vec<CreateCommand> = command::definitions()
         .iter()
         .map(|k| {
-            CreateCommand::new(k.ad)
-                .description(k.aciklama)
-                .set_options((k.secenekler)())
+            CreateCommand::new(k.name)
+                .description(k.description)
+                .set_options((k.options)())
         })
         .collect();
-    guild.set_commands(http, komutlar).await?;
+    guild.set_commands(http, commands).await?;
     Ok(())
 }
 
@@ -627,60 +705,64 @@ pub async fn komutlari_kayit(http: &Http, guild: GuildId) -> Result<(), Hata> {
 mod test {
     use super::*;
 
+    /// Verifies `fit_to_limit` truncates with a "kırpıldı" marker when over the limit, and passes short text through unchanged.
     #[test]
-    fn sigdir_siniri_asmaz() {
-        let uzun = "kelime ".repeat(1000);
-        let s = sigdir(&uzun, 200);
+    fn fit_stays_within_limit() {
+        let long_text = "kelime ".repeat(1000);
+        let s = fit_to_limit(&long_text, 200);
         assert!(s.chars().count() <= 200);
         assert!(s.contains("kırpıldı"));
-        // kısa metin aynen kalır
-        assert_eq!(sigdir("kısa", 200), "kısa");
+        // short text passes through unchanged
+        assert_eq!(fit_to_limit("kısa", 200), "kısa");
     }
 
+    /// Verifies `month_name` converts a `YYYY-MM` key to a Turkish month name, and passes through unparseable input as-is.
     #[test]
-    fn ay_adi_cevirir() {
-        assert_eq!(ay_adi("2026-09"), "Eylül 2026");
-        assert_eq!(ay_adi("2026-01"), "Ocak 2026");
-        assert_eq!(ay_adi("bozuk"), "bozuk");
-        assert_eq!(ay_adi("2026-13"), "2026-13");
+    fn month_name_converts() {
+        assert_eq!(month_name("2026-09"), "Eylül 2026");
+        assert_eq!(month_name("2026-01"), "Ocak 2026");
+        assert_eq!(month_name("bozuk"), "bozuk");
+        assert_eq!(month_name("2026-13"), "2026-13");
     }
 
+    /// Verifies the empty-section filter `build_modal` relies on: only non-empty `Section`s survive.
     #[test]
-    fn bolumler_bos_icerigi_alan_yapar() {
-        // modal_olustur boş bölmeleri atlar; hepsi boşsa tek "(henüz boş)" alanı kalır.
-        // CreateModal serileşmezliği yüzünden davranış Bolum filtresinden doğrulanır:
-        let dolu: Vec<Bolum> = vec![
-            Bolum::new("A", "a", String::new()),
-            Bolum::new("B", "b", "veri".into()),
+    fn empty_sections_become_placeholder_field() {
+        // build_modal skips empty sections; if all are empty, a single "(henüz boş)" field remains.
+        // CreateModal isn't inspectable, so behavior is verified via the Section filter itself:
+        let filled: Vec<Section> = vec![
+            Section::new("A", "a", String::new()),
+            Section::new("B", "b", "veri".into()),
         ]
         .into_iter()
-        .filter(|b| !b.icerik.trim().is_empty())
+        .filter(|b| !b.content.trim().is_empty())
         .collect();
-        assert_eq!(dolu.len(), 1);
-        assert_eq!(dolu[0].etiket, "B");
+        assert_eq!(filled.len(), 1);
+        assert_eq!(filled[0].label, "B");
     }
 
+    /// Verifies `token_breakdown` sorts categories by usage, descending.
     #[test]
-    fn token_kirilimi_sirali() {
-        let mut m = Metrik::default();
-        m.kategoriler.insert(
-            "az",
-            Kullanim {
+    fn token_breakdown_sorted() {
+        let mut metrics = Metrics::default();
+        metrics.categories.insert(
+            "few",
+            Usage {
                 prompt_tokens: 10,
                 completion_tokens: 5,
                 ..Default::default()
             },
         );
-        m.kategoriler.insert(
-            "cok",
-            Kullanim {
+        metrics.categories.insert(
+            "many",
+            Usage {
                 prompt_tokens: 100,
                 completion_tokens: 50,
                 ..Default::default()
             },
         );
-        let k = token_kirilimi(&m);
-        // büyük kategori önde gelir
-        assert!(k.find("cok").unwrap() < k.find("az").unwrap());
+        let result = token_breakdown(&metrics);
+        // the larger category comes first
+        assert!(result.find("many").unwrap() < result.find("few").unwrap());
     }
 }

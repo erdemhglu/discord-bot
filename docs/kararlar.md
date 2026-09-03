@@ -564,3 +564,18 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   trafik altında hangi kategorinin ne kadar yaktığı) olmadan körlemesine ek "optimizasyon" yapmak
   muhtemelen ya etkisiz ya da mevcut ince ayarı bozar riski taşır — somut bir darboğaz (ör.
   belirli bir komutun/akışın ölçülmüş maliyeti) bildirilirse ona göre bakılacak.
+- **2026-09-03 · Kod tabanı (src/**/*.rs, README.md) Türkçe'den İngilizceye çevrildi.** Kullanıcı
+  isteği. Kapsam: tanımlayıcılar (fonksiyon/struct/enum/const/dosya/dizin adları), kod yorumları,
+  `.env` değişken adları (`SAGLAYICI→PROVIDER`, `KANALLAR→CHANNELS`, `HABER_KANALI→NEWS_CHANNEL`,
+  `DEBUG_KANALI→DEBUG_CHANNEL`, `RESIM_ANALIZI→IMAGE_ANALYSIS`, `API_ADRES→API_URL`,
+  `LOG_SEVIYE→LOG_LEVEL`, `LOG_RENK→LOG_COLOR`), CLI bayrağı (`cargo run -- sohbet` →
+  `cargo run -- chat`). Türkçe bilerek bırakılanlar: `promptlar/*.md` (dizin+dosya adı+içerik —
+  botun kişiliği), `durum/` dosya biçimleri (alan adları, dosya adları — model JSON çıktısıyla
+  ya da mevcut disk verisiyle eşleşmesi gerekenler, ör. `Person`/`Record` tiplerinin `isim`/
+  `puan`/`not` alanları), ve Discord'a çıkan her şey (slash komut adları/açıklamaları, embed
+  metni, buton/menü etiketleri, model çıktısı, debug trace metinleri hariç — onlar geliştirici
+  tanılaması sayılıp İngilizceye çevrildi). Gerekçe: kod tabanının uluslararası okunabilirliği;
+  botun Türkçe kişiliği/davranışı hiç değişmedi, yalnız kaynağı okuyan tarafın dili değişti.
+  Doğrulama: `cargo build` + `cargo test` (76 yeşil) + `cargo clippy` (0 uyarı) + `cargo fmt`;
+  canlı Discord'da denenmedi (zaten hiç denenmemişti, bkz AGENTS.md "Bilinen açıklar"). Detay:
+  AGENTS.md madde 8, dev/ilerleme.md.

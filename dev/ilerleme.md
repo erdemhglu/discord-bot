@@ -584,6 +584,111 @@ altında gömülü (SIL OFL, `fonts/LICENSE`).
 - **Doğrulanmadı:** görsel canlı Discord'da görülmedi. Metin genişliği gerçek glif ölçümü
   değil, Inter harf/em oranı tahmini (bilerek yukarı yuvarlıyor — taşırmak yerine erken sarar).
 
+## 2026-09-03 · Kod tabanı İngilizceye çevrildi
+Kullanıcı isteği: README.md ve tüm `src/**/*.rs` İngilizceye çevrilsin, botun çalışma şekli
+(Türkçe kişilik/davranış) değişmeden kalsın. Netleştirme turlarında onaylanan kapsam: dosya
+adları da çevrilsin, AGENTS.md/docs/dev/ içindeki kod referansları yeni adlarla güncellensin.
+
+- **Kapsam.** 42 `.rs` dosyası (~8500 satır) + `build.rs`: tanımlayıcılar (fonksiyon/struct/
+  enum/const/static/alan/yerel değişken), dosya+dizin adları (`src/bot/`, `src/command/`),
+  yorumlar, `.env` değişken adları. Tüm `git mv` + içerik çevirisi dosya bazında yapıldı, git
+  rename algılaması korundu (`git status` "RM" olarak gösteriyor).
+- **Ana sözlük** (docs/sozluk.md'den, tutarlılık için temel alındı): durum→state,
+  hafiza→memory, sohbet→chat, gundem→agenda, gelisim→growth, seyahat→travel, uyku→sleep,
+  ajanlar→agents, promptlar→prompts, loglama→logging, komut→command, dongu→cycle (⚠ "loop"
+  Rust anahtar kelimesi, kullanılamadı), saglayici→provider, dokum→transcript, uret→generate,
+  analiz→analyze, cevap_parcala→parse_reply, soy→strip_name, kirp→trim/kirp_hata→trim_error,
+  ve onlarca fonksiyon/tip adı daha (tam liste: git diff ya da docs/moduller.md).
+- **Kritik bulgular (tuzağa düşülmeden yakalandı):**
+  - `Mesaj` → `Message` değil `ChatMessage` olarak çevrildi: `use serenity::all::*` zaten
+    kendi `Message` tipini taşıyor, isim çakışması olurdu.
+  - Model JSON çıktısına bağlı struct alanları (`isteklilik_coz`/`parse_willingness`'taki
+    `puan`/`sebep`, `hedef_ayikla`/`extract_target`'taki `hedef`, `ruh_hali_ayikla`/
+    `extract_mood`'taki `durum`/`yogunluk`, günlükçü/diarist'in `Kayit`/`Record`'undaki
+    `olay`/`kisiler`/`isim`/`puan_degisimi`/`not`/`bilgiler`/`etiketler`/`konular`/`ad`/
+    `kendim`) **çevrilmedi** — promptlar Türkçe kaldığı için model bu alan adlarıyla JSON
+    üretiyor, serde alan adı eşleşmesine bakıyor; çevrilseydi sessizce boş/0 dönerdi.
+  - `durum/` dosya formatındaki literal alan önekleri (`"kullanici_adi:"`, `"puan:"`,
+    `"etiket:"`, `"not:"` vb.) ve dizin adları (`kisiler/`, `konular/`, `olaylar/`, `arsiv/`,
+    `kanallar/`, `durum/`, `resimler/`) değişmedi — diskteki mevcut kullanıcı verisiyle uyumlu
+    kalması gerekiyordu.
+  - Discord'a çıkan her şey Türkçe kaldı: slash komut adları/açıklamaları/seçenek etiketleri,
+    embed başlık/alan metni, buton/menü etiketleri, model çıktısı, `!durum` kategori
+    etiketleri (`"sohbet"`, `"isteklilik"`, `"profilci"` vb. — bunlar `/durum` embed'inde
+    görünüyor). Debug trace metinleri (`self.debug_note`'a giden satırlar) istisna: geliştirici
+    tanılaması sayılıp İngilizceye çevrildi.
+  - `promptlar/*.md` (30 dosya) hem dizin hem dosya adı hem içerik olarak dokunulmadı.
+- **`.env` değişken adı değişiklikleri** (kullanıcı elle `.env` dosyasını güncellemeli, geriye
+  dönük uyumluluk shim'i eklenmedi): `SAGLAYICI→PROVIDER`, `KANALLAR→CHANNELS`,
+  `HABER_KANALI→NEWS_CHANNEL`, `DEBUG_KANALI→DEBUG_CHANNEL`, `RESIM_ANALIZI→IMAGE_ANALYSIS`,
+  `API_ADRES→API_URL`, `LOG_SEVIYE→LOG_LEVEL`, `LOG_RENK→LOG_COLOR`.
+  CLI bayrağı `cargo run -- sohbet` → `cargo run -- chat`; terminal tezgahındaki fallback
+  konuşmacı adı `emin` → `misafir` (kullanıcı isteğiyle, gerçek bir kişinin adı fallback değeri
+  olmasın diye).
+- **Doğrulama:** `cargo build` temiz, `cargo test` 76/76 yeşil (önceki 75'ten +1; testler de
+  çevrildi, mantık değişmedi), `cargo clippy --all-targets` 0 uyarı, `cargo fmt` uygulandı.
+  Canlı Discord'da denenmedi (zaten hiç denenmemişti).
+- **Belgeler güncellendi:** AGENTS.md (madde 8 içeriği tersine döndü: artık "tanımlayıcılar
+  İngilizce" diyor + tüm kod referansları), README.md (tam çeviri), docs/moduller.md (tam
+  referans güncellemesi), docs/kararlar.md (yeni tarihli kayıt eklendi, eskiler dokunulmadı —
+  kural gereği). docs/sozluk.md amacı değişti: artık kod sözlüğü değil, Türkçe kalan çalışma
+  zamanı kelime dağarcığının sözlüğü.
+- **Sonraki adım (varsa):** docs/akislar.md, docs/mimari.md, docs/durum-dosyalari.md,
+  docs/promptlar.md, docs/sabitler.md, docs/gelistirme.md içindeki kod referanslarının
+  güncellenmesi devam ediyor/edecek — bu dosyalar da moduller.md gibi "güncel durum" referans
+  dokümanları, kararlar.md/ilerleme.md gibi kronolojik log değiller.
+
+---
+
+## 2026-09-03: her fonksiyona profesyonel `///` doc-comment
+
+- Kullanıcı isteği: kod çevirisi bittikten sonra, yorum satırlarının "profesyonel" olması —
+  her fonksiyonun kullandığı objeleri/fonksiyonları, aldığı girdiyi, döndürdüğü çıktıyı,
+  hangi diğer fonksiyonların onu aynı şekilde kullandığını ve hangi struct'ların hangi veriyi
+  tuttuğunu belgelemesi istendi. Kapsam netleştirme sorusunda kullanıcı **"her fonksiyon (tam
+  kapsam)"** seçti — yalnız public/modüller-arası değil, gerçekten her fonksiyon.
+- 42 `.rs` dosyası + `build.rs`'deki bütün fonksiyonlara/struct'lara `Input:`/`Output:`/
+  `Uses:`/`Used by:` biçiminde `///` doc comment eklendi (bağımlılıklar ve çağıranlar dosya
+  adıyla birlikte referanslanıyor).
+- `#[test]` fonksiyonları (75 adet, `bot/tests_1..4.rs` + diğer dosyalardaki `mod test`
+  blokları) için aynı dört alanlı şablon anlamsız olduğundan (girdi/çıktı/kullanan yok), tek
+  satırlık "neyi doğruluyor" açıklaması eklendi — yine "her fonksiyon" kapsamına dahil, ama
+  test'e uygun daha hafif biçimde. `src/prompts.rs` (yalnız `pub const` bildirimleri) ve
+  `src/command.rs`/`src/command/registration.rs`'nin `include!` gövdeleri fonksiyon
+  içermediğinden dokunulmadı.
+- Bu geçiş sırasında yakalanan yan hata: `clippy::doc_lazy_continuation` — bir madde
+  listesinden (`- ...`) hemen sonra boş satır olmadan gelen düzyazı paragrafı, listenin son
+  maddesinin "girintisiz devamı" sayılıyordu (`types_message.rs`, `types_chat_state.rs`,
+  `types_bot.rs`, 3 dosyada 9 uyarı). Düzeltme: liste ile sonraki paragraf arasına boş `///`
+  satırı eklendi.
+- **Doğrulama:** `cargo build` temiz, `cargo test` 76/76 yeşil, `cargo clippy --all-targets`
+  0 uyarı, `cargo fmt` uygulandı (ek değişiklik çıkarmadı).
+
+---
+
+## 2026-09-03: src/bot/ 7 alt klasöre bölündü
+
+- Kullanıcı isteği: `src/bot/` altında 38 dosya tek klasördeydi, bu iyi değil dendi;
+  gruplandırılması istendi.
+- `git mv` ile konu bazlı 7 alt klasöre taşındı: `types/` (5), `text/` (4), `provider/` (11),
+  `chat/` (3), `cycle/` (6), `handler/` (3), `tests/` (5). Her klasörün aynı adı taşıyan bir
+  aggregator dosyası var (örn. `types/types.rs`), o da klasördeki kardeşlerini göreli
+  `include!("...")` ile toplar — `include!`'in yolu her zaman kendi dosyasının bulunduğu
+  klasöre göre çözüldüğü için (main.rs'e göre değil) klasör içi include'lara dokunmaya
+  gerek kalmadı. `setup.rs` tek dosya olduğu için klasörsüz kaldı. `main.rs`'in üstteki
+  7 `include!("bot/...")` satırı yeni yollara güncellendi (`bot/types.rs` →
+  `bot/types/types.rs` vb.).
+- Yan iş: bu arada önceki doc-comment geçişinde `#[test]`/`#[tokio::test]` sonrasına
+  eklenmiş `///` satırları (öznitelikten SONRA gelen doc comment — derlenir ama alışılmış
+  sıra değil) fark edildi, 76 yerde doc comment ile öznitelik yer değiştirdi (artık doc
+  comment önce, `#[test]` sonra — idiomatik sıra).
+- **Doğrulama:** `cargo build` temiz, `cargo test` 76/76 yeşil, `cargo clippy --all-targets`
+  0 uyarı, `cargo fmt` uygulandı. `docs/mimari.md` ve `docs/moduller.md` (güncel-durum
+  referans belgeleri) yeni klasör yapısını yansıtacak şekilde güncellendi; `src/travel.rs`,
+  `src/bot/types/types_settings.rs`, `docs/sabitler.md`, `docs/gelistirme.md`, `README.md`
+  içindeki eski düz `bot/xxx.rs` yol referansları yeni klasörlü yollarla değiştirildi.
+  `docs/kararlar.md`/`dev/ilerleme.md`'nin geçmiş kayıtları kural gereği dokunulmadı
+  (kronolojik log, geriye dönük düzeltilmez).
 
 ---
 
@@ -591,4 +696,6 @@ altında gömülü (SIL OFL, `fonts/LICENSE`).
 ```
 cargo fmt && cargo clippy --all-targets && cargo test && cargo build --release
 ```
-`AGENTS.md` kuralı: clippy 0 uyarı beklenir. Tanımlayıcılar Türkçe ama ASCII (`dusunce`, `kisalt`).
+`AGENTS.md` kuralı: clippy 0 uyarı beklenir. Tanımlayıcılar İngilizce ve ASCII (`thought`,
+`trim`) — yalnız botun Türkçe çalışma şekli (promptlar/, durum/ dosya biçimleri, Discord'a
+çıkan her şey) buna dahil değil, bkz AGENTS.md madde 8.

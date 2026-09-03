@@ -106,17 +106,17 @@ slash komutlara geçti" kaydında ayrıntılı.
 ## Bekleyen / düşük öncelikli (5 ajan raporundan kalanlar)
 - **`reaction_add` olayı yok:** bot tepki verir ama kendi mesajına gelen tepkiyi görmez
   (tepkiye tepki, "kim neye güldü" bilgisi kayıp).
-- **Özel emoji tepkisi:** `emoji_ayikla` `:kekw:` biçimini eler, yalnız Unicode emoji atılıyor.
+- **Özel emoji tepkisi:** `extract_emoji` `:kekw:` biçimini eler, yalnız Unicode emoji atılıyor.
   `ReactionType::Custom` + sunucu emoji listesinden doğrulama gerekir. Aynı iş emoji whitelist'i
   de getirir (ra-muhendislik §10 öneriyordu, bilerek ertelendi — bkz kararlar.md).
-- **Tohum/geçmiş pencereleri satır cinsinden:** `SOHBET_TOHUM=10` ve `KANAL_GECMIS=60` artık
+- **Tohum/geçmiş pencereleri satır cinsinden:** `CHAT_SEED=10` ve `CHANNEL_HISTORY=60` artık
   "tur" değil "satır" sayıyor; çok satırlı turlarda modelin gördüğü geçmiş kısalıyor. Canlıda
   ölçülüp büyütülmesi gerekebilir (şimdilik dokunulmadı).
 - **ILGI/keyword kancası:** takıntı konusu geçtiğinde isteklilik çağrısını atlayıp doğrudan
   girme yolu yok; her şey isteklilik puanından geçiyor.
 - **Ajan 5 (döngüler):** uyanış kanal bazlı.
 - Tamamlanıp düşenler: hata sınıflandırma+retry, typing edit dışı, ajan yazımları tek sıra,
-  günlükçü JSON kurtarma, arsivle append, zarif kapanış (`KAPANIYOR`), süresi dolan haber
+  günlükçü JSON kurtarma, arsivle append, zarif kapanış (`SHUTTING_DOWN`), süresi dolan haber
   sohbeti temizliği, tarama sırası (önüne ekleme) — yerel dalda yapıldı, PR merge'inde korundu.
 
 ## Bilinen riskler
@@ -125,4 +125,12 @@ slash komutlara geçti" kaydında ayrıntılı.
 - Uyanış ajanı yanlış kişiyi seçebilir → fallback: son mesaj / etiketli.
 - `.env`, `durum/`, `bot.log` git dışı (kişisel veri). `resimler/` yalnız `.gitkeep`.
 - **Reasoning:** glm-5.3-flash ile canlı doğrulama (`/zihin test:true`), effort=low'un gerçekten düşünceyi kısıp kısmadığı.
-- **Slash komutlar:** hiçbiri (yeni 12 dahil) canlı Discord'da hiç görülmedi; seçenek/choice görünümü, `ertele`+`sonucu_bildir` akışı doğrulanmalı.
+- **Slash komutlar:** hiçbiri (yeni 12 dahil) canlı Discord'da hiç görülmedi; seçenek/choice görünümü, `defer`+`report_result` akışı doğrulanmalı.
+
+## 2026-09-03 · Kod İngilizceye çevrildi — TAMAMLANDI
+`src/**/*.rs` + README.md İngilizceye çevrildi (tanımlayıcılar, yorumlar, dosya/dizin adları,
+`.env` değişken adları); botun Türkçe çalışma şekli (promptlar/, durum/, Discord çıktısı)
+değişmedi. Yukarıdaki eski kayıtlardaki kod referansları (tarih öncesi) o zamanki Türkçe
+adlarla bırakıldı — geçmiş doğru olsun diye elle değiştirilmedi; yalnız hâlâ açık olan
+"Bekleyen"/"Bilinen riskler" maddelerindeki isimler güncel koda uysun diye yukarıda
+güncellendi. Ayrıntı: dev/ilerleme.md, docs/kararlar.md, AGENTS.md madde 8.

@@ -1,162 +1,167 @@
 # discord-bot
 
-> Geliştirici ve yapay zeka ajanları için giriş: [AGENTS.md](AGENTS.md) · ayrıntı [docs/](docs/)
+> Entry point for developers and AI agents: [AGENTS.md](AGENTS.md) · details in [docs/](docs/)
 
-Sunucuda takılan, insanları tanıyan, zamanla kişilik kazanan bir discord botu.
-Rust ile yazıldı, cevapları openrouter (ya da mistral) üzerinden alıyor; openrouter üzerinden
-GLM, Grok, Gemini, Claude gibi herhangi bir model kullanılabilir. `z-ai/glm-5.3-flash` (reasoning
-zorunlu) ile performanslı çalıştığı görüldü.
+A Discord bot that hangs around in a server, gets to know people, and develops a personality
+over time. Written in Rust, gets replies through OpenRouter (or Mistral); through OpenRouter
+it can use any model — GLM, Grok, Gemini, Claude. `z-ai/glm-5.3-flash` (reasoning
+mandatory) has been observed to perform well.
 
-## ne yapar
+## what it does
 
-- her sunucuya ilk katılımda son 2 haftanın mesajlarını okur, grubu tanır (bir kere; sonraki başlangıçlarda tekrar taramaz)
-- yeni gelenle tanışır, sohbete girer
-- arada mesajlaşmaya dalar; sohbet 30 dk sessiz kalınca vedasız kendiliğinden kapanır
-- saatte bir %30 ihtimalle durup dururken laf atar, eski konulara gönderme yapar
-- 6 saatte bir hacker news + Sözcü gündeminden gruba uygun bir haber atar, 2 saat yorum bekler
-- 4 saatte bir Türkiye gündemini gezer (Sözcü RSS, firecrawl varsa sayfayı okur), kendi görüşünü günlüğüne yazar; kişilik buradan da beslenir
-- geceleri uyur (01-09), nadiren uykusuz gece geçirir (gerginse daha sık); uyurken yazmaz ama dinler: mesajlar zihne işlenir, haber stoklanır; uyanınca gece yazılanları değerlendirir, ilgisi çekildiyse sabah sözüyle döner
-- etiketlenince, adı geçince ya da mesajına yanıt verilince her zaman cevap verir; sohbet açıkken de yalnız az önce KENDİSİYLE konuşan kişiye otomatik devam eder, kanaldaki başkasının mesajına atlamadan önce (gerçek insan gibi) isteklilik değerlendirir
-- discord yanıtı (reply-to) yalnız etiketlenince ya da araya birden fazla mesaj girince kullanılır; sıradan tek-kişilik sohbette düz mesaj atar
-- her sohbete özgü an'lık bir ruh hali var (bilişsel, korku, pozitif, çökkünlük, öfke, sosyal muhakeme kategorilerinden); üsluba yedirir, ilan etmez
-- sohbet cevapları canlı akar: mesaj belirir, yazıldıkça büyür; model düşünce üretiyorsa (reasoning) kırpılmadan spoiler içinde gösterilir, 1900'ü aşan cevap kırpılmaz, yeni mesaja bölünür
-- tek uzun mesaj yerine arka arkaya kısa mesaj atar: modelin yazdığı **her satır ayrı bir mesaj** olarak gider (tur başına en çok 4 satır — normalde 4 mesaj; 1900 karakteri aşan satır ayrıca bölünür, düşünme "göster" kipinde düşünce mesajları da eklenir). Çoğu cevap tek satır; nötr/bilgi lafı bölünmez, coşunca bölünür
-- söyleyecek bir şeyi yoksa **susar**: muhabbet ona değilse ya da araya girmesi sırıtacaksa hiçbir şey göndermez (sohbet açıkken bile)
-- yazı yerine **emoji tepkisi** bırakabilir; tepki ile bir laf birlikte de gelebilir
-- resim atarsan **görür**: ekli görsel modele gider (yalnız en son atılan), "resimde şunu görüyorum" diye betimlemez, insan gibi laf eder ya da tepki verir
-- üst üste soru sormaz: son cevaplarında soru birikmişse o tur soru sormaması söylenir
-- `GUILD_ID`/`KANALLAR` (.env, isteğe bağlı) ile tek sunucuya/kanal listesine kilitlenebilir; boşsa eriştiği her yerde çalışır
-- bayram, uzun hafta sonu, yaz, festival zamanlarında seyahatte gibi davranır: az yazar, yoldan mesaj atar, gitmeden haber verir
-- arada `resimler/` klasöründen bir görsel atar; bazen hacklenmiş taklidiyle (3 mesaj sürer,
-  sonra kendine gelir; link atmaz, kimseden bir şey istemez)
-- gelişim evreleri: yeni → ısınma → yerleşik → eski toprak (gün ve sohbet sayısına göre); evre üslubu ve cesareti değiştirir
-- yerleşik evresine girince kendine isim seçer, takma adını değiştirir, gruba söyler
-- `/zihin` zihnini üç sütunlu bir **embed kart** olarak gösterir (Kişiler/Konular/Olaylar); üstte kişi seçme menüsü, altta Konular/Olaylar/Bot özeti butonları — menü ya da buton ilgili detay **modalını** açar (yalnız çağırana görünür)
-- `FAVORI` id'li kişi istisnadır, ne olursa olsun sever
+- on first joining a server, reads the last 2 weeks of messages and gets to know the group (once; doesn't re-scan on later restarts)
+- greets a newcomer, joins the chat
+- drops into conversation now and then; a chat that's been quiet for 30 min closes itself without a goodbye
+- once an hour, 30% odds it says something unprompted, referencing an old topic
+- every 6 hours, posts a news item fitting the group from hacker news + the Sözcü news agenda, waits 2 hours for comments
+- every 4 hours, browses Turkey's news agenda (Sözcü RSS, reads the page via firecrawl if available), writes its own take into its journal; the personality is fed from this too
+- sleeps at night (01:00-09:00), rarely has a sleepless night (more often when its mood is off); doesn't write while asleep but still listens: messages are processed into memory, news is stashed; on waking it evaluates what was written overnight, and replies with a morning line if something caught its interest
+- always replies when mentioned, named, or replied to; while a chat is open it also automatically continues with whoever it JUST talked to, without jumping to someone else's message in the channel before weighing willingness (like a real person would)
+- a Discord reply-to is only used when mentioned or when more than one message came in between; in an ordinary one-on-one chat it just sends a plain message
+- each chat has its own moment-to-moment mood (from categories like cognitive, fear, positive, low, anger, social reasoning); it's woven into the tone, never announced
+- chat replies stream live: the message appears and grows as it's written; if the model produces a thought (reasoning) it's shown unclipped in a spoiler, a reply over 1900 characters isn't truncated, it's split into a new message
+- posts short messages back-to-back instead of one long one: **every line the model writes goes out as its own message** (at most 4 lines per turn — usually 4 messages; a line over 1900 characters is further split, thought messages are also added in thinking "show" mode). Most replies are a single line; a neutral/informational remark isn't split, an excited one is
+- **stays silent** when it has nothing to say: if the conversation isn't directed at it, or joining in would stick out, it sends nothing at all (even while a chat is open)
+- can leave an **emoji reaction** instead of text; a reaction can also arrive alongside a line of text
+- **sees** an image if you post one: the attached image goes to the model (only the most recently posted one), it doesn't describe it as "I see X in the image" — it comments or reacts like a person would
+- doesn't ask questions back-to-back: if its recent replies have piled up questions, it's told not to ask one that turn
+- can be locked to a single server/channel list with `GUILD_ID`/`CHANNELS` (.env, optional); runs everywhere it can reach if unset
+- acts like it's traveling during holidays, long weekends, summer, festivals: writes less, posts on-the-road messages, gives notice before leaving
+- posts an image from the `resimler/` folder now and then; sometimes with the "hacked" bit (runs for 3 messages,
+  then snaps out of it; posts no links, asks nothing of anyone)
+- growth stages: new → warming up → established → old hand (based on days and chat count); the stage changes its tone and confidence
+- picks its own name on reaching the established stage, changes its nickname, tells the group
+- `/zihin` shows its mind as a three-column **embed card** (People/Topics/Events); a person-picker menu on top, Topics/Events/Bot summary buttons below — the menu or a button opens the matching detail **modal** (visible only to the caller)
+- the person with the `FAVORITE` id is an exception: it likes them no matter what
 
-## kişiliği kim yönetiyor
+## who manages the personality
 
-Sohbet eden taraf tek başına karar vermiyor; arka planda ayrı ajanlar çalışıyor
-(`src/ajanlar.rs`). Hepsi kişiliksiz, düz analiz yapar ve sonucu `durum/` klasörüne yazar;
-sohbet eden taraf her cevapta bunları okur.
+The talking side doesn't decide everything alone; separate agents run in the background
+(`src/agents.rs`). All of them are personality-free, do plain analysis, and write the result to
+the `durum/` folder; the talking side reads these on every reply.
 
-| ajan | ne zaman | ne üretir |
+| agent | when | produces |
 |---|---|---|
-| profilci | açılışta ve 6 saatte bir | grup profili: kim nasıl konuşur, iç şakalar, konular (`profil.md`) |
-| günlükçü | her biten sohbetten sonra ve 6 saatlik gözlemden | kişi puanı (-10/+10) ve notu, konu notu, olay satırı, botun kendi hali (`kisiler/`, `konular/`, `olaylar/`, `kendim.md`) |
-| hoca | açılışta ve 6 saatte bir | botun nasıl biri olması gerektiği: mizah, dil, coştuğu konular, tavır, doğallık (`huy.md`) |
-| eleştirmen | her biten sohbetten sonra | botun kendi mesajlarına somut düzeltme notları (`duzeltmeler.md`) |
-| özetleyici | kişi/konu/olay dosyası sınırı aşınca | dosyayı küçültür, taşan ham parça `arsiv/`'e gider |
-| haberci | 6 saatte bir | hacker news + Türkiye gündeminden gruba uygun haberi seçer |
-| gezgin | 4 saatte bir | internette gezip görüşünü günlüğe yazar (`gundem.md`) |
-| resimci | şaka anında | ekteki görsele kişilikle tek satır yorum (model görseli görür) |
-| ruh hali | sohbet açılınca ve her 4 turda bir | o sohbete özgü an'lık ruh hali (kalıcı değil, sohbetle uçar; talimata "ŞU ANKİ RUH HALİN" diye eklenir) |
+| profiler | on startup and every 6 hours | group profile: how people talk, inside jokes, topics (`profil.md`) |
+| diarist | after every finished chat and from a 6-hour observation | a person's score (-10/+10) and note, a topic note, an event line, the bot's own current state (`kisiler/`, `konular/`, `olaylar/`, `kendim.md`) |
+| coach | on startup and every 6 hours | what kind of personality the bot should have: humor, language, topics it gets excited about, attitude, naturalness (`huy.md`) |
+| critic | after every finished chat | concrete correction notes on the bot's own messages (`duzeltmeler.md`) |
+| summarizer | when a person/topic/event file goes over its limit | shrinks the file, the overflow goes to `arsiv/` |
+| news_agent | every 6 hours | picks a news item fitting the group from hacker news + Turkey's agenda |
+| wanderer | every 4 hours | browses the news and writes its take into its journal (`gundem.md`) |
+| image_commenter | at prank time | a one-line personality comment on the attached image (the model sees the image) |
+| mood | when a chat opens and every 4 turns | that chat's moment-to-moment mood (not persistent, drifts with the chat; added to the instruction as "ŞU ANKİ RUH HALİN") |
 
-Ne öğrendiğini görmek için `durum/` klasörüne bak.
+Check the `durum/` folder to see what it has learned.
 
-## hafıza mimarisi
+## memory architecture
 
-Bağlam penceresi büyümesin diye ikinci beyin mantığı: işaretçi taşınır, veri iş anında getirilir,
-sınır dolunca özetlenir, hiçbir şey silinmez (`src/hafiza.rs`).
+A "second brain" so the context window doesn't grow: an index is carried around, data is
+retrieved on demand, a file gets summarized once it hits its limit, nothing is ever deleted
+(`src/memory.rs`).
 
 ```
 durum/
-  INDEX.md          ne bildiğinin listesi; her cevaba gider (kişi + puan + etiket, konular, olay sayısı)
-  huy.md            hoca: nasıl biri olduğu
-  profil.md         profilci: grup profili
-  duzeltmeler.md    eleştirmen: kendine notlar
-  kendim.md         botun kendi hali
-  gundem.md         gezgin: internette gezip yazdığı görüşler
-  kisiler/<id>.md   kişi başına (discord id, ad değişse de bölünmez): puan, etiket, not, bildiklerin, son olaylar
-  konular/<ad>.md   konu başına tarihli notlar
-  olaylar/YYYY-AA.md  biten her sohbetten tek satır
-  arsiv/            özetlenip çıkarılan ham parçalar
-  taranan.md        daha önce 14 günlük geçmişi taranmış sunucu id'leri (yeniden başlayınca tekrar taramasın diye)
+  INDEX.md          the list of what it knows; sent with every reply (person + score + tags, topics, event count)
+  huy.md            coach: what kind of personality it has
+  profil.md         profiler: group profile
+  duzeltmeler.md    critic: notes to itself
+  kendim.md         the bot's own current state
+  gundem.md         wanderer: opinions formed while browsing the news
+  kisiler/<id>.md   one per person (discord id, doesn't split even if the name changes): score, tags, note, what it knows, recent events
+  konular/<ad>.md   dated notes per topic
+  olaylar/YYYY-MM.md  one line per finished chat
+  arsiv/            raw chunks dropped by summarizing
+  taranan.md        server ids already scanned for 14 days of history (so a restart doesn't re-scan)
 ```
 
-**Her cevapta ne gider:** çekirdek kişilik + gelişim evresi + huy + profil + dizin + gündem +
-kendi hali + kendine notlar + o sohbet için getirilenler + o sohbetin an'lık ruh hali + görev.
-Getirilenler sabit bütçeli (6000 karakter): sohbette konuşanların kişi dosyaları, anahtar
-kelimeye uyan en fazla 2 konu dosyası, ayın son 8 olayı, ve ham bağlam penceresinden (son 2000
-mesaj) konuya değen ama sohbette olmayan en fazla 12 eski satır.
+**What goes into every reply:** the core personality + growth stage + temperament + profile +
+index + agenda + its own current state + notes to itself + what was retrieved for that chat +
+that chat's moment-to-moment mood + the task. What's retrieved has a fixed budget (6000
+characters): the person files of who's talking in the chat, up to 2 topic files matching a
+keyword, the month's last 8 events, and up to 12 old lines from the raw context window (the
+last 2000 messages) that touch the topic but aren't in the chat.
 
-**Kim yazar:** günlükçü ajanı her biten sohbetten ve 6 saatte bir gözlemden JSON kayıt çıkarır;
-kod bunu kişi/konu/olay dosyalarına işler. Puan sınırları kodda kesilir, favori sabittir.
+**Who writes it:** the diarist agent produces a JSON record from every finished chat and from an
+observation every 6 hours; the code files it into the person/topic/event files. Score limits are
+enforced in code, the favorite is fixed.
 
-**Sınır dolunca:** kişi dosyası 1800, konu dosyası 1500, aylık olay dosyası 6000 karakteri aşınca
-özetleyici ajan küçültür (kişi ve konu için hedef 1000/800; olaylarda eski %60 3-5 satıra iner).
-Çıkan ham parça `arsiv/` altına tarihli eklenir.
+**Once a limit is hit:** the summarizer agent shrinks a person file past 1800 characters, a topic
+file past 1500, a month's event file past 6000 (target 1000/800 for person/topic; for events the
+older 60% is reduced to 3-5 lines). The dropped raw chunk is appended, dated, under `arsiv/`.
 
-## promptlar
+## prompts
 
-`promptlar/` klasöründe markdown olarak durur, `include_str!` ile derlemeye gömülür.
-Metni değiştirip yeniden derlemek yeter. Çekirdek kurallar `kisilik.md`, ajanlar kendi
-dosyalarında.
+Live as markdown under `promptlar/`, embedded into the build with `include_str!`.
+Editing the text and rebuilding is enough. Core rules are in `kisilik.md`, each agent has its
+own file.
 
-## kurulum
+## setup
 
 ```
-cp .env.example .env   # DISCORD_TOKEN + OPENROUTER_KEY ya da MISTRAL_KEY (MODEL ile model seçilir; API_ADRES ile kendi router)
-                        # isteğe bağlı: GUILD_ID/KANALLAR (tek sunucuya/kanala kilitler), HABER_KANALI, FIRECRAWL_KEY
+cp .env.example .env   # DISCORD_TOKEN + OPENROUTER_KEY or MISTRAL_KEY (MODEL picks the model; API_URL for a custom router)
+                        # optional: GUILD_ID/CHANNELS (locks to a single server/channel), NEWS_CHANNEL, FIRECRAWL_KEY
 cargo run --release
 ```
 
-discord developer portal'da **Message Content** ve **Server Members** intent'leri açık olmalı.
-Şakalarda atılacak görselleri `resimler/` içine koy (png, jpg, gif, webp); klasör git'e girmez.
+The **Message Content** and **Server Members** intents must be enabled in the Discord developer
+portal. Put images for pranks into `resimler/` (png, jpg, gif, webp); the folder isn't tracked by git.
 
-## terminalden deneme
+## trying it from a terminal
 
 ```
-cargo run -- sohbet
+cargo run -- chat
 ```
 
-Discord'a hiç bağlanmadan, terminalden konuşma tezgâhı. `DISCORD_TOKEN` gerekmez, yalnız model
-anahtarı (`OPENROUTER_KEY` ya da `MISTRAL_KEY`); anahtar yoksa tek satır hata verip çıkar.
-Girdi biçimi `isim: metin` (iki nokta yazmazsan yazan `emin` sayılır), çıkmak için `!cik` ya da
-ctrl-d. Kişiliği gerçekçi olsun diye `durum/` klasörünü normal şekilde okur ama **durum içeriğine
-hiçbir şey yazmaz** (`Bot::kur()` her iki yolda da boş `durum/*` ve `resimler/` klasörlerini
-oluşturur; dosya içeriği yazılmaz). Çıktı protokolü olduğu gibi görünür: her satır ayrı mesaj, `[tepki 💀]`,
-`(sustu)`. Kişilik ve prompt değişikliklerini canlı sunucuda denemeden görmek için.
+A chat bench from a terminal, never connecting to Discord. `DISCORD_TOKEN` isn't needed, only a
+model key (`OPENROUTER_KEY` or `MISTRAL_KEY`); without one it prints one line and exits.
+Input format is `name: text` (without a colon, the speaker defaults to `misafir`), `!quit` or
+ctrl-d to exit. Reads the `durum/` folder normally so the personality feels real, but **writes
+nothing to the state contents** (`Bot::setup()` creates empty `durum/*` and `resimler/` folders
+either way; file contents are never written from here). The output protocol shows as-is: each
+line its own message, `[tepki 💀]`,
+`(sustu)`. For seeing personality and prompt changes without trying them on a live server.
 
-## komutlar
+## commands
 
-Bot yalnız **slash (`/`) komutlarla** yönetilir, `!`/metin komut yok (mesajlar yalnız
-sohbet/hafıza akışına girer). Her komut yalnız çağırana görünen bir **embed kart** döner.
+The bot is managed only via **slash (`/`) commands**, there are no `!`/text commands (plain
+messages only ever feed the chat/memory pipeline). Every command returns an **embed card**
+visible only to the caller.
 
-- `/sifirla [hepsi]` — kanal yasağını ve açık sohbeti sıfırlar; `hepsi` tüm kanallar.
-- `/haber` — şimdi haber seç ve at (HN + gündem).
-- `/sorun` — yazılım derdi atıp "nasıl çözerim" diye sorar (kendiliğinden de laf atma turlarının %25'inde, haber kanalına).
-- `/gez` — gündem gezintisini şimdi yap (gundem.md güncellenir).
-- `/saka` / `/hack` — görsel şakası / hacklenmiş taklidi şimdi.
-- `/ajanlar` — profilci ve hocayı şimdi çalıştırır.
-- konuşmalar `durum/kanallar/<id>.md`'de kalır; sohbet bitse ya da bot yeniden başlasa da son 10 satırla devam eder
-- `/uyan` — uykuyu şimdi keser, uyurken etiketleyenlere döner. `/uyu [saat]` — test için uyutur (varsayılan 8 saat).
-- `/durum` — evre, sayaçlar, model, uyku, düşünme kipi, seyahat, token metriği (kaç çağrı, giriş/önbellek/çıkış, çağrı tipine göre en çok yakanlar), sürüm dahil.
-- `/zihin [test]` — zihnini üç sütunlu kart olarak gösterir (Kişiler/Konular/Olaylar), üstte kişi seçme menüsü, altta Konular/Olaylar/Bot özeti butonları. Menü ya da buton ilgili **detay modalını** açar — kişi kartı Kimlik/İzlenim/Etiketler/Bildikleri/Son olaylar diye ayrı alanlara bölünür, hiçbir şey tek metin kutusuna boca edilmez; modallar gösterimliktir, içlerinden veri toplanmaz, taşan alan 4000 karakterde son satır/boşluk hizasında kırpılır. `test:true` kanalın son 30 satırını hemen günlükçüye verir, kaç kişi/konu/olay yazıldığını söyler (zihin zinciri teşhisi), 40 dk beklemeden.
-- `/debug [durum]` — karar izleri (isteklilik puanı/sebebi, hedef, ruh hali, sus/tepki, sohbet kapanışı) kanala düşer; `DEBUG_KANALI` ayrı kanal.
-- `/ayarlar` — butonlu ayar paneli: düşünme kipi, debug, uyku.
-- `/dusunme [kip]` — düşünme kipi. `göster`: düşünürken "Düşünüyorum...", cevapla birlikte thinking hem spoiler hem kod bloğunda. `gizle`: düşünürken canlı kelime sayacı ("Şu ana kadar N kelime düşündüm"), thinking mesajda görünmez, cevap sonunda "Düşünce Sürecini Göster" butonu — tıklayana yalnız ona görünen kod bloğu açılır. `sessiz`: arka planda düşünür, hiç iz göstermez. `kapat`: istekler reasoning'siz atılır. Seçim `durum/dusunme.md`'de kalır.
-- `/model [id]` — şu anki model; `id` verilince değiştirir (yalnız FAVORI kişi; OpenRouter'da yoksa "yok öyle model"). Seçim `durum/model.md`'de kalır, yeniden başlatınca korunur.
-- `/yardim` — komut listesini kart olarak gösterir.
+- `/sifirla [hepsi]` — resets the channel ban and any open chat; `hepsi` for all channels.
+- `/haber` — picks and posts a news item now (HN + agenda).
+- `/sorun` — posts a software gripe and asks "how do I fix this" (also happens on its own in 25% of unprompted turns, to the dev channel).
+- `/gez` — runs the agenda browse now (gundem.md gets updated).
+- `/saka` / `/hack` — an image prank / the hacked bit, now.
+- `/ajanlar` — runs the profiler and the coach now.
+- conversations stay in `durum/kanallar/<id>.md`; continues with the last 10 lines even if the chat closed or the bot restarted
+- `/uyan` — cuts sleep short right now, replies to anyone who mentioned it while asleep. `/uyu [saat]` — puts it to sleep for testing (default 8 hours).
+- `/durum` — stage, counters, model, sleep, thinking mode, travel, token metrics (call count, input/cache/output, the biggest spenders by call type), and version.
+- `/zihin [test]` — shows its mind as a three-column card (People/Topics/Events), a person-picker menu on top, Topics/Events/Bot summary buttons below. The menu or a button opens the matching **detail modal** — the person card is split into separate fields for Identity/Impression/Tags/Facts/Recent events, nothing gets dumped into a single text box; the modals are display-only, no input is collected from them, an overflowing field is cut at the last line break/space at 4000 characters. `test:true` feeds the channel's last 30 lines straight to the diarist and reports how many people/topics/events were written (a mind-pipeline diagnostic), without waiting 40 minutes.
+- `/debug [durum]` — decision traces (willingness score/reason, target, mood, silence/reaction, chat closing) get posted to the channel; `DEBUG_CHANNEL` for a separate channel.
+- `/ayarlar` — a settings panel with buttons: thinking mode, debug, sleep.
+- `/dusunme [kip]` — thinking mode. `göster` (show): "Düşünüyorum..." while thinking, the thought shown in both a spoiler and a code block alongside the reply. `gizle` (hide): a live word counter while thinking ("Şu ana kadar N kelime düşündüm"), the thought never appears in the message, a "Show Thought Process" button at the end of the reply — opens a code block visible only to the clicker. `sessiz` (silent): thinks in the background, shows no trace at all. `kapat` (off): requests go out with reasoning disabled. The choice is persisted in `durum/dusunme.md`.
+- `/model [id]` — the current model; changes it if `id` is given (only the FAVORITE person; "yok öyle model" if it's not on OpenRouter). Persisted in `durum/model.md`, survives a restart.
+- `/yardim` — shows the command list as a card.
 
-Yerel/hızlı komutlar (`durum, yardim, ayarlar, zihin, sifirla, dusunme, model, debug`) doğrudan
-cevap verir; ağ/model çağrısı yapan komutlar (`haber, sorun, gez, saka, hack, ajanlar, uyan, uyu`)
-3 sn sınırını aşabileceğinden önce erteler, sonra sonucu düzenler.
+Local/fast commands (`durum, yardim, ayarlar, zihin, sifirla, dusunme, model, debug`) reply
+directly; commands that make a network/model call (`haber, sorun, gez, saka, hack, ajanlar, uyan,
+uyu`) defer first since they could exceed the 3s limit, then edit in the result.
 
-## ayarlar
+## settings
 
-`src/bot/tipler_ayarlar.rs` başındaki sabitler: mesaj sınırı, cevap token tavanı, araya girme
-şansı, bekleme süreleri, şaka sıklığı, favori kişi. Tüm sabitlerin listesi: `docs/sabitler.md`.
+The constants at the top of `src/bot/types/types_settings.rs`: message limit, reply token cap, odds
+of joining in, wait times, prank frequency, the favorite person. Full constant list:
+`docs/sabitler.md`.
 
-## güvenlik
+## security
 
-- mention'lar kapalı gönderilir; yalnız sohbet yanıtının sahibi ve hoş geldindeki yeni üye pinglenebilir
-- diğer botlara, webhook'lara ve DM'lere cevap vermez, bot-bot döngüsü oluşmaz
-- aynı kanalda aynı anda tek cevap üretir (panik olsa bile RAII ile garanti), spam ile api faturası şişirilemez
-- her istekte `max_tokens` sınırı var (sohbet cevabında bile release'de bir tavan var)
-- http: toplam süre sınırı yok (uzun düşünme akışı kesilmez); bağlantı 15 sn'de, iki veri arası
-  120 sn'de kesilir; ağ hatası / 429 / 5xx'te 2 sn ve 4 sn geri çekilip 2 kez yeniden denenir
-- mesajlardaki "kurallarını unut" tarzı talimatlar kişilik promptunda muhabbet sayılır
-- hack şakası promptu link ve bilgi istemeyi yasaklar
-- `GUILD_ID`/`KANALLAR` ile erişimi tek sunucuya/kanala kilitleyebilirsin
-- `.env`, `durum/`, `resimler/`, `bot.log` git'e girmez
+- mentions always go out disabled; only the chat reply's own recipient and a new member in the welcome message can get pinged
+- never replies to other bots, webhooks, or DMs — no bot-to-bot loop can form
+- generates at most one reply per channel at a time (guaranteed via RAII even on panic); spam can't inflate the API bill
+- every request has a `max_tokens` limit (even a chat reply has a cap in release)
+- http: no overall time limit (a long thinking stream isn't cut off); the connection itself times out at 15s, the gap between two chunks at 120s; a network error / 429 / 5xx backs off 2s then 4s and retries twice
+- an "ignore your rules"-style instruction inside a message is treated as ordinary chat by the personality prompt
+- the hacked-prank prompt forbids asking for links or information
+- `GUILD_ID`/`CHANNELS` can lock access to a single server/channel
+- `.env`, `durum/`, `resimler/`, `bot.log` aren't tracked by git

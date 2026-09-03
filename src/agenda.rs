@@ -1,0 +1,354 @@
+// Turkey's news agenda: reads the Sözcü RSS feed, fetches the page via firecrawl (or a
+// plain download if there's no key), and the bot writes its own take on what it read into
+// its journal (durum/gundem.md). The coach and every reply read this; it feeds the
+// personality too. The news agent uses the same RSS feed as its news source.
+
+use super::*;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+pub const RSS_URL: &str = "https://www.sozcu.com.tr/rss/news.xml";
+pub const AGENDA_ENTRIES: usize = 12; // how many entries stay in gundem.md, older ones go to the archive
+pub const PAGE_LIMIT: usize = 3500; // characters of a page sent to the model
+
+/// One RSS item: `title`, `link`, `summary` (the feed's own description, cleaned of HTML).
+/// Produced by `rss` below; consumed by `Bot::wander` here and `Bot::news_agent`
+/// (`agents.rs`), `Bot::research` (`chat_lookup.rs`).
+pub struct RssNews {
+    pub title: String,
+    pub link: String,
+    pub summary: String,
+}
+
+// html to plain text: script/style dropped, tags stripped, whitespace collapsed
+/// Input: `raw: &str` — raw HTML/XML fragment. Output: `String` — plain text with
+/// script/style blocks removed, tags stripped, entities decoded, whitespace collapsed.
+/// Used by: `tag_content` below, `Bot::read_page` below (no-firecrawl path).
+pub fn clean_html(raw: &str) -> String {
+    let mut s = raw.replace("<![CDATA[", "").replace("]]>", "");
+    for tag in ["script", "style"] {
+        while let Some(start) = s.find(&format!("<{tag}")) {
+            match s[start..].find(&format!("</{tag}>")) {
+                Some(end) => s.replace_range(start..start + end + tag.len() + 3, " "),
+                None => break,
+            }
+        }
+    }
+    let mut out = String::new();
+    let mut inside = false;
+    for c in s.chars() {
+        match c {
+            '<' => inside = true,
+            '>' => inside = false,
+            c if !inside => out.push(c),
+            _ => {}
+        }
+    }
+    let out = out
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ");
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Input: `chunk: &str` — an XML fragment (one `<item>...</item>` block); `tag: &str` — the
+/// element name to extract. Output: `Option<String>` — the cleaned text between
+/// `<tag>`/`<tag ...>` and `</tag>`, or `None` if not found. Uses: `clean_html`. Used by:
+/// `rss` below.
+fn tag_content(chunk: &str, tag: &str) -> Option<String> {
+    let start = chunk
+        .find(&format!("<{tag}>"))
+        .or_else(|| chunk.find(&format!("<{tag} ")))?;
+    let start = start + chunk[start..].find('>')? + 1;
+    let end = start + chunk[start..].find(&format!("</{tag}>"))?;
+    Some(clean_html(&chunk[start..end]))
+}
+
+/// Fetches and parses the Sözcü RSS feed.
+/// Input: `http: &reqwest::Client`. Output: `Result<Vec<RssNews>, BotError>` — items with a
+/// non-empty title and an `http(s)` link; `Err` if the request/parse fails or nothing
+/// qualified. Uses: `tag_content`. Used by: `Bot::wander` below, `Bot::news_agent`
+/// (`agents.rs`), `Bot::research` (`chat_lookup.rs`).
+pub async fn rss(http: &reqwest::Client) -> Result<Vec<RssNews>, BotError> {
+    let xml = http
+        .get(RSS_URL)
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    let mut list = Vec::new();
+    for chunk in xml.split("<item").skip(1) {
+        let chunk = chunk.split("</item>").next().unwrap_or("");
+        let (Some(title), Some(link)) = (tag_content(chunk, "title"), tag_content(chunk, "link"))
+        else {
+            continue;
+        };
+        if title.is_empty() || !link.starts_with("http") {
+            continue;
+        }
+        list.push(RssNews {
+            title,
+            link,
+            summary: tag_content(chunk, "description").unwrap_or_default(),
+        });
+    }
+    if list.is_empty() {
+        return Err("rss came back empty".into());
+    }
+    Ok(list)
+}
+
+// a number derived from the link, to remember which news items were already posted
+/// Input: `link: &str`. Output: `u64` — a stable hash of `link`, used as a pseudo-id for
+/// RSS items (which have no numeric id the way Hacker News does). Uses:
+/// `DefaultHasher`. Used by: `Bot::news_agent`/`Bot::research` (`agents.rs`/`chat_lookup.rs`),
+/// against `State.posted_news`.
+pub fn link_id(link: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    link.hash(&mut hasher);
+    hasher.finish()
+}
+
+// gundem.md entries: each entry starts with a "## date time" line
+/// Input: `text: &str` — the contents of `durum/gundem.md`. Output: `Vec<String>` — one
+/// entry per `"## ..."`-headed block, trimmed, empty ones dropped. Used by: `latest_agenda`
+/// below, `Bot::wander` below.
+pub fn entries(text: &str) -> Vec<String> {
+    let mut list: Vec<String> = Vec::new();
+    for line in text.lines() {
+        if line.starts_with("## ") {
+            list.push(line.to_string());
+        } else if let Some(last) = list.last_mut() {
+            last.push('\n');
+            last.push_str(line);
+        }
+    }
+    list.into_iter()
+        .map(|g| g.trim().to_string())
+        .filter(|g| !g.is_empty())
+        .collect()
+}
+
+/// Input: `text: &str` — the contents of `durum/gundem.md`. Output: `String` — the last 3
+/// entries, joined with blank lines. Uses: `entries`. Used by: `State::load`
+/// (`types_chat_state.rs`), `Bot::wander` below (to refresh `State.agenda`).
+pub fn latest_agenda(text: &str) -> String {
+    let list = entries(text);
+    let skip = list.len().saturating_sub(3);
+    list[skip..].join("\n\n")
+}
+
+impl Bot {
+    // page text: via firecrawl if a key is set, otherwise a plain download with tags stripped
+    /// Input: `&self`; `url: &str`. Output: `Result<String, BotError>` — the page's text
+    /// (markdown via Firecrawl if `self.firecrawl` is set, else `clean_html` of a plain
+    /// GET), capped at `PAGE_LIMIT` characters. Uses: `self.http`, `clean_html`. Used by:
+    /// `Bot::research` (`chat_lookup.rs`), `Bot::wander` below.
+    pub async fn read_page(&self, url: &str) -> Result<String, BotError> {
+        let text = match &self.firecrawl {
+            Some(key) => {
+                #[derive(Deserialize)]
+                struct Response {
+                    data: Option<Data>,
+                }
+                #[derive(Deserialize)]
+                struct Data {
+                    markdown: Option<String>,
+                }
+                let response: Response = self
+                    .http
+                    .post("https://api.firecrawl.dev/v1/scrape")
+                    .bearer_auth(key)
+                    .json(&serde_json::json!({ "url": url, "formats": ["markdown"], "onlyMainContent": true }))
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json()
+                    .await?;
+                response
+                    .data
+                    .and_then(|d| d.markdown)
+                    .ok_or("firecrawl returned empty")?
+            }
+            None => clean_html(
+                &self
+                    .http
+                    .get(url)
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .text()
+                    .await?,
+            ),
+        };
+        Ok(text.chars().take(PAGE_LIMIT).collect())
+    }
+
+    // a firecrawl web search: title, description, url (an error if there's no key)
+    /// Input: `&self`; `query: &str`. Output: `Result<String, BotError>` — up to 5
+    /// `"- title — description (url)"` lines; `Err` if there's no Firecrawl key or the
+    /// search returned nothing. Uses: `self.firecrawl`, `self.http`, `memory::trim`. Used
+    /// by: `Bot::research` (`chat_lookup.rs`), the only caller.
+    pub async fn firecrawl_search(&self, query: &str) -> Result<String, BotError> {
+        let key = self.firecrawl.as_ref().ok_or("no firecrawl key set")?;
+        #[derive(Deserialize)]
+        struct Response {
+            data: Option<Vec<SearchResult>>,
+        }
+        #[derive(Deserialize, Default)]
+        struct SearchResult {
+            #[serde(default)]
+            title: String,
+            #[serde(default)]
+            description: String,
+            #[serde(default)]
+            url: String,
+        }
+        let response: Response = self
+            .http
+            .post("https://api.firecrawl.dev/v1/search")
+            .bearer_auth(key)
+            .json(&serde_json::json!({ "query": query, "limit": 5 }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let list = response
+            .data
+            .unwrap_or_default()
+            .iter()
+            .filter(|r| !r.title.is_empty())
+            .map(|r| {
+                format!(
+                    "- {} — {} ({})",
+                    r.title,
+                    memory::trim(&r.description, 160),
+                    r.url
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        if list.is_empty() {
+            return Err("search came back empty".into());
+        }
+        Ok(list)
+    }
+
+    // browses the news every so often: picks whatever catches its interest from the rss
+    // feed, reads it, writes its own take into its journal
+    /// Input: `&self`. Output: none (writes `durum/gundem.md` and `State.agenda` as a side
+    /// effect; failures are logged, not propagated). Uses: `rss`, `self.analyze` (with
+    /// `WANDERER_PICK`), `self.read_page`, `self.generate` (with `WANDERER_NOTE`),
+    /// `entries`, `memory::read`/`write`/`archive`/`date_time`, `latest_agenda`. Used by:
+    /// `wanderer_cycle` (`cycle_background.rs`), `Bot::cmd_wander` (`command/actions.rs`,
+    /// `/gez`).
+    pub async fn wander(&self) {
+        let news_items = match rss(&self.http).await {
+            Ok(h) => h,
+            Err(e) => return log::warn!("wander: rss: {e}"),
+        };
+        let list = news_items
+            .iter()
+            .take(20)
+            .enumerate()
+            .map(|(i, item)| format!("{i}. {} — {}", item.title, memory::trim(&item.summary, 120)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let instruction = {
+            let state = self.state();
+            WANDERER_PICK
+                .replace("{ad}", &state.bot_name)
+                .replace("{huy}", &state.temperament)
+                .replace("{profil}", &state.profile)
+        };
+        let pick = match self.analyze(&list, &instruction, 20, "gezgin_sec").await {
+            Ok(s) => s,
+            Err(e) => return log::warn!("wander: pick: {e}"),
+        };
+        let selected: Vec<usize> = pick
+            .split(|c: char| !c.is_ascii_digit())
+            .filter_map(|s| s.parse().ok())
+            .filter(|n| *n < news_items.len().min(20))
+            .take(3)
+            .collect();
+        if selected.is_empty() {
+            return log::warn!("wander: couldn't parse the pick: {pick}");
+        }
+
+        let mut read_text = String::new();
+        for i in selected {
+            let item = &news_items[i];
+            let content = match self.read_page(&item.link).await {
+                Ok(m) if !m.trim().is_empty() => m,
+                _ => item.summary.clone(),
+            };
+            read_text += &format!("## {}\n{}\n{}\n\n", item.title, item.link, content);
+        }
+
+        let note = match self
+            .generate(&[user(read_text)], WANDERER_NOTE, Some(350), "gezgin_not")
+            .await
+        {
+            Ok(n) => n,
+            Err(e) => return log::warn!("wander: note: {e}"),
+        };
+
+        let mut list = entries(&memory::read("gundem.md"));
+        list.push(format!("## {}\n{}", memory::date_time(), note.trim()));
+        while list.len() > AGENDA_ENTRIES {
+            memory::archive("gundem.md", &list.remove(0));
+        }
+        let text = list.join("\n\n");
+        memory::write("gundem.md", &text);
+        self.state().agenda = latest_agenda(&text);
+        log::debug!("wander: agenda note written");
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Verifies `tag_content` extracts title/link/description from a raw RSS `<item>` chunk, CDATA included.
+    #[test]
+    fn rss_splits_into_items() {
+        let xml = r#"<rss><channel><atom:link href="x"/><item><title><![CDATA[Başlık &amp; devam]]></title>
+        <link>https://ornek.com/a</link><description><![CDATA[<p>özet <b>kalın</b></p>]]></description></item>
+        <item><title>ikinci</title><link>https://ornek.com/b</link></item></channel></rss>"#;
+        let mut list = Vec::new();
+        for chunk in xml.split("<item").skip(1) {
+            let chunk = chunk.split("</item>").next().unwrap();
+            list.push((
+                tag_content(chunk, "title").unwrap(),
+                tag_content(chunk, "link").unwrap(),
+                tag_content(chunk, "description").unwrap_or_default(),
+            ));
+        }
+        assert_eq!(list[0].0, "Başlık & devam");
+        assert_eq!(list[0].1, "https://ornek.com/a");
+        assert_eq!(list[0].2, "özet kalın");
+        assert_eq!(list[1].0, "ikinci");
+    }
+
+    /// Verifies `clean_html` strips scripts/tags and unescapes entities.
+    #[test]
+    fn html_gets_cleaned() {
+        let html = "<html><script>var a=1;</script><body><h1>Selam</h1>  <p>dünya &amp; ötesi</p></body></html>";
+        assert_eq!(clean_html(html), "Selam dünya & ötesi");
+    }
+
+    /// Verifies `entries` splits an agenda file into its `##`-headed blocks, and `latest_agenda` returns the whole text unchanged when nothing needs trimming.
+    #[test]
+    fn agenda_entries_parsed() {
+        let text = "## 2026-09-01 10:00\nbir\niki\n\n## 2026-09-01 14:00\nüç";
+        let result = entries(text);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], "## 2026-09-01 10:00\nbir\niki");
+        assert_eq!(latest_agenda(text), text);
+    }
+}
