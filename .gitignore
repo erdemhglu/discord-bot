@@ -1,6 +1,6 @@
 .env
 target/
 durum/
-resimler/*
-!resimler/.gitkeep
+photos/*
+!photos/.gitkeep
 bot.log

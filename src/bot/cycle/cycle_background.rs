@@ -78,7 +78,7 @@ async fn poke_cycle(bot: Arc<Bot>, ctx: Context) {
     }
 }
 
-// every so often, posts an image from the resimler/ folder; sometimes with the hacked bit
+// every so often, posts an image from the photos/ folder; sometimes with the hacked bit
 /// Input: `bot: Arc<Bot>`; `ctx: Context`. Output: none. Uses: `sleep::is_awake`,
 /// `travel::now`, `idle_channel`, `bot.run_prank`. Used by: `Handler::ready`
 /// (`handler_event.rs`), via `run_cycle("prank", ...)`.

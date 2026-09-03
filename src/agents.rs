@@ -30,7 +30,7 @@ pub struct DiaristSummary {
 
 /// Deserialize target for the diarist's JSON reply (see `prompts/gunlukcu.md`). Field
 /// names are Turkish on purpose — they must match the JSON keys the model is instructed to
-/// produce (see AGENTS.md rule 8 / `docs/sozluk.md`). Holds `olay` (one-line event summary),
+/// produce (see AGENTS.md rule 8 / `docs/glossary.md`). Holds `olay` (one-line event summary),
 /// `kisiler`/`konular` (per-person/per-topic records, see `PersonRecord`/`TopicRecord`
 /// below), `kendim` (the bot's own updated state, if it changed). Parsed by `Bot::diarist`
 /// below, the only consumer.
@@ -481,7 +481,7 @@ impl Bot {
 
     // shows the model the image and gets a one-line personality comment; if the model
     // doesn't support vision, it writes blind
-    /// Input: `&self`; `path: &PathBuf` — an image file (from `resimler/`). Output:
+    /// Input: `&self`; `path: &PathBuf` — an image file (from `photos/`). Output:
     /// `Result<String, BotError>` — a one-line personality comment. Uses: `system_text`
     /// (`provider_system.rs`, with `IMAGE_POST`), `base64::Engine`, `self.ask_raw`
     /// (vision call), `self.generate` (blind fallback if the vision call fails), `clean`.
@@ -554,7 +554,7 @@ pub struct News {
     pub source: &'static str,
 }
 
-// a random image from the resimler/ folder
+// a random image from the photos/ folder
 /// Input: none. Output: `Option<PathBuf>` — a random image file from `IMAGE_DIR`
 /// (png/jpg/jpeg/gif/webp), or `None` if the folder is missing/empty. Used by:
 /// `Bot::run_prank` (`cycle_news.rs`), the only caller.

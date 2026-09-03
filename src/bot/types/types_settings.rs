@@ -80,7 +80,7 @@ const REASONING_MANDATORY_BASE: u32 = 500;
 const REASONING_BUDGET_BASE: u32 = 1500;
 const FAVORITE: u64 = 259669117248864257; // this person is always liked, no matter what
 const WANDERER_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60); // how often it browses the news
-const IMAGE_DIR: &str = "resimler"; // images available for pranks (on-disk folder name, kept as-is)
+const IMAGE_DIR: &str = "photos"; // images available for pranks (on-disk folder name)
 const STATE_DIR: &str = "durum"; // where the agents write what they've learned (on-disk folder name, kept as-is)
                                   // version string: Cargo.toml plus the commit/date build.rs pulled from git at
                                   // build time. Shown in !status and announced in-channel on restart, so it's
