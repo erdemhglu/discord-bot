@@ -1,5 +1,7 @@
 # discord-bot
 
+*Read this in other languages: [Türkçe](README.tr.md)*
+
 **A Discord bot with a personality that grows on its own.**
 
 It doesn't run off a static system prompt. A set of background agents reads every
