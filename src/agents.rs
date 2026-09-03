@@ -255,13 +255,8 @@ impl Bot {
     /// every write), `Bot::cmd_mind`'s `test:true` (`command/cards.rs`, transitively via
     /// `diarist`).
     pub async fn summarizer(&self) {
-        for (kind, path) in memory::over_limit() {
-            let old = std::fs::read_to_string(&path).unwrap_or_default();
-            let rel = path
-                .strip_prefix(STATE_DIR)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .to_string();
+        for (kind, rel) in memory::over_limit() {
+            let old = memory::read(&rel);
 
             let result = match kind {
                 "kisi" => {

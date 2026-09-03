@@ -58,22 +58,28 @@ Check the `durum/` folder to see what it has learned.
 ## memory architecture
 
 A "second brain" so the context window doesn't grow: an index is carried around, data is
-retrieved on demand, a file gets summarized once it hits its limit, nothing is ever deleted
-(`src/memory.rs`).
+retrieved on demand, a record gets summarized once it hits its limit, nothing is ever deleted
+(`src/memory.rs`). Everything below lives in one embedded database, `durum/hafiza.redb`
+([redb](https://github.com/cberner/redb) — pure Rust, single file, ACID transactions), keyed
+by the same names a plain-file layout would have used — `arsiv/` is the one exception, kept as
+real markdown files since it's write-only and meant for a human to read, never the bot again.
+Migrating an older plain-markdown `durum/` tree: `cargo run -- migrate-durum` (non-destructive,
+see `src/migrate.rs`).
 
 ```
 durum/
-  INDEX.md          the list of what it knows; sent with every reply (person + score + tags, topics, event count)
-  huy.md            coach: what kind of personality it has
-  profil.md         profiler: group profile
-  duzeltmeler.md    critic: notes to itself
-  kendim.md         the bot's own current state
-  gundem.md         wanderer: opinions formed while browsing the news
-  kisiler/<id>.md   one per person (discord id, doesn't split even if the name changes): score, tags, note, what it knows, recent events
-  konular/<ad>.md   dated notes per topic
-  olaylar/YYYY-MM.md  one line per finished chat
-  arsiv/            raw chunks dropped by summarizing
-  taranan.md        server ids already scanned for 14 days of history (so a restart doesn't re-scan)
+  hafiza.redb       everything below, as one embedded database (redb)
+    INDEX.md          the list of what it knows; sent with every reply (person + score + tags, topics, event count)
+    huy.md            coach: what kind of personality it has
+    profil.md         profiler: group profile
+    duzeltmeler.md    critic: notes to itself
+    kendim.md         the bot's own current state
+    gundem.md         wanderer: opinions formed while browsing the news
+    kisiler/<id>.md   one per person (discord id, doesn't split even if the name changes): score, tags, note, what it knows, recent events
+    konular/<ad>.md   dated notes per topic
+    olaylar/YYYY-MM.md  one line per finished chat
+    taranan.md        server ids already scanned for 14 days of history (so a restart doesn't re-scan)
+  arsiv/            raw chunks dropped by summarizing — real files, human-inspection only
 ```
 
 **What goes into every reply:** the core personality + growth stage + temperament + profile +
@@ -120,11 +126,19 @@ cargo run -- chat
 A chat bench from a terminal, never connecting to Discord. `DISCORD_TOKEN` isn't needed, only a
 model key (`OPENROUTER_KEY` or `MISTRAL_KEY`); without one it prints one line and exits.
 Input format is `name: text` (without a colon, the speaker defaults to `misafir`), `!quit` or
-ctrl-d to exit. Reads the `durum/` folder normally so the personality feels real, but **writes
-nothing to the state contents** (`Bot::setup()` creates empty `durum/*` and `resimler/` folders
-either way; file contents are never written from here). The output protocol shows as-is: each
+ctrl-d to exit. Reads `durum/hafiza.redb` normally so the personality feels real, but **writes
+nothing to the state contents** (`Bot::setup()` opens/creates it either way; content is never
+written from here). The output protocol shows as-is: each
 line its own message, `[tepki 💀]`,
 `(sustu)`. For seeing personality and prompt changes without trying them on a live server.
+
+```
+cargo run -- migrate-durum [--from <dir>] [--to <redb-path>] [--dry-run] [--force]
+```
+
+One-time (safe to re-run) import of an older plain-markdown `durum/` tree into
+`durum/hafiza.redb`; see "memory architecture" above. Never touches Discord, never deletes or
+moves the source `.md` files.
 
 ## commands
 

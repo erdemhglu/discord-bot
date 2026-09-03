@@ -1,80 +1,197 @@
-// File-based memory, the "second brain" logic:
+// Memory, the "second brain" logic:
 //   - INDEX.md   the list of what it knows; sent with every reply (a pointer, not the data itself)
-//   - kisiler/   one file per person; only people talking in this chat get pulled in
-//   - konular/   one file per topic; pulled in by keyword match against the chat
+//   - kisiler/   one record per person; only people talking in this chat get pulled in
+//   - konular/   one record per topic; pulled in by keyword match against the chat
 //   - olaylar/   one line per finished chat, filed by month
-//   - arsiv/     raw chunks summarized out of files that hit their limit (nothing is ever deleted)
+//   - arsiv/     raw chunks summarized out of records that hit their limit (nothing is ever deleted)
 // Once a file hits its limit, the summarizer agent (agents.rs) shrinks it. The context
 // window doesn't grow: every reply gets the index plus whatever was retrieved for that
 // chat, so the budget stays constant.
+//
+// Everything above except `arsiv/` lives in one embedded database, `durum/hafiza.redb`
+// (redb — pure Rust, single file, ACID transactions; chosen over rusqlite specifically to
+// avoid a C dependency, see docs/kararlar.md). The design deliberately doesn't reshape the
+// data: every value stored is the exact same text a file held before this migration, keyed
+// by the same relative path string the file used to have (`"kisiler/1.md"`, `"profil.md"`,
+// ...) — so `Person::parse`/`Person::text`, `retrieve`, `keywords`, `trim`, `slug`, and every
+// external caller of `read`/`write` (their signatures are unchanged) needed no changes.
+// `arsiv/` stays real files on disk: write-mostly, human-inspection-only, never read back by
+// the bot — keeping it out of the transactional store avoids unbounded DB growth and keeps
+// its documented "for humans" purpose intact.
 
 use super::*;
+use redb::{Database, ReadableDatabase, ReadableTable, ReadableTableMetadata, TableDefinition};
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
-// writes go through a single lock and land atomically: two agents hitting the same file,
-// or the process dying mid-write, can't leave a half-written/corrupt file (temp file +
-// rename, atomic on the same filesystem)
-static WRITE_LOCK: Mutex<()> = Mutex::new(());
+// path -> the exact text a file held before the redb migration
+const CONTENT: TableDefinition<&str, &str> = TableDefinition::new("content");
+// path -> unix seconds of last write; replaces filesystem mtime for "most recently changed" ordering
+const MODIFIED: TableDefinition<&str, u64> = TableDefinition::new("modified");
 
-pub const PERSON_LIMIT: usize = 1800; // a person file gets summarized past this size
+static DB: OnceLock<Database> = OnceLock::new();
+// arsiv/ is the one thing still written as real files (see module doc above); this guards
+// just that narrow path — redb serializes its own writers internally, no lock needed there
+static ARCHIVE_LOCK: Mutex<()> = Mutex::new(());
+
+pub const PERSON_LIMIT: usize = 1800; // a person record gets summarized past this size
 pub const PERSON_TARGET: usize = 1000; // target size after summarizing
 pub const TOPIC_LIMIT: usize = 1500;
 pub const TOPIC_TARGET: usize = 800;
-pub const EVENT_LIMIT: usize = 6000; // a month's event file gets its older half summarized past this size
+pub const EVENT_LIMIT: usize = 6000; // a month's event record gets its older half summarized past this size
 pub const CONTEXT_BUDGET: usize = 6000; // total characters of memory retrieved for one reply
 pub const INDEX_PEOPLE: usize = 40; // max people shown in the index
 pub const FAVORITE_NOTE: &str = "canın ciğerin, ne yaparsa yapsın arkasındasın";
 
-// ---------- file operations ----------
+// ---------- database open + primitives ----------
 
-/// Input: `rel: &str` — a path relative to `STATE_DIR` (e.g. `"kisiler/1.md"`). Output:
-/// `PathBuf` — `STATE_DIR/rel`. Used throughout this module and by `over_limit` below.
-pub fn path(rel: &str) -> PathBuf {
-    Path::new(STATE_DIR).join(rel)
+/// Opens (creating if missing) the redb database at `path` and makes it the process-wide
+/// store every other function in this module reads/writes through. Input: `path: &Path`.
+/// Output: none (a failure to open is fatal — logged then the process can't proceed, same
+/// severity as today's directory-creation failures). Used by: `Bot::setup` (`setup.rs`),
+/// once, before `State::load` runs.
+pub fn init(path: &Path) {
+    let db = match Database::create(path) {
+        Ok(db) => db,
+        Err(e) => {
+            log::error!("couldn't open {}: {e}", path.display());
+            return;
+        }
+    };
+    // touch both tables once so they exist even on a brand new file (redb creates a table
+    // lazily on its first open in a write transaction)
+    if let Ok(txn) = db.begin_write() {
+        let _ = txn.open_table(CONTENT);
+        let _ = txn.open_table(MODIFIED);
+        let _ = txn.commit();
+    }
+    let _ = DB.set(db);
 }
 
-/// Input: `rel: &str`. Output: `String` — the file's contents, or `""` if it doesn't exist
-/// or can't be read. Uses: `path`. Used throughout the crate (`State::load`, agents,
-/// commands) wherever a `durum/` file is read.
+/// Input: none. Output: `&'static Database`. Panics if `init` hasn't run yet (a
+/// programming error, not a runtime condition — every real entry point calls `init` first).
+/// Used by every function below.
+fn db() -> &'static Database {
+    DB.get().expect("memory::init wasn't called")
+}
+
+/// Input: `rel: &str` — a path relative to `STATE_DIR` (e.g. `"kisiler/1.md"`), used as the
+/// database key. Output: `String` — the stored content, or `""` if there's no entry or the
+/// database can't be read. Used throughout the crate (`State::load`, agents, commands)
+/// wherever a durum record is read.
 pub fn read(rel: &str) -> String {
-    fs::read_to_string(path(rel)).unwrap_or_default()
+    let Ok(txn) = db().begin_read() else {
+        return String::new();
+    };
+    let Ok(table) = txn.open_table(CONTENT) else {
+        return String::new();
+    };
+    table
+        .get(rel)
+        .ok()
+        .flatten()
+        .map(|g| g.value().to_string())
+        .unwrap_or_default()
 }
 
-// writing to a temp file then renaming is atomic: even on a crash/kill, no reader ever
-// sees half-written content (`fs::write` alone doesn't guarantee that). The temp name is
-// fixed: WRITE_LOCK guarantees a single writer, so there's no need for a counter/pid to keep it unique
-/// Input: `rel: &str`; `content: &str` — the full new file content. Output: none (failures
-/// are logged, not propagated). Uses: `path`, `WRITE_LOCK`. Used throughout the crate
-/// wherever a whole `durum/` file is rewritten.
+/// Input: `rel: &str`; `content: &str` — the full new value. Output: none (failures are
+/// logged, not propagated). Uses: `db`, `now_unix`. Used throughout the crate wherever a
+/// whole durum record is rewritten.
 pub fn write(rel: &str, content: &str) {
-    let _lock = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let p = path(rel);
-    if let Some(parent) = p.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    // write to a temp file, then rename: a half-written file is never visible
-    let tmp = p.with_extension("tmp");
-    let result = fs::write(&tmp, content).and_then(|_| fs::rename(&tmp, &p));
-    if let Err(e) = result {
-        let _ = fs::remove_file(&tmp);
-        log::error!("couldn't write {}: {e}", p.display());
+    if let Err(e) = write_inner(rel, content) {
+        log::error!("couldn't write {rel}: {e}");
     }
 }
 
-// a real append instead of rewriting the whole file with a read+write
+fn write_inner(rel: &str, content: &str) -> Result<(), redb::Error> {
+    write_with_mtime_inner(rel, content, now_unix() as u64)
+}
+
+/// Input: `rel`; `content`; `modified: u64` — a specific unix timestamp instead of "now".
+/// Output: none (failures logged). Uses: `db`. Used by: `migrate::run`, to seed `MODIFIED`
+/// with each source file's real historical mtime instead of resetting every record's
+/// recency to migration day.
+pub(crate) fn write_with_mtime(rel: &str, content: &str, modified: u64) {
+    if let Err(e) = write_with_mtime_inner(rel, content, modified) {
+        log::error!("couldn't write {rel}: {e}");
+    }
+}
+
+fn write_with_mtime_inner(rel: &str, content: &str, modified: u64) -> Result<(), redb::Error> {
+    let txn = db().begin_write()?;
+    {
+        txn.open_table(CONTENT)?.insert(rel, content)?;
+        txn.open_table(MODIFIED)?.insert(rel, modified)?;
+    }
+    txn.commit()?;
+    Ok(())
+}
+
+/// Input: none. Output: `u64` — how many records `CONTENT` currently holds (0 if it can't
+/// be read). Uses: `db`. Used by: `migrate::run`, to refuse overwriting a populated target
+/// without `--force`.
+pub(crate) fn record_count() -> u64 {
+    let Ok(txn) = db().begin_read() else {
+        return 0;
+    };
+    let Ok(table) = txn.open_table(CONTENT) else {
+        return 0;
+    };
+    table.len().unwrap_or(0)
+}
+
+// a real append instead of read-modify-write from the caller's side; the get+insert
+// happens inside one write transaction, so it's atomic even under concurrent writers (redb
+// serializes write transactions internally — the get here can never race with another
+// writer's insert)
 /// Input: `rel: &str`; `line: &str` — one line to add (a trailing `\n` is added). Output:
-/// none (failures are logged). Uses: `path`, `WRITE_LOCK`. Used by: `archive`/`add_event`
-/// below.
+/// none (failures are logged). Uses: `db`, `now_unix`. Used by: `add_event` below.
 fn append(rel: &str, line: &str) {
-    let _lock = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let p = path(rel);
+    let result: Result<(), redb::Error> = (|| {
+        let txn = db().begin_write()?;
+        {
+            let mut table = txn.open_table(CONTENT)?;
+            let mut new_content = table
+                .get(rel)?
+                .map(|g| g.value().to_string())
+                .unwrap_or_default();
+            new_content.push_str(line);
+            new_content.push('\n');
+            table.insert(rel, new_content.as_str())?;
+            txn.open_table(MODIFIED)?.insert(rel, now_unix() as u64)?;
+        }
+        txn.commit()?;
+        Ok(())
+    })();
+    if let Err(e) = result {
+        log::error!("couldn't append to {rel}: {e}");
+    }
+}
+
+// a raw chunk dropped by summarizing goes to the archive; nothing is ever deleted. arsiv/
+// stays real files on disk (see module doc) — write-only, human-inspection-only, never read
+// back by the bot, so it's kept out of the transactional store on purpose.
+/// Input: `rel: &str` — the original record's key; `content: &str` — the chunk being
+/// dropped. Output: none. Uses: `archive_append`, `date_time`. Used by: `Bot::summarizer`
+/// (`agents.rs`), whenever a record shrinks.
+pub fn archive(rel: &str, content: &str) {
+    archive_append(
+        &format!("arsiv/{rel}"),
+        &format!("\n## {} öncesi\n{}", date_time(), content.trim_end()),
+    );
+}
+
+/// Input: `rel: &str` — path relative to `STATE_DIR`; `line: &str` — appended verbatim plus
+/// a trailing `\n`. Output: none (failures logged). Uses: `ARCHIVE_LOCK`. Used by: `archive`
+/// above, the only caller.
+fn archive_append(rel: &str, line: &str) {
+    let _lock = ARCHIVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let p = Path::new(STATE_DIR).join(rel);
     if let Some(parent) = p.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    // two write_all calls: no intermediate allocation just to format the line
     let result = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -86,17 +203,6 @@ fn append(rel: &str, line: &str) {
     if let Err(e) = result {
         log::error!("couldn't append to {}: {e}", p.display());
     }
-}
-
-// a raw chunk dropped by summarizing goes to the archive; nothing is ever deleted
-/// Input: `rel: &str` — the original file's path, relative to `STATE_DIR`; `content: &str`
-/// — the chunk being dropped. Output: none. Uses: `append`, `date_time`. Used by:
-/// `Bot::summarizer` (`agents.rs`), whenever a file shrinks.
-pub fn archive(rel: &str, content: &str) {
-    append(
-        &format!("arsiv/{rel}"),
-        &format!("\n## {} öncesi\n{}", date_time(), content.trim_end()),
-    );
 }
 
 /// Input: `name: &str`. Output: `String` — a lowercase, Turkish-letter-simplified,
@@ -164,19 +270,19 @@ pub fn date_from_unix(unix: i64) -> String {
 
 /// Input: none. Output: `String` — `"YYYY-MM"` (the first 7 characters of `date()`). Used
 /// by: `add_event`/`over_limit`/`retrieve` below, `Bot::send_news`/`news_cycle`
-/// (`cycle_news.rs`, `awaiting_comment` window's event file name).
+/// (`cycle_news.rs`, `awaiting_comment` window's event record name).
 pub fn month() -> String {
     date()[..7].to_string()
 }
 
-// ---------- person file ----------
+// ---------- person record ----------
 
-/// One `kisiler/<id>.md` file's parsed contents. Holds `id` (file key, Discord user id),
-/// `name`/`username`/`previous_names` (identity), `score` (-10..10), `tags`, `note`,
+/// One `kisiler/<id>.md` record's parsed contents. Holds `id` (record key, Discord user
+/// id), `name`/`username`/`previous_names` (identity), `score` (-10..10), `tags`, `note`,
 /// `facts`/`events` (the two bulleted lists). Round-trips through `parse`/`text` below.
 #[derive(Default, Clone)]
 pub struct Person {
-    pub id: u64,                     // file key; the discord user id
+    pub id: u64,                     // record key; the discord user id
     pub name: String,                // display name (global_name or username)
     pub username: String,            // discord username
     pub previous_names: Vec<String>, // earlier display names
@@ -188,7 +294,7 @@ pub struct Person {
 }
 
 impl Person {
-    /// Input: `id: u64`; `text: &str` — a `kisiler/<id>.md` file's contents. Output:
+    /// Input: `id: u64`; `text: &str` — a `kisiler/<id>.md` record's contents. Output:
     /// `Person`. Unknown lines are ignored; the field prefixes it looks for
     /// (`kullanici_adi:`, `eski_adlar:`, `puan:`, `etiket:`, `not:`) are Turkish on purpose
     /// — they're the on-disk format (see `docs/durum-dosyalari.md`), not translated so
@@ -243,7 +349,7 @@ impl Person {
         p
     }
 
-    /// Input: `&self`. Output: `String` — the `kisiler/<id>.md` file format (inverse of
+    /// Input: `&self`. Output: `String` — the `kisiler/<id>.md` record format (inverse of
     /// `parse`). Used by: `write_person` below.
     pub fn text(&self) -> String {
         let mut s = format!(
@@ -268,7 +374,7 @@ impl Person {
 }
 
 /// Input: `id: u64`. Output: `Person` — parsed from `kisiler/<id>.md`, or an empty
-/// `Person{id, ..}` if the file doesn't exist. Uses: `read`, `Person::parse`. Used by:
+/// `Person{id, ..}` if there's no record. Uses: `read`, `Person::parse`. Used by:
 /// `Bot::diarist` (`agents.rs`), `modal::person_modal`, `retrieve` below (via `read`
 /// directly, not this — see that function).
 pub fn read_person(id: u64) -> Person {
@@ -291,33 +397,34 @@ pub fn write_person(p: &Person) {
 
 // ---------- topics and events ----------
 
-// the check + header + line all happen under a single lock: two concurrent calls can't
-// duplicate the header or clobber each other's line (there used to be a gap between read->write->append)
-/// Input: `name: &str` — the topic name (used verbatim as the `# ` header on a new file,
-/// slugified for the filename); `note: &str` — the dated note to append. Output: none.
-/// Uses: `path`, `WRITE_LOCK`, `slug`, `date_time`. Used by: `Bot::diarist` (`agents.rs`),
-/// the only caller.
+/// Input: `name: &str` — the topic name (used verbatim as the `# ` header on a new record,
+/// slugified for the key); `note: &str` — the dated note to append. Output: none. Uses:
+/// `db`, `slug`, `date_time`, `now_unix`. Used by: `Bot::diarist` (`agents.rs`), the only
+/// caller.
 pub fn add_topic(name: &str, note: &str) {
-    let _lock = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let p = path(&format!("konular/{}.md", slug(name)));
-    if let Some(parent) = p.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    let empty = fs::metadata(&p).map(|m| m.len() == 0).unwrap_or(true);
-    let result = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&p)
-        .and_then(|mut f| {
-            let mut data = String::new();
-            if empty {
-                data.push_str(&format!("# {name}\netiket: \n\n"));
+    let rel = format!("konular/{}.md", slug(name));
+    let result: Result<(), redb::Error> = (|| {
+        let txn = db().begin_write()?;
+        {
+            let mut table = txn.open_table(CONTENT)?;
+            let existing = table
+                .get(rel.as_str())?
+                .map(|g| g.value().to_string())
+                .unwrap_or_default();
+            let mut new_content = existing.clone();
+            if existing.is_empty() {
+                new_content.push_str(&format!("# {name}\netiket: \n\n"));
             }
-            data.push_str(&format!("- {}: {}\n", date_time(), note.trim()));
-            f.write_all(data.as_bytes())
-        });
+            new_content.push_str(&format!("- {}: {}\n", date_time(), note.trim()));
+            table.insert(rel.as_str(), new_content.as_str())?;
+            txn.open_table(MODIFIED)?
+                .insert(rel.as_str(), now_unix() as u64)?;
+        }
+        txn.commit()?;
+        Ok(())
+    })();
     if let Err(e) = result {
-        log::error!("couldn't append to {}: {e}", p.display());
+        log::error!("couldn't append to {rel}: {e}");
     }
 }
 
@@ -331,23 +438,19 @@ pub fn add_event(channel: &str, event: &str) {
     );
 }
 
-// summaries for the modal display (mtime order, most recently changed first)
+// summaries for the modal display (most recently changed first)
 
-/// Input: none. Output: `Vec<Person>` — every `kisiler/*.md` file with a valid numeric id
-/// and non-empty name, most recently changed first. Uses: `files`, `Person::parse`. Used
-/// by: `modal::mind_embeds`/`person_options`, the `/zihin` card.
+/// Input: none. Output: `Vec<Person>` — every `kisiler/*` record with a valid numeric id
+/// and non-empty name, most recently changed first. Uses: `files`, `stem`, `Person::parse`.
+/// Used by: `modal::mind_embeds`/`person_options`, the `/zihin` card.
 pub fn person_summaries() -> Vec<Person> {
     let mut list = Vec::new();
-    for path in files("kisiler") {
-        // filename is id-based; old slug-named files (id can't be parsed) are skipped
-        let Some(id) = path
-            .file_stem()
-            .and_then(|f| f.to_str())
-            .and_then(|f| f.parse::<u64>().ok())
-        else {
+    for key in files("kisiler") {
+        // key tail is id-based; old slug-keyed records (id can't be parsed) are skipped
+        let Some(id) = stem(&key).parse::<u64>().ok() else {
             continue;
         };
-        let person = Person::parse(id, &fs::read_to_string(&path).unwrap_or_default());
+        let person = Person::parse(id, &read(&key));
         if person.name.is_empty() {
             continue;
         }
@@ -364,15 +467,16 @@ pub fn topic_summaries() -> Vec<(String, String)> {
     files("konular")
         .into_iter()
         .take(30)
-        .map(|path| {
-            let content = fs::read_to_string(&path).unwrap_or_default();
+        .map(|key| {
+            let content = read(&key);
             let latest = content
                 .lines()
                 .rev()
                 .find(|l| l.starts_with("- "))
                 .map(|l| l.trim_start_matches("- ").to_string())
                 .unwrap_or_default();
-            (first_line(&path), latest)
+            let name = first_line(&content);
+            (name, latest)
         })
         .collect()
 }
@@ -380,43 +484,37 @@ pub fn topic_summaries() -> Vec<(String, String)> {
 // event records for the last `month_count` months: (month, "- " lines); newest month first.
 // looking only at the current month gave an empty view at the start of a new month
 /// Input: `month_count: usize`. Output: `Vec<(String, Vec<String>)>` — up to `month_count`
-/// months as (`"YYYY-MM"`, its `"- "` lines), newest first. Uses: `files`. Used by:
+/// months as (`"YYYY-MM"`, its `"- "` lines), newest first. Uses: `files`, `stem`. Used by:
 /// `modal::mind_embeds`/`events_modal`.
 pub fn event_months(month_count: usize) -> Vec<(String, Vec<String>)> {
     files("olaylar")
         .into_iter()
         .take(month_count)
-        .filter_map(|path| {
-            let month = path.file_stem()?.to_str()?.to_string();
-            let lines: Vec<String> = fs::read_to_string(&path)
-                .unwrap_or_default()
+        .map(|key| {
+            let month = stem(&key).to_string();
+            let lines: Vec<String> = read(&key)
                 .lines()
                 .filter(|l| l.starts_with("- "))
                 .map(|l| l.to_string())
                 .collect();
-            Some((month, lines))
+            (month, lines)
         })
         .collect()
 }
 
 // ---------- channel history ----------
 
-// reads durum/kanallar/<id>.md files: (channel id, recent lines)
-/// Input: none. Output: `Vec<(u64, VecDeque<String>)>` — every channel history file as
-/// (channel id, non-empty lines). Uses: `files`. Used by: `State::load`
+// reads durum/kanallar/<id> records: (channel id, recent lines)
+/// Input: none. Output: `Vec<(u64, VecDeque<String>)>` — every channel history record as
+/// (channel id, non-empty lines). Uses: `files`, `stem`. Used by: `State::load`
 /// (`types_chat_state.rs`), the only caller (once, at startup).
 pub fn load_channel_history() -> Vec<(u64, VecDeque<String>)> {
     let mut list = Vec::new();
-    for path in files("kanallar") {
-        let Some(id) = path
-            .file_stem()
-            .and_then(|f| f.to_str())
-            .and_then(|f| f.parse::<u64>().ok())
-        else {
+    for key in files("kanallar") {
+        let Some(id) = stem(&key).parse::<u64>().ok() else {
             continue;
         };
-        let lines: VecDeque<String> = fs::read_to_string(&path)
-            .unwrap_or_default()
+        let lines: VecDeque<String> = read(&key)
             .lines()
             .filter(|l| !l.trim().is_empty())
             .map(|l| l.to_string())
@@ -428,29 +526,54 @@ pub fn load_channel_history() -> Vec<(u64, VecDeque<String>)> {
 
 // ---------- index ----------
 
-/// Input: `folder: &str` — a subdirectory of `STATE_DIR` (e.g. `"kisiler"`). Output:
-/// `Vec<PathBuf>` — its `.md` files, most recently modified first. Used by:
-/// `person_summaries`/`topic_summaries`/`event_months`/`load_channel_history`/
-/// `refresh_index`/`retrieve`/`over_limit` — every listing function in this module.
-fn files(folder: &str) -> Vec<PathBuf> {
-    let mut list: Vec<(std::time::SystemTime, PathBuf)> = fs::read_dir(path(folder))
-        .map(|dir| {
-            dir.flatten()
-                .map(|e| e.path())
-                .filter(|p| p.extension().is_some_and(|u| u == "md"))
-                .filter_map(|p| Some((fs::metadata(&p).ok()?.modified().ok()?, p)))
-                .collect()
-        })
-        .unwrap_or_default();
-    list.sort_by_key(|e| std::cmp::Reverse(e.0)); // most recently changed first
-    list.into_iter().map(|(_, p)| p).collect()
+/// Input: `folder: &str` — a key prefix (e.g. `"kisiler"`, everything under it is
+/// `"kisiler/..."`). Output: `Vec<String>` — matching keys, most recently modified first.
+/// Uses: `db`, `MODIFIED`. Used by: `person_summaries`/`topic_summaries`/`event_months`/
+/// `load_channel_history`/`refresh_index`/`retrieve`/`over_limit` — every listing function
+/// in this module.
+fn files(folder: &str) -> Vec<String> {
+    let prefix = format!("{folder}/");
+    let (Ok(txn),) = (db().begin_read(),) else {
+        return Vec::new();
+    };
+    let (Ok(content), Ok(modified)) = (txn.open_table(CONTENT), txn.open_table(MODIFIED)) else {
+        return Vec::new();
+    };
+    let Ok(range) = content.range(prefix.as_str()..) else {
+        return Vec::new();
+    };
+    let mut list: Vec<(u64, String)> = Vec::new();
+    for entry in range {
+        let Ok((key, _)) = entry else { continue };
+        let key = key.value();
+        if !key.starts_with(prefix.as_str()) {
+            break; // keys are sorted; once the prefix stops matching, we're past this folder
+        }
+        let when = modified
+            .get(key)
+            .ok()
+            .flatten()
+            .map(|g| g.value())
+            .unwrap_or(0);
+        list.push((when, key.to_string()));
+    }
+    list.sort_by_key(|(when, _)| std::cmp::Reverse(*when));
+    list.into_iter().map(|(_, key)| key).collect()
 }
 
-/// Input: `path: &Path`. Output: `String` — the file's first line, with a leading `"# "`
-/// stripped. Used by: `topic_summaries` above.
-fn first_line(path: &Path) -> String {
-    fs::read_to_string(path)
-        .unwrap_or_default()
+/// Input: `key: &str` — a full record key (e.g. `"kisiler/1.md"`). Output: `&str` — the
+/// part after the last `/` with a trailing `.md` stripped (`"1"`). Used by:
+/// `person_summaries`/`event_months`/`load_channel_history`/`refresh_index` above/below,
+/// wherever an id/month used to come from `Path::file_stem()`.
+fn stem(key: &str) -> &str {
+    let name = key.rsplit('/').next().unwrap_or(key);
+    name.strip_suffix(".md").unwrap_or(name)
+}
+
+/// Input: `content: &str` — a record's contents. Output: `String` — its first line, with a
+/// leading `"# "` stripped. Used by: `topic_summaries` above.
+fn first_line(content: &str) -> String {
+    content
         .lines()
         .next()
         .unwrap_or("")
@@ -460,7 +583,7 @@ fn first_line(path: &Path) -> String {
 
 // the index display only needs the header fields; parsed without building the
 // facts/events Vecs (cheaper than Person::parse's full parse)
-/// A cheaper partial parse of a person file: just `name`/`score`/`tags`/`note`, no
+/// A cheaper partial parse of a person record: just `name`/`score`/`tags`/`note`, no
 /// `facts`/`events`. Produced by `person_header` below; used only by `refresh_index`.
 struct PersonHeader {
     name: String,
@@ -469,7 +592,7 @@ struct PersonHeader {
     note: String,
 }
 
-/// Input: `text: &str` — a `kisiler/<id>.md` file's contents. Output: `PersonHeader`.
+/// Input: `text: &str` — a `kisiler/<id>.md` record's contents. Output: `PersonHeader`.
 /// Stops at the first `## ` heading (never descends into the `facts`/`events` lists).
 /// Used by: `refresh_index` below, the only caller.
 fn person_header(text: &str) -> PersonHeader {
@@ -502,24 +625,20 @@ fn person_header(text: &str) -> PersonHeader {
 }
 
 // regenerates and returns INDEX.md: the "what I know" list sent with every reply
-/// Input: none. Output: `String` — the regenerated `INDEX.md` content (also written to
-/// disk). Uses: `files`, `person_header`, `write`. Used by: `State::load`
+/// Input: none. Output: `String` — the regenerated `INDEX.md` content (also written to the
+/// database). Uses: `files`, `stem`, `person_header`, `write`. Used by: `State::load`
 /// (`types_chat_state.rs`), `Bot::diarist`/`summarizer` (`agents.rs`),
 /// `Bot::cmd_agents` (`command/actions.rs`) — anywhere the person/topic/event listing
 /// might have changed.
 pub fn refresh_index() -> String {
     use std::fmt::Write as _;
     let mut output = String::from("## Kişiler\n");
-    for path in files("kisiler").into_iter().take(INDEX_PEOPLE) {
-        // filename is id-based; old slug-named files (id can't be parsed) are skipped
-        let has_id = path
-            .file_stem()
-            .and_then(|f| f.to_str())
-            .is_some_and(|f| f.parse::<u64>().is_ok());
-        if !has_id {
+    for key in files("kisiler").into_iter().take(INDEX_PEOPLE) {
+        // key tail is id-based; old slug-keyed records (id can't be parsed) are skipped
+        if stem(&key).parse::<u64>().is_err() {
             continue;
         }
-        let header = person_header(&fs::read_to_string(&path).unwrap_or_default());
+        let header = person_header(&read(&key));
         if header.name.is_empty() {
             continue;
         }
@@ -533,9 +652,9 @@ pub fn refresh_index() -> String {
         output.push('\n');
     }
     output.push_str("\n## Konular\n");
-    for path in files("konular").into_iter().take(30) {
+    for key in files("konular").into_iter().take(30) {
         // a single read: the name and latest note both come from the same content
-        let content = fs::read_to_string(&path).unwrap_or_default();
+        let content = read(&key);
         let name = content
             .lines()
             .next()
@@ -550,17 +669,9 @@ pub fn refresh_index() -> String {
         let _ = writeln!(output, "- {name} · son: {latest}");
     }
     output.push_str("\n## Olaylar\n");
-    for path in files("olaylar").into_iter().take(3) {
-        let n = fs::read_to_string(&path)
-            .unwrap_or_default()
-            .lines()
-            .filter(|l| l.starts_with("- "))
-            .count();
-        let _ = writeln!(
-            output,
-            "- {} · {n} kayıt",
-            path.file_stem().and_then(|f| f.to_str()).unwrap_or("")
-        );
+    for key in files("olaylar").into_iter().take(3) {
+        let n = read(&key).lines().filter(|l| l.starts_with("- ")).count();
+        let _ = writeln!(output, "- {} · {n} kayıt", stem(&key));
     }
     write("INDEX.md", &output);
     output
@@ -599,7 +710,7 @@ pub fn keywords(texts: &[String]) -> Vec<String> {
 }
 
 /// Input: `text: &str`; `keywords: &[String]`. Output: `usize` — how many `keywords` appear
-/// (case-insensitively) in `text`. Used by: `retrieve` below, twice (topic files and raw
+/// (case-insensitively) in `text`. Used by: `retrieve` below, twice (topic records and raw
 /// history lines).
 fn score_matches(text: &str, keywords: &[String]) -> usize {
     let lower = text.to_lowercase();
@@ -627,14 +738,14 @@ pub fn trim(text: &str, limit: usize) -> String {
     }
 }
 
-// what to retrieve for this chat: the speakers' files, topic files touching the subject,
-// recent events, and old raw-memory lines matching a keyword. The budget is fixed.
+// what to retrieve for this chat: the speakers' records, topic records touching the
+// subject, recent events, and old raw-memory lines matching a keyword. The budget is fixed.
 /// Input: `participants: &[String]` — names currently talking (up to 4 used);
-/// `name_to_id: &HashMap<String, u64>` — to resolve names to person files;
+/// `name_to_id: &HashMap<String, u64>` — to resolve names to person records;
 /// `keywords: &[String]` — from `keywords` above; `history: &VecDeque<String>` — the raw
 /// message buffer; `exclude_recent: usize` — how many of the most recent `history` lines
 /// to skip (they're already in the chat, no need to retrieve them again).
-/// Output: `String` — sections (person files, up to 2 matching topic files, the month's
+/// Output: `String` — sections (person records, up to 2 matching topic records, the month's
 /// last 8 events, up to 12 old keyword-matching lines) concatenated up to
 /// `CONTEXT_BUDGET` characters. Uses: `read`, `trim`, `files`, `score_matches`, `month`.
 /// Used by: `Bot::chat_system` (`provider_generate.rs`), the only caller.
@@ -657,11 +768,11 @@ pub fn retrieve(
         }
     }
 
-    // content travels bundled with its score: the top two files aren't read a second time
+    // content travels bundled with its score: the top two records aren't read a second time
     let mut topics: Vec<(usize, String)> = files("konular")
         .into_iter()
         .take(30)
-        .map(|p| fs::read_to_string(&p).unwrap_or_default())
+        .map(|key| read(&key))
         .map(|content| (score_matches(&content, keywords), content))
         .filter(|(score, _)| *score >= 1)
         .collect();
@@ -721,34 +832,25 @@ pub fn retrieve(
     result
 }
 
-// files over their limit: (kind, file path)
-/// Input: none. Output: `Vec<(&'static str, PathBuf)>` — `("kisi", path)`/`("konu", path)`/
-/// `("olay", path)` for every file over `PERSON_LIMIT`/`TOPIC_LIMIT`/`EVENT_LIMIT`. Uses:
-/// `files`, `path`, `month`. Used by: `Bot::summarizer` (`agents.rs`), the only caller.
-pub fn over_limit() -> Vec<(&'static str, PathBuf)> {
+// records over their limit: (kind, record key)
+/// Input: none. Output: `Vec<(&'static str, String)>` — `("kisi", key)`/`("konu", key)`/
+/// `("olay", key)` for every record over `PERSON_LIMIT`/`TOPIC_LIMIT`/`EVENT_LIMIT`. Uses:
+/// `files`, `read`, `month`. Used by: `Bot::summarizer` (`agents.rs`), the only caller.
+pub fn over_limit() -> Vec<(&'static str, String)> {
     let mut list = Vec::new();
-    for path in files("kisiler") {
-        if fs::metadata(&path)
-            .map(|m| m.len() as usize > PERSON_LIMIT)
-            .unwrap_or(false)
-        {
-            list.push(("kisi", path));
+    for key in files("kisiler") {
+        if read(&key).len() > PERSON_LIMIT {
+            list.push(("kisi", key));
         }
     }
-    for path in files("konular") {
-        if fs::metadata(&path)
-            .map(|m| m.len() as usize > TOPIC_LIMIT)
-            .unwrap_or(false)
-        {
-            list.push(("konu", path));
+    for key in files("konular") {
+        if read(&key).len() > TOPIC_LIMIT {
+            list.push(("konu", key));
         }
     }
-    let event_path = path(&format!("olaylar/{}.md", month()));
-    if fs::metadata(&event_path)
-        .map(|m| m.len() as usize > EVENT_LIMIT)
-        .unwrap_or(false)
-    {
-        list.push(("olay", event_path));
+    let event_key = format!("olaylar/{}.md", month());
+    if read(&event_key).len() > EVENT_LIMIT {
+        list.push(("olay", event_key));
     }
     list
 }
@@ -756,6 +858,24 @@ pub fn over_limit() -> Vec<(&'static str, PathBuf)> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    // every test in this module shares the process-wide `DB` static, so they all open the
+    // same temp redb file (once, first test in) and use distinctly-prefixed keys to avoid
+    // stepping on each other — mirrors the old suite's single `"test-gecici.md"` convention,
+    // just extended to "the whole database is shared, not just one file". `Once` (not a
+    // `DB.get().is_none()` check) matters here: cargo test runs these in parallel threads,
+    // and a check-then-act race let two threads both call `Database::create` on the same
+    // path at once, which redb's file locking turned into a spurious "memory::init wasn't
+    // called" failure for whichever thread lost the race.
+    static INIT: std::sync::Once = std::sync::Once::new();
+    fn ensure_test_db() {
+        INIT.call_once(|| {
+            let path =
+                std::env::temp_dir().join(format!("discord-bot-test-{}.redb", std::process::id()));
+            let _ = fs::remove_file(&path);
+            init(&path);
+        });
+    }
 
     /// Verifies `date_from_unix` against known unix timestamps, including a day boundary.
     #[test]
@@ -833,7 +953,7 @@ mod test {
     }
 
     /// Verifies `person_header` reads only the header fields and stops before the fact/event lists,
-    /// and that an empty file parses to an empty header rather than panicking.
+    /// and that an empty record parses to an empty header rather than panicking.
     #[test]
     fn person_header_stops_before_lists() {
         let text = "# Ali\nid: 5\npuan: +3\netiket: rust, oyun\nnot: yakın arkadaş\n\n## Bildiklerin\n- bilgi1\n- bilgi2\n\n## Son olaylar\n- olay1\n";
@@ -842,27 +962,50 @@ mod test {
         assert_eq!(header.score, 3);
         assert_eq!(header.tags, vec!["rust", "oyun"]);
         assert_eq!(header.note, "yakın arkadaş");
-        // empty file: everything stays empty, no panic
+        // empty record: everything stays empty, no panic
         let empty = person_header("");
         assert!(empty.name.is_empty());
     }
 
-    /// Verifies `write`/`append`/`read` round-trip on a real temp file and that no `.tmp` file is left behind.
+    /// Verifies `write`/`append`/`read` round-trip through the database, and that `files`
+    /// finds a written key under its folder prefix.
     #[test]
-    fn write_append_round_trip_on_disk() {
-        let name = "test-gecici.md";
-        write(name, "ilk\n");
-        append(name, "ikinci");
-        let content = read(name);
-        let tmp_left = path(name).with_extension("tmp").exists();
-        let _ = fs::remove_file(path(name));
-        assert_eq!(content, "ilk\nikinci\n");
-        assert!(!tmp_left); // no temp file should remain after the rename
+    fn write_append_read_round_trip() {
+        ensure_test_db();
+        let key = "test/gecici.md";
+        write(key, "ilk\n");
+        append(key, "ikinci");
+        assert_eq!(read(key), "ilk\nikinci\n");
+        assert!(files("test").contains(&key.to_string()));
+    }
+
+    /// Verifies `add_topic` writes a header on first use and only appends on later calls.
+    #[test]
+    fn add_topic_writes_header_once() {
+        ensure_test_db();
+        add_topic("test konusu", "ilk not");
+        add_topic("test konusu", "ikinci not");
+        let content = read("konular/test-konusu.md");
+        assert_eq!(content.matches("# test konusu").count(), 1);
+        assert!(content.contains("ilk not"));
+        assert!(content.contains("ikinci not"));
+    }
+
+    /// Verifies `write_with_mtime` stores the given timestamp (not "now") and that
+    /// `record_count` reflects it — the two primitives `migrate::run` is built on.
+    #[test]
+    fn write_with_mtime_round_trips() {
+        ensure_test_db();
+        let before = record_count();
+        write_with_mtime("test/mtime.md", "içerik", 12345);
+        assert_eq!(read("test/mtime.md"), "içerik");
+        assert!(record_count() > before);
     }
 
     /// Verifies `retrieve` pulls in history lines matching the keywords/name and excludes unrelated ones.
     #[test]
     fn retrieve_pulls_from_memory() {
+        ensure_test_db();
         let mut history = VecDeque::new();
         history.push_back("emin: rust derleme süresi çok uzun".to_string());
         history.push_back("lng: bugün hava güzel".to_string());

@@ -4,6 +4,42 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-03 · durum/ markdown → redb (`durum/hafiza.redb`) + migrator
+Kullanıcı: "bot tüm hafızasını durum altında markdown ile saklamak yerine redb kullansın" →
+"ayrıca bu redb geçişinde bir migrator lazım" → "bi planla redb olmak zorunda değil karar
+veririz". Önce `durum/`+`memory.rs`'in tam envanteri çıkarıldı (bir Explore ajanıyla), sonra
+üç seçenek (redb/rusqlite/düz JSON) kullanıcıya sunuldu, redb seçildi (gerekçe:
+docs/kararlar.md'nin yeni maddesi — proje C bağımlılığından kaçınıyor, rusqlite bunu bozardı).
+Plan modunda onaylanan tasarım: veri modelini değiştirme, yalnız konteyneri değiştir — her
+redb değeri göçten önceki dosyanın birebir aynı metni, anahtar da o dosyanın eski göreli yolu.
+- `src/memory.rs`: `CONTENT`/`MODIFIED` iki redb tablosu (`static DB: OnceLock<Database>`,
+  `Lang`/`prompts`/`strings` ile aynı desen); `path`/`files` kaldırıldı, `read`/`write`/
+  `append`/`add_topic`/`over_limit`/`person_summaries`/`topic_summaries`/`event_months`/
+  `load_channel_history`/`refresh_index` redb'ye taşındı — imzaları değişmedi, `Person::parse`/
+  `text`/`retrieve`/`keywords`/`trim`/`slug` hiç dokunulmadı. `WRITE_LOCK` kalktı (redb
+  yazarları kendi içinde sıralıyor). `durum/arsiv/` bilinçli olarak dışarıda bırakıldı, hâlâ
+  gerçek dosya (`ARCHIVE_LOCK` ile korunuyor, `archive_append`).
+- `agents.rs`'in `summarizer`'ı `memory::over_limit()`'in artık `PathBuf` değil `String` anahtar
+  döndüğüne göre güncellendi (`STATE_DIR` strip_prefix satırı kalktı).
+- `src/migrate.rs` (yeni): `cargo run -- migrate-durum [--from] [--to] [--dry-run] [--force]`.
+  Eski ağacı `arsiv/` hariç tarar, gerçek OS mtime'ını `memory::write_with_mtime`'a taşır
+  (göç günü herkesin "son değişen" sırası sıfırlanmasın diye), hedef doluysa `--force` yoksa
+  reddeder, orijinal dosyalara dokunmaz.
+- Test sırasında bir yarış durumu yakalandı: `memory.rs`'nin test yardımcısı
+  `DB.get().is_none()` kontrolüyle DB açıyordu, cargo test paralel thread'lerinde iki test
+  aynı anda bu kontrolden geçip aynı redb dosyasını açmaya çalışınca biri "memory::init
+  wasn't called" ile patlıyordu — `std::sync::Once` ile düzeltildi, 5 ardışık `cargo test`
+  koşusuyla doğrulandı.
+- Elle uçtan uca doğrulama: gerçek binary ile uydurma bir `durum/` ağacı (kişi+konu+ay
+  olayları+model.md+profil.md+arsiv) oluşturuldu, `migrate-durum --dry-run` → gerçek çalışma →
+  force'suz tekrar (reddetti) → `--force` ile tekrar (kabul etti) → `cargo run -- chat` ile
+  açıldı, `model: z-ai/glm-5.3-flash` loga düştü (fixture'daki model.md doğru okundu) — göç
+  sonrası okuma yolunun uçtan uca çalıştığının kanıtı.
+- Bu ortamda gerçek üretim `durum/` verisi yok (boş, git dışı); gerçek bir ağaca karşı hiç
+  denenmedi, bkz AGENTS.md "Bilinen açıklar".
+- Doğrulama: 85 test (82→85), clippy 0 uyarı, fmt temiz, yukarıdaki elle uçtan uca kontrol.
+
+## 2026-09-03 · Çok dilli altyapı: BOT_LANG, prompts/<dil>/, langs/<dil>.json
 ## 2026-09-03 · Çok dilli altyapı: BOT_LANG, prompts/<dil>/, langs/<dil>.json
 Kullanıcı: ".env de dil girelim promptlar/<dil> altından seçsin, slash komutlar içinde bir
 dil sistemi olsun, langs klasörüne localization dosyaları yazalım" → netleştirme turunda

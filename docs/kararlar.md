@@ -579,3 +579,27 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   Doğrulama: `cargo build` + `cargo test` (76 yeşil) + `cargo clippy` (0 uyarı) + `cargo fmt`;
   canlı Discord'da denenmedi (zaten hiç denenmemişti, bkz AGENTS.md "Bilinen açıklar"). Detay:
   AGENTS.md madde 8, dev/ilerleme.md.
+- **2026-09-03 · `durum/` markdown dosyalarından redb'e geçildi (`durum/hafiza.redb`).**
+  Kullanıcı isteği: dosya-başına-markdown yerine gömülü bir veritabanı, artı eski veriyi
+  taşıyan bir migrator. Üç seçenek sunuldu, kullanıcı redb'yi seçti: rusqlite (SQLite) mimarı
+  bir C bağımlılığı getiriyordu — proje şu ana kadar bilinçli olarak C'siz (`reqwest` varsayılan
+  `native-tls` yerine `rustls-tls` ile kuruluyor, tam bu yüzden); düz yapılandırılmış JSON
+  dosyaları ise gerçek ACID/transaction kazanmıyordu. redb: saf Rust, tek dosya, transaction'lı.
+  Tasarım kararı: veri modeli **yeniden şekillendirilmedi**, yalnız konteyner değişti — her
+  redb değeri, göçten önce bir dosyanın tuttuğu metnin birebir aynısı, anahtar da o dosyanın
+  eski göreli yolu (`"kisiler/1.md"` vb.). Bu sayede `Person::parse`/`text`, `retrieve`,
+  `keywords`, `trim`, `slug` ve `memory::read`/`write`'ı çağıran ~15 yer (imzaları değişmedi)
+  hiç dokunulmadan kaldı — riski gerçekten küçülten şey büyük bir yeniden tasarım değil, bu
+  minimal-fark yaklaşımıydı. `durum/arsiv/` bilinçli olarak redb'ye taşınmadı: yalnız insan
+  içindir (bot bir daha okumaz), sınırsız büyür — transactional depoda tutmak hem gereksiz hem
+  onun "insan için" amacını bozardı. `WRITE_LOCK` (global Mutex + geçici-dosya+rename) kalktı:
+  redb yazma transaction'ları zaten kendi içinde sıralanıyor, bu daha güçlü bir garanti (çapraz
+  tablo atomiklik de mümkün, v1 bunu kullanmadı, kapsamı küçük tutmak için). `files()`'ın
+  "son değişen önce" sıralaması artık dosya mtime'ı yerine ayrı bir `MODIFIED` tablosunda
+  tutulan zaman damgasından geliyor. Migrator (`src/migrate.rs`, `cargo run -- migrate-durum`)
+  eski dosyaların gerçek OS mtime'ını bu tabloya taşıyor ki geçiş günü herkesin "en son
+  değişen" sırası sıfırlanmasın; orijinal dosyalara dokunmuyor (elle silinir). Doğrulama: 85
+  test + clippy 0 uyarı + fmt temiz + `migrate-durum` gerçek binary ile uydurma bir dosya
+  ağacına karşı çalıştırılıp `cargo run -- chat` ile geri okunarak elle doğrulandı (model.md
+  doğru geldi) — ama bu ortamda gerçek üretim `durum/` verisi yok, bkz AGENTS.md "Bilinen
+  açıklar". Detay: `docs/durum-dosyalari.md`, dev/ilerleme.md.

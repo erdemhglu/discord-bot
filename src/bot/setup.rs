@@ -72,10 +72,11 @@ impl Bot {
             }
             _ => None,
         };
-        for k in ["kisiler", "konular", "olaylar", "arsiv", "kanallar"] {
-            std::fs::create_dir_all(PathBuf::from(STATE_DIR).join(k))?;
-        }
+        // only arsiv/ is still real files (see memory.rs's module doc); everything else
+        // that used to be its own directory tree is now key prefixes inside hafiza.redb
+        std::fs::create_dir_all(PathBuf::from(STATE_DIR).join("arsiv"))?;
         std::fs::create_dir_all(IMAGE_DIR)?;
+        memory::init(&PathBuf::from(STATE_DIR).join("hafiza.redb"));
 
         let mut state = State::load();
         sleep::update(&mut state);
@@ -127,7 +128,8 @@ impl Bot {
         log::info!("debug [{channel}]: {text}");
         let target = self.debug_channel.unwrap_or(channel);
         let body: String = text.chars().take(300).collect();
-        let msg = CreateMessage::new().embed(modal::info_embed(strings::t("debug.title"), &body));
+        let msg =
+            CreateMessage::new().embed(modal::info_embed(strings::t("debug.trace_title"), &body));
         if let Err(e) = target.send_message(&ctx.http, msg).await {
             log::warn!("couldn't send debug line ({target}): {e}");
         }

@@ -114,7 +114,7 @@ döngüler tik başında bakar ve döner, bekçi yeniden başlatmaz; `main`'in k
 ### Başlangıç
 - `setting(isim)` — boş olmayan env değişkeni ya da açık hata.
 - `wait_for_shutdown()` — ctrl-c veya SIGTERM.
-- `Bot::setup() -> Result<Arc<Bot>, BotError>` — sağlayıcı seçimi (`PROVIDER`/anahtarlar/`MODEL`/`API_URL`), `NEWS_CHANNEL`/`GUILD_ID`/`CHANNELS`, `durum/{kisiler,konular,olaylar,arsiv,kanallar}` + `resimler/` klasörleri, `State::load` + `sleep::update` + `durum/model.md`, reqwest istemcisi. **Discord'a bağlanmaz, DISCORD_TOKEN istemez**: hem `main`'in bot yolu hem `cargo run -- chat` buradan geçer (ikisi aynı kurulumu görsün diye tek fonksiyona çıkarıldı).
+- `Bot::setup() -> Result<Arc<Bot>, BotError>` — sağlayıcı seçimi (`PROVIDER`/anahtarlar/`MODEL`/`API_URL`), `NEWS_CHANNEL`/`GUILD_ID`/`CHANNELS`, `durum/arsiv/` + `resimler/` klasörleri, `memory::init(durum/hafiza.redb)`, `State::load` + `sleep::update` + `durum/model.md`, reqwest istemcisi. **Discord'a bağlanmaz, DISCORD_TOKEN istemez**: hem `main`'in bot yolu hem `cargo run -- chat` buradan geçer (ikisi aynı kurulumu görsün diye tek fonksiyona çıkarıldı).
 - `main` — `.env`, loglama, panic hook; ilk argüman `chat` ise `Bot::setup()` + `Bot::chat_cli()` (kurulum hatasında tek satır mesaj + çıkış kodu 1) ve döner. Değilse `DISCORD_TOKEN` + `Bot::setup()`, intents `GUILDS|GUILD_MESSAGES|GUILD_MEMBERS|MESSAGE_CONTENT`, kapanışta `shard_manager.shutdown_all`.
 
 - `version_text()` — `v{CARGO_PKG_VERSION} ({VERSION_COMMIT}, {VERSION_DATE})`; iki env'i `build.rs` derlemede git'ten doldurur (git/date yoksa `?`). `modal::status_message` ve `guild_create` sürüm duyurusu kullanır.
@@ -185,7 +185,7 @@ select menü ≤25 seçenek (etiket ≤45, açıklama ≤100).
 
 ## src/memory.rs
 - Sabitler: `PERSON_LIMIT 1800 / PERSON_TARGET 1000 / TOPIC_LIMIT 1500 / TOPIC_TARGET 800 / EVENT_LIMIT 6000 / CONTEXT_BUDGET 6000 / INDEX_PEOPLE 40 / FAVORITE_NOTE`.
-- `path(parca)`, `read(parca)`, `write(parca, icerik)` — `WRITE_LOCK` (static Mutex) ile tek sıradan ve atomik (geçici + rename); `append(parca, satir)` — gerçek append (OpenOptions), aynı kilit; `archive(parca, icerik)` (`arsiv/parca`'ya tarihli başlıkla ekler).
+- `init(yol)` — `durum/hafiza.redb`'i açar/oluşturur, süreç boyunca sabit kalan `static DB: OnceLock<Database>`'i doldurur (`Bot::setup`, bir kez). `read(anahtar)`, `write(anahtar, icerik)` — anahtar eski göreli dosya yoluyla aynı (`"kisiler/1.md"` vb.); `write` tek redb yazma transaction'ında hem içeriği hem `now_unix()`'i yazar (atomik, `WRITE_LOCK` kalktı — redb yazarları kendi içinde sıralar). `append(anahtar, satir)` — get+insert TEK transaction içinde (redb'nin serileştirmesi sayesinde yarış yok). `archive(anahtar, icerik)` tek istisna: hâlâ gerçek dosyaya yazar (`arsiv/anahtar`'a tarihli başlıkla ekler, `ARCHIVE_LOCK` ile), çünkü `arsiv/` redb'ye taşınmadı (yalnız insan içindir, bkz `docs/durum-dosyalari.md`).
 - `person_summaries` / `topic_summaries` / `event_months` — modal gösterimi için mtime sıralı dökümler.
 - `slug(isim)` — küçük harf, Türkçe harf sadeleştirme, alfanümerik dışı `-`, boşsa "bilinmeyen".
 - `date()`, `date_from_unix(unix)` (Hinnant civil-from-days), `month()` "YYYY-AA".
@@ -198,6 +198,9 @@ select menü ≤25 seçenek (etiket ≤45, açıklama ≤100).
 - `STOPWORDS` — elenen sık kelimeler. `keywords(&[String])` — 4+ harf, durak değil, tekrarsız, ≤40.
 - `score_matches(metin, anahtar)` — kaç anahtar geçiyor. `trim(metin, sinir)` — karakter sınırı + `…`.
 - `retrieve(katilimcilar, name_to_id, anahtar, hafiza, exclude_recent) -> String` — sırayla: katılımcıların kişi dosyaları (`name_to_id` ile id'ye çevrilir, ≤4, her biri ≤1200), en çok eşleşen 2 konu dosyası (≤800), ayın son 8 olayı, ham hafızadan (son `exclude_recent` hariç) ≥2 anahtarla eşleşen en fazla 12 satır (puan sonra yenilik sırası, sonra kronolojik). Bütçe 6000 karakter; sığmayan bölüm ve sonrası atlanır.
+
+## src/migrate.rs
+- `run(args) -> Result<(), BotError>` — `cargo run -- migrate-durum [--from <dizin>] [--to <redb-yolu>] [--dry-run] [--force]`. Eski bir `durum/` ağacındaki her `.md` dosyasını (`arsiv/` hariç) `collect` ile toplar (anahtar + içerik + gerçek işletim sistemi mtime'ı), sayıları basar, sonra `memory::init` + `memory::write_with_mtime` ile hedef redb'ye yazar. Hedef zaten doluysa `--force` yoksa reddeder. Orijinal dosyalara dokunmaz.
 - `over_limit() -> Vec<(tür, yol)>` — boyutu aşan kişi/konu dosyaları ve bu ayın olay dosyası.
 
 ## src/agenda.rs

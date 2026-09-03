@@ -3,7 +3,7 @@
 ## Tek cümle
 Discord olayları → sohbet motoru (12 mesajlık kısa sohbetler) → her cevapta "sistem mesajı"
 = çekirdek kişilik + ajanların öğrettikleri + hafızadan o sohbet için getirilenler + görev;
-biten sohbet → ajanlar hafızayı ve kişiliği günceller → dosyalar (`durum/`).
+biten sohbet → ajanlar hafızayı ve kişiliği günceller → `durum/hafiza.redb` (+ `durum/arsiv/`).
 
 ## Katmanlar
 
@@ -40,7 +40,8 @@ biten sohbet → ajanlar hafızayı ve kişiliği günceller → dosyalar (`duru
 | `src/modal.rs` | ~710 | embed/bileşen/modal üreticileri (`/zihin` kartı, detay modalları, ayar paneli, `info_embed`), slash kaydı `register_commands` |
 | `src/chat_cli.rs` | ~170 | `cargo run -- chat`: discord'suz terminal sohbet tezgâhı (`impl Bot`), çıktı protokolünü denemek için |
 | `src/agents.rs` | ~420 | arka plan ajanları (`impl Bot` bloğu), `News`, `random_image` |
-| `src/memory.rs` | ~475 | dosya hafızası: path/read/write/arşiv, `Person` biçimi, dizin, getirme, sınırlar, tarih |
+| `src/memory.rs` | ~1025 | redb hafızası (`durum/hafiza.redb`): read/write/arşiv, `Person` biçimi, dizin, getirme, sınırlar, tarih |
+| `src/migrate.rs` | ~210 | eski `durum/` markdown ağacından `hafiza.redb`'e tek seferlik geçiş (`cargo run -- migrate-durum`) |
 | `src/agenda.rs` | ~265 | Sözcü RSS, html temizleme, firecrawl, `wander` ajanı, `gundem.md` |
 | `src/sleep.rs` | ~130 | uyku planı, yerel saat, uykusuz gece, "ŞU AN" satırı |
 | `src/travel.rs` | ~240 | yıllık etkinlik takvimi, seyahat penceresi, "ŞU AN" eki |

@@ -6,6 +6,7 @@ mod growth;
 mod lang;
 mod logging;
 mod memory;
+mod migrate;
 mod modal;
 mod prompts;
 mod sleep;
@@ -53,6 +54,16 @@ async fn main() -> Result<(), BotError> {
         let trace = std::backtrace::Backtrace::force_capture();
         log::error!("PANIC: {panic_info}\n{trace}");
     }));
+    // `cargo run -- migrate-durum`: one-time import of a pre-redb durum/ markdown tree
+    // into hafiza.redb (see migrate.rs). Never touches Discord.
+    if std::env::args().nth(1).as_deref() == Some("migrate-durum") {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        if let Err(e) = migrate::run(&args) {
+            eprintln!("migrate-durum failed: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     // `cargo run -- chat`: a terminal chat bench that never connects to Discord.
     // No token needed, only a model key; missing key prints one line and exits 1
     if std::env::args().nth(1).as_deref() == Some("chat") {

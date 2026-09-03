@@ -94,8 +94,11 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
     bu iki dizine birer dosya eklemek + `prompts.rs`/`strings.rs`'e birer `match` kolu.
 
 ## Durum klasörü (çalışma zamanı, git'e girmez)
-`durum/INDEX.md` işaretçi · `kisiler/` `konular/` `olaylar/` içerik · `arsiv/` taşan ·
-`huy.md profil.md duzeltmeler.md kendim.md gundem.md` ajan çıktıları. Bkz docs/durum-dosyalari.md.
+`durum/hafiza.redb` (redb, tek dosya): `INDEX.md` işaretçi · `kisiler/` `konular/` `olaylar/`
+içerik · `huy.md profil.md duzeltmeler.md kendim.md gundem.md` ajan çıktıları — hepsi eski
+dosya yolu aynı string anahtarla saklanır, biçimler değişmedi (bkz docs/durum-dosyalari.md).
+`durum/arsiv/` taşan: tek istisna, hâlâ gerçek `.md` dosyaları (yalnız insan içindir). Eski
+bir `durum/` ağacından geçiş `cargo run -- migrate-durum` ile (`src/migrate.rs`).
 
 ## Bilinen açıklar / doğrulanmamış
 - Canlı Discord akışı hiç test edilmedi (token yok). Serenity çağrıları derleyiciden geçti.
@@ -146,3 +149,9 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
   boyut sınırlarına (`modal.rs`'nin `LABEL_LIMIT`/`FIELD_LIMIT` vb.) uyduğu yalnız statik
   olarak (aynı uzunlukta Türkçe metin) doğrulandı, canlı render edilmedi. İkinci bir dil
   eklendiğinde bu sınırlara o dilin metinleriyle de uyulduğu ayrıca kontrol edilmeli.
+- **2026-09-03: `durum/` markdown dosyalarından `durum/hafiza.redb`'e geçildi.** Bu ortamda
+  gerçek üretim `durum/` verisi yok (boş, hiç canlı çalıştırılmamış); geçiş yalnız 85 birim
+  test + elle kurulmuş uydurma bir dosya ağacı üzerinde `migrate-durum` çalıştırıp
+  `cargo run -- chat` ile geri okunarak (model.md doğru geldi) doğrulandı. Gerçek bir
+  `durum/` ağacına karşı hiç denenmedi — operatör kendi ağacında önce `--dry-run`, sonra
+  gerçek geçiş yapıp `/durum`/`/zihin` ile karşılaştırmalı.

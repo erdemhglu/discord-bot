@@ -1,9 +1,19 @@
-# durum/ dosyaları
+# durum/ kayıtları
 
-Çalışma zamanı hafızası; git'e girmez. Bot yeniden başlayınca buradan yükler. Tümü UTF-8 düz metin.
+Çalışma zamanı hafızası; git'e girmez. Bot yeniden başlayınca buradan yükler.
+
+**Depolama**: `arsiv/` dışındaki her şey tek bir dosyada, `durum/hafiza.redb`
+(redb — saf Rust, ACID transaction; neden rusqlite/düz-JSON değil de bu:
+`docs/kararlar.md`). Aşağıdaki tablo hâlâ eski dosya yollarını gösteriyor çünkü tasarım
+gereği öyle: her kayıt, redb'de o eski göreli yol string'i anahtar olarak (`"kisiler/1.md"`,
+`"profil.md"`, ...), değeri ise dosyanın tutacağı metnin birebir aynısı olacak şekilde saklanır
+— alan adları, sınırlar, biçimler aşağıda değişmeden geçerli, yalnız konteyner değişti (bkz
+`src/memory.rs`'nin modül yorumu). `arsiv/` tek istisna: hâlâ gerçek `.md` dosyaları, çünkü
+yalnız insan içindir, bot bir daha okumaz (bkz aşağıdaki tablo). Eski bir `durum/` ağacından
+geçiş `cargo run -- migrate-durum` ile yapılır (`src/migrate.rs`).
 (Dosya/dizin adları ve içindeki alan adları bilerek Türkçe bırakıldı, bkz AGENTS.md madde 8.)
 
-| Dosya | Yazan | Okuyan | Sınır / bakım |
+| Kayıt | Yazan | Okuyan | Sınır / bakım |
 |---|---|---|---|
 | `INDEX.md` | `refresh_index` (diarist, summarizer, açılış) | her cevap (sistem mesajı), coach | ≤40 kişi, ≤30 konu, ≤3 ay; türetilmiş dosya, elle düzenleme |
 | `profil.md` | profiler | her cevap, news_agent, wanderer, coach | her 6 saatte yeniden üretilir (max_tokens 1200) |

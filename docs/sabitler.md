@@ -33,7 +33,9 @@
 
 ## src/memory.rs
 PERSON_LIMIT 1800 · PERSON_TARGET 1000 · TOPIC_LIMIT 1500 · TOPIC_TARGET 800 · EVENT_LIMIT 6000 ·
-CONTEXT_BUDGET 6000 · INDEX_PEOPLE 40 · FAVORITE_NOTE · STOPWORDS (elenen kelimeler)
+CONTEXT_BUDGET 6000 · INDEX_PEOPLE 40 · FAVORITE_NOTE · STOPWORDS (elenen kelimeler). Depolama
+`durum/hafiza.redb` (dosya adı sabit, `.env`'den ayarlanmaz); `durum/arsiv/` tek istisna, hâlâ
+gerçek dosya (bkz docs/durum-dosyalari.md).
 
 ## src/agenda.rs
 RSS_URL (Sözcü) · AGENDA_ENTRIES 12 · PAGE_LIMIT 3500
@@ -69,7 +71,9 @@ CHANNELS (virgüllü kanal id listesi; ayarlıysa bot yalnız bu kanallarda çal
 DEBUG_CHANNEL (kanal id; `/debug` açıkken karar izleri buraya, yoksa mesajın kanalına) ·
 IMAGE_ANALYSIS (varsayılan açık; `kapali/off/hayir/0` ekli fotoğrafları okumayı kapatır — yalnız
 açılışta okunur, hiçbir slash komutla çalışırken değiştirilemez, `Bot.image_analysis`) ·
-LOG_LEVEL (error/warn/info/debug/trace, varsayılan info) · LOG_COLOR (on/off; varsayılan: terminalde açık, dosyada kapalı)
+LOG_LEVEL (error/warn/info/debug/trace, varsayılan info) · LOG_COLOR (on/off; varsayılan: terminalde açık, dosyada kapalı) ·
+BOT_LANG (varsayılan tr; `LANG` değil — o çoğu kabukta zaten OS yereli için ayarlı, karışmasın
+diye ayrı isim; `Lang::current()`'la süreç boyunca sabitlenir, bkz `src/lang.rs`, AGENTS.md madde 12)
 
 **Not (2026-09-03):** bu değişken adları eskiden Türkçeydi (`SAGLAYICI`, `HABER_KANALI`, `KANALLAR`,
 `DEBUG_KANALI`, `RESIM_ANALIZI`, `API_ADRES`, `LOG_SEVIYE`, `LOG_RENK`); kod İngilizceye
