@@ -692,6 +692,36 @@ adları da çevrilsin, AGENTS.md/docs/dev/ içindeki kod referansları yeni adla
 
 ---
 
+## 2026-09-03: kendi mesajına atılan tepkiler de değerlendiriliyor
+
+- Kullanıcı isteği: bot artık kendisine (kendi mesajlarına) atılan emoji tepkilerini de
+  değerlendirsin.
+- `GatewayIntents::GUILD_MESSAGE_REACTIONS` eklendi (`main.rs`); `Handler::reaction_add`
+  (`src/bot/handler/handler_event.rs`) yeni serenity olay callback'i olarak eklendi.
+- Yalnız **botun kendi mesajına**, insan (bot değil) biri tarafından, sunucu içinde (DM
+  değil) ve `GUILD_ID`/`CHANNELS` filtresinden geçerek atılan tepkilerle ilgileniyor —
+  gerisi erken çıkar. `Reaction` olayı ne reactor'ın kim olduğunu ne de tepki verilen
+  mesajın metnini taşıdığı için ikisi de `add_reaction.user`/`.message` ile HTTP'den
+  çekiliyor. Metni boş (yalnız embed'li — kart/durum mesajı) bir mesaja atılan tepki
+  atlanıyor.
+- `reaction_label` (yeni yardımcı) emoji'yi okunabilir hale getiriyor: unicode olduğu gibi,
+  özel sunucu emoji'si `:ad:` biçiminde (`ReactionType`'ın kendi `Display`'i Discord'un ham
+  `<:ad:id>` mention biçimini veriyordu, modele anlamsız gelirdi).
+  Sonuç `"(tepki 💀) \"...\" mesajına tepki verdi"` satırı olarak `remember` (ham hafıza) ve
+  `channel_note`'a düşüyor; o kanalda sohbet açıksa `chat.history`'ye de aynı satır ekleniyor
+  (model bir sonraki cevabında bağlam olarak görsün diye). **Kasıtlı olarak kendiliğinden
+  cevap tetiklemiyor** — isteklilik değerlendirmesi yok, yeni mesaj gitmiyor; her tepkide
+  bot konuşursa spam/gereksiz token yakımı olurdu. `debug` açıksa iz düşüyor.
+- Yeni birim testi: `reaction_label_formats_emoji` (unicode/özel emoji/isimsiz emoji).
+- **Doğrulama:** `cargo build` temiz, `cargo test` 77/77 yeşil, `cargo clippy --all-targets`
+  0 uyarı, `cargo fmt` uygulandı. Canlı Discord'da denenmedi (yeni intent + HTTP fetch'ler
+  hiç görülmedi, bkz AGENTS.md "Bilinen açıklar").
+- **Belgeler:** docs/akislar.md'ye "Bir tepki (reaction) atıldı" bölümü, docs/moduller.md'ye
+  `reaction_add` satırı, README.md'ye "what it does" maddesi, AGENTS.md'ye doğrulanmamış not
+  eklendi; `cargo test` komut satırı 77'ye güncellendi.
+
+---
+
 ## Not — doğrulama komutları
 ```
 cargo fmt && cargo clippy --all-targets && cargo test && cargo build --release

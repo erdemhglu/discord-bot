@@ -18,7 +18,7 @@ Türkçe çalışma şeklinin bir parçası; kod tarafı İngilizce'dir, bkz. ma
 ## Hızlı komutlar
 ```
 cargo build            # derle
-cargo test             # 76 birim test (memory, agenda, travel, stream, willingness, target, cache, çıktı protokolü, chat_cli, komut tablosu, yanıt çözümü)
+cargo test             # 77 birim test (memory, agenda, travel, stream, willingness, target, cache, çıktı protokolü, chat_cli, komut tablosu, yanıt çözümü, tepki etiketi)
 cargo clippy           # 0 uyarı beklenir
 cargo fmt              # commit'ten önce
 cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, PROVIDER, API_URL, FIRECRAWL_KEY, NEWS_CHANNEL, GUILD_ID, CHANNELS, DEBUG_CHANNEL, IMAGE_ANALYSIS isteğe bağlı
@@ -119,6 +119,11 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
   anahtar yok): anahtarsız hata yolu ve birim testleri dışında **doğrulanmadı**.
 - Reasoning zorunlu model (glm-5.3-flash) için ajan dayanıklılığı (bütçe ×2, effort=low, düşünceden JSON) canlıda
   doğrulanmadı; `/zihin test:true` ile denenir. Debug modu ve ayar paneli butonları canlı Discord'da görülmedi.
+- `Handler::reaction_add` (botun kendi mesajına atılan tepkileri değerlendirir) ve
+  `GUILD_MESSAGE_REACTIONS` intent'i canlıda hiç görülmedi; yalnız derleyici + `reaction_label`
+  birim testiyle doğrulandı. Reactor bilgisi ve tepki verilen mesaj metni her seferinde
+  `add_reaction.user`/`.message` ile HTTP'den çekiliyor (Reaction olayı ikisini de taşımıyor) —
+  canlıda gecikme/rate limit görülmedi.
 - **2026-09-03: kod tabanı (src/**/*.rs, README.md) Türkçe'den İngilizceye çevrildi**
   (tanımlayıcılar, yorumlar, dosya/dizin adları, .env değişken adları). Botun çalışma şekli
   (promptlar/, durum/ dosya biçimleri, Discord'a çıkan her şey) bilerek Türkçe bırakıldı — bkz.

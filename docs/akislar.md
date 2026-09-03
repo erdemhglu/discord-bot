@@ -23,6 +23,20 @@
 7. Sohbet açıksa kullanıcı satırını geçmişe ekle (son 20).
 8. Kilit dışı: `reply`.
 
+## Bir tepki (reaction) atıldı
+`Handler::reaction_add` (`GUILD_MESSAGE_REACTIONS` intent gerekir) her tepkide tetiklenir, ama
+yalnız **botun kendi mesajına** atılan, insan kaynaklı, sunucu içi (DM değil) ve
+`GUILD_ID`/`CHANNELS` filtresinden geçen tepkilerle ilgilenir — gerisi hemen çıkar. `Reaction`
+olayı ne kimin attığını ne de tepki verilen mesajın metnini taşır: ikisi de `add_reaction.user`/
+`.message` ile HTTP'den çekilir. Metni boş (yalnız embed'li) bir mesaja atılan tepki atlanır —
+kartlara/durum satırlarına tepki "botun sözüne" sayılmaz. `reaction_label` emoji'yi okunabilir
+hale getirir: unicode emoji olduğu gibi, özel sunucu emoji'si `:ad:` biçiminde (Discord'un ham
+`<:ad:id>` mention biçimi değil). Sonuç `"(tepki 💀) \"...\" mesajına tepki verdi"` satırı olarak
+`remember` (ham hafıza) ve `channel_note`'a düşer; sohbet o kanalda açıksa `chat.history`'ye de
+eklenir (model bir sonraki cevabında bunu bağlam olarak görür). **Kendiliğinden cevap
+tetiklemez** — isteklilik değerlendirmesi yok, yeni mesaj gitmez; bot yalnız fark eder, sıradaki
+doğal cevabında değinebilir. `debug` açıksa `tepki: <isim> → <emoji>` izi düşer.
+
 ## Çıktı protokolü (her kişilikli cevap bundan geçer)
 Model düz metin değil **satır bazlı bir protokol** yazar; `parse_reply` çözer (`strip_name`
 uygulanmış metin üzerinde, yeniden soyma yok):

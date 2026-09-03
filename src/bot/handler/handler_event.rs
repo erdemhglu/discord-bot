@@ -394,6 +394,83 @@ impl EventHandler for Handler {
         }
     }
 
+    // a reaction on the bot's own message is treated as a social signal, the same way a
+    // spoken message is: it's recorded, and if a chat is open it enters the model's
+    // context too — but unlike a message, it never triggers a reply by itself (no
+    // willingness check, no new message goes out); the bot just notices it and may bring
+    // it up next time it naturally replies
+    /// Serenity's `reaction_add` callback — fires when anyone reacts to any message.
+    /// Input: `&self`; `ctx: Context`; `add_reaction: Reaction`. Output: none (returns
+    /// early unless the reacted-to message is the bot's own, in a guild, from a human,
+    /// and has text). Uses: `self.bot.guild_id`/`allowed_channels`, `add_reaction.user`/
+    /// `message` (fetches the reactor and the reacted message over HTTP — a `Reaction`
+    /// carries no message text), `reaction_label`, `display_name`, `self.bot.state()`,
+    /// `remember`, `channel_note`, `self.bot.debug_note`.
+    async fn reaction_add(&self, ctx: Context, add_reaction: Reaction) {
+        let bot_id = ctx.cache.current_user().id;
+        // DMs, and reactions on someone else's message, aren't this bot's business
+        if add_reaction.guild_id.is_none() || add_reaction.message_author_id != Some(bot_id) {
+            return;
+        }
+        if self.bot.guild_id.is_some_and(|g| add_reaction.guild_id != Some(g)) {
+            return;
+        }
+        if self
+            .bot
+            .allowed_channels
+            .as_ref()
+            .is_some_and(|k| !k.contains(&add_reaction.channel_id))
+        {
+            return;
+        }
+        let reactor = match add_reaction.user(&ctx).await {
+            // a bot's own `tepki:` reaction on its own earlier message, or another bot: skip
+            Ok(u) if !u.bot && u.id != bot_id => u,
+            Ok(_) => return,
+            Err(e) => {
+                log::debug!("reaction_add: couldn't fetch reactor: {e}");
+                return;
+            }
+        };
+        let content = match add_reaction.message(&ctx).await {
+            Ok(m) => m.content_safe(&ctx.cache),
+            Err(e) => {
+                log::debug!("reaction_add: couldn't fetch reacted message: {e}");
+                return;
+            }
+        };
+        // an embed-only message (a slash-command card, a debug line) has nothing to react
+        // to in the bot's own words
+        if content.trim().is_empty() {
+            return;
+        }
+        let channel = add_reaction.channel_id;
+        let name = display_name(&reactor);
+        let emoji = reaction_label(&add_reaction.emoji);
+        let text = format!(
+            "(tepki {emoji}) \"{}\" mesajına tepki verdi",
+            memory::trim(&content, 200)
+        );
+        {
+            let mut state = self.bot.state();
+            state
+                .name_to_id
+                .insert(name.to_lowercase(), reactor.id.get());
+            state.usernames.insert(reactor.id.get(), reactor.name.clone());
+            remember(&mut state, &name, &text);
+            if let Some(chat) = state.chats.get_mut(&channel) {
+                chat.history.push(user(format!("{name}: {text}")));
+                if chat.history.len() > CHAT_SIZE {
+                    chat.history.drain(..chat.history.len() - CHAT_SIZE);
+                }
+            }
+            channel_note(&mut state, channel, format!("{name}: {text}"));
+        }
+        self.bot
+            .debug_note(&ctx, channel, format!("tepki: {name} → {emoji}"))
+            .await;
+    }
+
     // slash commands run from the command::definitions() table (the bot is only managed
     // via slash); the menu/buttons on the mind card lead to detail modals; a modal
     // submission just gets a short acknowledgment (display-only, no input is collected);
@@ -465,5 +542,19 @@ impl EventHandler for Handler {
             }
             _ => {}
         }
+    }
+}
+
+// ReactionType's own Display gives Discord's raw mention form for a custom emoji
+// (`<:name:id>`), which the model would just repeat back verbatim — not what a person means
+// when they say what emoji someone used
+/// Input: `emoji: &ReactionType`. Output: `String` — the unicode emoji as-is, or a custom
+/// (server) emoji's name wrapped in colons, `"bilinmeyen emoji"` if even the name is
+/// missing. Used by: `Handler::reaction_add` above, the only caller.
+fn reaction_label(emoji: &ReactionType) -> String {
+    match emoji {
+        ReactionType::Unicode(s) => s.clone(),
+        ReactionType::Custom { name: Some(n), .. } => format!(":{n}:"),
+        _ => "bilinmeyen emoji".to_string(),
     }
 }

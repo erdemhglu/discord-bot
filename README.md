@@ -23,6 +23,7 @@ mandatory) has been observed to perform well.
 - posts short messages back-to-back instead of one long one: **every line the model writes goes out as its own message** (at most 4 lines per turn — usually 4 messages; a line over 1900 characters is further split, thought messages are also added in thinking "show" mode). Most replies are a single line; a neutral/informational remark isn't split, an excited one is
 - **stays silent** when it has nothing to say: if the conversation isn't directed at it, or joining in would stick out, it sends nothing at all (even while a chat is open)
 - can leave an **emoji reaction** instead of text; a reaction can also arrive alongside a line of text
+- notices when someone reacts to one of **its own** messages: the reaction (and what it was on) is noted the same way a message is, and enters an open chat's context — it doesn't trigger a reply by itself, but the bot may bring it up next time it naturally speaks
 - **sees** an image if you post one: the attached image goes to the model (only the most recently posted one), it doesn't describe it as "I see X in the image" — it comments or reacts like a person would
 - doesn't ask questions back-to-back: if its recent replies have piled up questions, it's told not to ask one that turn
 - can be locked to a single server/channel list with `GUILD_ID`/`CHANNELS` (.env, optional); runs everywhere it can reach if unset

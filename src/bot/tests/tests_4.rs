@@ -136,3 +136,27 @@
         let slice: &str = strip_name(&text, "cicikus");
         assert_eq!(slice, "merhaba dünya");
     }
+
+    /// Verifies `reaction_label` passes a unicode emoji through as-is, wraps a named custom
+    /// emoji in colons instead of Discord's raw `<:name:id>` mention form, and falls back to
+    /// a placeholder when even the name is missing.
+    #[test]
+    fn reaction_label_formats_emoji() {
+        assert_eq!(reaction_label(&ReactionType::Unicode("💀".into())), "💀");
+        assert_eq!(
+            reaction_label(&ReactionType::Custom {
+                animated: false,
+                id: EmojiId::new(1),
+                name: Some("kekw".into()),
+            }),
+            ":kekw:"
+        );
+        assert_eq!(
+            reaction_label(&ReactionType::Custom {
+                animated: false,
+                id: EmojiId::new(1),
+                name: None,
+            }),
+            "bilinmeyen emoji"
+        );
+    }
