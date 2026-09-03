@@ -190,7 +190,7 @@ input is collected.
 channels, pages of 100) → the last 2000 lines of raw memory → profiler → coach (if temperament
 is empty). Not re-scanned on a reconnect.
 `guild_create` also sends a one-line version announcement to the default channel, once per
-process (`Handler.announced`): `geldim · v0.2.0 (69e2851, 2026-09-02) · model … · düşünme …` —
+process (`Handler.announced`): `geldim · v1.0.0 (69e2851, 2026-09-02) · model … · düşünme …` —
 this doesn't get written to memory or the channel note (so the bot doesn't mistake it for its
 own words). Not in `ready`, because the guild cache isn't populated yet at that point.
 

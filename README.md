@@ -303,9 +303,9 @@ deliberately left as-is — see AGENTS.md item 8.
 
 ## Project status
 
-Actively developed, pre-1.0. The core (chat engine, memory, agents) is covered by 86 unit
-tests and passes `clippy` clean, but **live Discord behavior has not yet been verified** in
-this development environment (no bot token available here) — command registration, streaming
+**v1.0.0 (2026).** The core (chat engine, memory, agents) is covered by 86 unit tests and
+passes `clippy` clean, but **live Discord behavior has not yet been verified** in this
+development environment (no bot token available here) — command registration, streaming
 cadence, reaction handling, and rate-limit behavior are all compiler- and test-verified only so
 far. See AGENTS.md's "Known gaps / unverified" section for the full, honestly-kept list before
 relying on this in production.

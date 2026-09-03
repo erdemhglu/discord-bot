@@ -4,6 +4,38 @@ Chronological. Newest at the top. Each line: date · commit (if any) · what+why
 
 ---
 
+## 2026-09-04 · dev/+docs/ merged and translated, AGENTS.md/README.md rewritten, v1.0.0
+User requests across the session: rename `resimler/` → `photos/`; merge `dev/` into `docs/`
+and translate all doc content to English; translate `AGENTS.md`/`CLAUDE.md` to English; rewrite
+`README.md` as a full technical document, plus a Turkish translation (`README.tr.md`); bump the
+crate version to 1.0.0 for the 2026 release.
+- `resimler/` renamed to `photos/` (code, `.gitignore`, docs); `.env.example` comments
+  translated to English (commit `a64525b`).
+- `dev/` merged into `docs/` as a single documentation home; all Turkish filenames renamed to
+  English (`mimari.md`→`architecture.md`, `kararlar.md`→`decisions.md`, `ilerleme.md`→
+  `progress.md`, etc.) and their full content translated Turkish→English, done via four
+  parallel background agents (one of the four hit a session rate limit partway through
+  `progress.md` and had to be relaunched). Runtime artifacts (durum/ field names, agent names,
+  literal prompt/example text) deliberately left untranslated per AGENTS.md item 8. Stale
+  content caught along the way and fixed in `docs/development.md`'s "not done" list: reaction-
+  handling, id-based person keys, and call/token metrics were listed as missing but are already
+  implemented (commit `de13a3f`).
+- `AGENTS.md`/`CLAUDE.md` translated Turkish→English by hand at the user's request; also fixed
+  a stale unit-test count (77→86) noticed while rewriting the quick-commands section (commit
+  `3b117a4`).
+- `README.md` rewritten from a dense bullet list into a structured technical document: badges,
+  table of contents, architecture diagram, agent/memory-model tables, a full configuration
+  table kept in sync with `.env.example` (added `LOG_LEVEL`/`LOG_COLOR`, previously undocumented
+  there), a commands table, and a documentation map (commit `c744183`). A full Turkish
+  translation added as `README.tr.md`, with a language-switcher line at the top of each file.
+- `Cargo.toml` version bumped `0.2.0` → `1.0.0`. `Cargo.lock` was briefly untracked at the
+  user's request, then kept committed once flagged that a binary crate (unlike a library)
+  should ship a locked dependency tree for reproducible builds — user agreed, reverted.
+- Verification: `cargo build`/`test`/`clippy --all-targets`/`fmt --check` clean after every
+  step (86 tests). Doc/README content changes don't affect runtime behavior; none of this was
+  exercised against a live Discord connection, same caveat as everything else in this
+  environment.
+
 ## 2026-09-03 · English filled in: prompts/en/*.md (31) + langs/en.json (158 keys)
 User: "add the English translations for the langs and markdown files too, get that going in the
 project" — the multilingual infrastructure already existed (see the two entries below), only
