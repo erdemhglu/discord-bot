@@ -29,7 +29,7 @@ fn system_json(fixed: &str, variable: &str, api_url: &str) -> serde_json::Value 
 // every reply's system message has two parts: FIXED (personality, temperament, profile,
 // index... changes when an agent runs, this is where the prompt cache pays off) and
 // VARIABLE (retrieved memory, time, task)
-/// Assembles the fixed/variable system-message text (see `docs/mimari.md`'s numbered list).
+/// Assembles the fixed/variable system-message text (see `docs/architecture.md`'s numbered list).
 /// Input: `state: &State` (reads `bot_name`, `favorite_name`, `growth`, `temperament`,
 /// `profile`, `index`, `agenda`, `myself`, `corrections`); `instruction: &str` — this call's
 /// task; `retrieved: &str` — memory retrieved for this chat (empty for agent calls).

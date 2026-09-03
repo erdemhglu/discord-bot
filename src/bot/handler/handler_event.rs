@@ -165,7 +165,7 @@ impl EventHandler for Handler {
     }
 
     /// Serenity's `message` callback — the core of the bot's Discord-side logic (see
-    /// `docs/akislar.md`'s "Bir mesaj geldi" for the full step list).
+    /// `docs/flows.md`'s "A message arrives" for the full step list).
     /// Input: `&self`; `ctx: Context`; `msg: Message` (a raw Discord message, any author).
     /// Output: none. Uses (non-exhaustive — this is the crate's densest function):
     /// `self.bot.guild_id`/`allowed_channels`, `msg.content_safe`, `self.bot.image_analysis`,

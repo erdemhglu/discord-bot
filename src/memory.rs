@@ -10,7 +10,7 @@
 //
 // Everything above except `arsiv/` lives in one embedded database, `durum/hafiza.redb`
 // (redb — pure Rust, single file, ACID transactions; chosen over rusqlite specifically to
-// avoid a C dependency, see docs/kararlar.md). The design deliberately doesn't reshape the
+// avoid a C dependency, see docs/decisions.md). The design deliberately doesn't reshape the
 // data: every value stored is the exact same text a file held before this migration, keyed
 // by the same relative path string the file used to have (`"kisiler/1.md"`, `"profil.md"`,
 // ...) — so `Person::parse`/`Person::text`, `retrieve`, `keywords`, `trim`, `slug`, and every
@@ -297,7 +297,7 @@ impl Person {
     /// Input: `id: u64`; `text: &str` — a `kisiler/<id>.md` record's contents. Output:
     /// `Person`. Unknown lines are ignored; the field prefixes it looks for
     /// (`kullanici_adi:`, `eski_adlar:`, `puan:`, `etiket:`, `not:`) are Turkish on purpose
-    /// — they're the on-disk format (see `docs/durum-dosyalari.md`), not translated so
+    /// — they're the on-disk format (see `docs/state-files.md`), not translated so
     /// existing data keeps parsing. Used by: `read_person`/`person_summaries` below,
     /// `Bot::diarist` (`agents.rs`).
     pub fn parse(id: u64, text: &str) -> Person {
@@ -723,7 +723,7 @@ fn score_matches(text: &str, keywords: &[String]) -> usize {
 // the result is ALWAYS at most `limit` characters (some Discord fields — like a select
 // menu option's description — enforce this exact limit strictly); "…" is included in the
 // count too, otherwise the trimmed result comes out to limit+1 characters (see
-// docs/kararlar.md — this caused a live "Must be 100 or fewer in length" error)
+// docs/decisions.md — this caused a live "Must be 100 or fewer in length" error)
 /// Input: `text: &str`; `limit: usize`. Output: `String` — `text` trimmed, or hard-cut to
 /// `limit - 1` characters plus a trailing `…` (so the total is always `<= limit`). Used
 /// throughout the crate wherever text has to fit a Discord field/embed limit (`modal.rs`,

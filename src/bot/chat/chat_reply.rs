@@ -3,7 +3,7 @@ impl Bot {
     // a time — messages that arrive meanwhile are appended to history and seen on the next reply
     /// The full reply turn: picks an instruction, evaluates mood/research/target/question-cap,
     /// streams a reply (falling back to non-streaming on an empty stream), records it, and
-    /// loops again if a new message arrived meanwhile. See `docs/akislar.md`'s `reply` diagram
+    /// loops again if a new message arrived meanwhile. See `docs/flows.md`'s `reply` diagram
     /// for the full step-by-step.
     /// Input: `&self`; `ctx: &Context`; `channel: ChannelId`. Output: none (sends messages as
     /// a side effect; returns early on any hard failure). Uses: `self.state()`, `BusyGuard`,

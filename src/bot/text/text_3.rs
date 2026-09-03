@@ -1,5 +1,5 @@
 /// Parses raw model output into a `Reply` per the line-based protocol (see AGENTS.md rule 2
-/// and `docs/akislar.md`'s "Çıktı protokolü").
+/// and `docs/flows.md`'s "Output protocol").
 /// Input: `text: &str` — model output, already passed through `strip_name`. Output: `Reply`.
 /// Uses: `number_prefix`, `silence_marker`, `reaction_body`, `extract_emoji`, `clean_slop`,
 /// `split`, `BURST_LIMIT`/`MESSAGE_LIMIT`. Used by: `Bot::send_stream`/`send_lines`
