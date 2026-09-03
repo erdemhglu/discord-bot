@@ -12,7 +12,6 @@
 
 use super::*;
 use crate::memory::{self, Person};
-use crate::prompts::*;
 use base64::Engine;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -29,7 +28,7 @@ pub struct DiaristSummary {
     pub output_chars: usize, // character count of the model's output
 }
 
-/// Deserialize target for the diarist's JSON reply (see `promptlar/gunlukcu.md`). Field
+/// Deserialize target for the diarist's JSON reply (see `prompts/gunlukcu.md`). Field
 /// names are Turkish on purpose — they must match the JSON keys the model is instructed to
 /// produce (see AGENTS.md rule 8 / `docs/sozluk.md`). Holds `olay` (one-line event summary),
 /// `kisiler`/`konular` (per-person/per-topic records, see `PersonRecord`/`TopicRecord`
@@ -84,7 +83,12 @@ impl Bot {
             return;
         }
         match self
-            .analyze(&sample, PROFILE_EXTRACT, 1200, "profilci")
+            .analyze(
+                &sample,
+                prompts::current().profile_extract,
+                1200,
+                "profilci",
+            )
             .await
         {
             Ok(result) => {
@@ -117,7 +121,8 @@ impl Bot {
         }
         let (instruction, favorite, bot_name) = {
             let state = self.state();
-            let text = DIARIST
+            let text = prompts::current()
+                .diarist
                 .replace("{ad}", &state.bot_name)
                 .replace("{kaynak}", source)
                 .replace(
@@ -262,7 +267,9 @@ impl Bot {
                 "kisi" => {
                     self.analyze(
                         &old,
-                        &SUMMARIZER_PERSON.replace("{sinir}", &memory::PERSON_TARGET.to_string()),
+                        &prompts::current()
+                            .summarizer_person
+                            .replace("{sinir}", &memory::PERSON_TARGET.to_string()),
                         700,
                         "ozetleyici_kisi",
                     )
@@ -271,7 +278,9 @@ impl Bot {
                 "konu" => {
                     self.analyze(
                         &old,
-                        &SUMMARIZER_TOPIC.replace("{sinir}", &memory::TOPIC_TARGET.to_string()),
+                        &prompts::current()
+                            .summarizer_topic
+                            .replace("{sinir}", &memory::TOPIC_TARGET.to_string()),
                         600,
                         "ozetleyici_konu",
                     )
@@ -287,7 +296,7 @@ impl Bot {
                     match self
                         .analyze(
                             &older.join("\n"),
-                            SUMMARIZER_EVENTS,
+                            prompts::current().summarizer_events,
                             400,
                             "ozetleyici_olaylar",
                         )
@@ -355,7 +364,10 @@ impl Bot {
                 recent_messages(&state, 200),
                 if own.is_empty() { "(henüz konuşmadı)" } else { &own },
             );
-            (text, COACH.replace("{ad}", &state.bot_name))
+            (
+                text,
+                prompts::current().coach.replace("{ad}", &state.bot_name),
+            )
         };
         match self.analyze(&text, &instruction, 800, "hoca").await {
             Ok(result) => {
@@ -377,7 +389,8 @@ impl Bot {
         }
         let instruction = {
             let state = self.state();
-            CRITIC
+            prompts::current()
+                .critic
                 .replace("{ad}", &state.bot_name)
                 .replace("{mevcut}", &state.corrections)
         };
@@ -456,7 +469,7 @@ impl Bot {
         let pick = self
             .analyze(
                 &list,
-                &NEWS_PICK.replace("{profil}", &profile),
+                &prompts::current().news_pick.replace("{profil}", &profile),
                 10,
                 "haber_sec",
             )
@@ -482,7 +495,7 @@ impl Bot {
     pub async fn image_commenter(&self, path: &PathBuf) -> Result<String, BotError> {
         let (system, bot_name) = {
             let state = self.state();
-            let (fixed, variable) = system_text(&state, IMAGE_POST, "");
+            let (fixed, variable) = system_text(&state, prompts::current().image_post, "");
             (format!("{fixed}\n\n{variable}"), state.bot_name.clone())
         };
         let data = tokio::fs::read(path).await?;
@@ -515,7 +528,7 @@ impl Bot {
             Err(_) => {
                 self.generate(
                     &[user("bir görsel atıyorsun ama ne olduğunu hatırlamıyorsun")],
-                    IMAGE_POST,
+                    prompts::current().image_post,
                     Some(120),
                     "resimci",
                 )

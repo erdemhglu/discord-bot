@@ -261,7 +261,8 @@ impl Bot {
             .join("\n");
         let instruction = {
             let state = self.state();
-            WANDERER_PICK
+            prompts::current()
+                .wanderer_pick
                 .replace("{ad}", &state.bot_name)
                 .replace("{huy}", &state.temperament)
                 .replace("{profil}", &state.profile)
@@ -291,7 +292,12 @@ impl Bot {
         }
 
         let note = match self
-            .generate(&[user(read_text)], WANDERER_NOTE, Some(350), "gezgin_not")
+            .generate(
+                &[user(read_text)],
+                prompts::current().wanderer_note,
+                Some(350),
+                "gezgin_not",
+            )
             .await
         {
             Ok(n) => n,

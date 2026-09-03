@@ -87,7 +87,8 @@ impl Bot {
         category: &'static str,
     ) -> Result<String, BotError> {
         let input = user(format!("{text}\n\n---\n\n{instruction}"));
-        self.ask(ANALYST, &[input], max_tokens, category).await
+        self.ask(prompts::current().analyst, &[input], max_tokens, category)
+            .await
     }
 
     // "do I want to join this conversation?" mini evaluation (0-10 score).
@@ -114,8 +115,9 @@ impl Bot {
         if context.trim().is_empty() {
             return None;
         }
-        let fixed = format!("{ANALYST}\n\nGRUP PROFİLİ\n{profile}\n\nKİŞİ DİZİNİ\n{index}");
-        let variable = WILLINGNESS.replace("{ad}", &bot_name);
+        let p = prompts::current();
+        let fixed = format!("{}\n\nGRUP PROFİLİ\n{profile}\n\nKİŞİ DİZİNİ\n{index}", p.analyst);
+        let variable = p.willingness.replace("{ad}", &bot_name);
         let input = user(format!("SON MESAJLAR\n{context}"));
         match self
             .ask_split(&fixed, &variable, &[input], Some(80), "isteklilik")
@@ -142,7 +144,8 @@ impl Bot {
             let s = self.state();
             (recent_messages(&s, 12), s.bot_name.clone())
         };
-        let fixed = format!("{ANALYST}\n\n{}", TARGET_PICK.replace("{ad}", &bot_name));
+        let p = prompts::current();
+        let fixed = format!("{}\n\n{}", p.analyst, p.target_pick.replace("{ad}", &bot_name));
         let variable = format!("BEKLEYENLER\n- {}", waiting.join("\n- "));
         let input = user(format!("SON MESAJLAR\n{context}"));
         match self
@@ -179,9 +182,10 @@ impl Bot {
                 ..m.clone()
             })
             .collect();
-        let variable = MOOD.replace("{ad}", &self.state().bot_name);
+        let p = prompts::current();
+        let variable = p.mood.replace("{ad}", &self.state().bot_name);
         match self
-            .ask_split(ANALYST, &variable, &history, Some(40), "ruh_hali")
+            .ask_split(p.analyst, &variable, &history, Some(40), "ruh_hali")
             .await
         {
             Ok(c) => extract_mood(&c),

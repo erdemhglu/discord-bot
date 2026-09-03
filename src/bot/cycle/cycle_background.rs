@@ -33,13 +33,13 @@ async fn poke_cycle(bot: Arc<Bot>, ctx: Context) {
             }
             bot.state().last_road_message = travel::today();
             let _ = trip;
-            ON_THE_WAY
+            prompts::current().on_the_way
         } else if let Some(trip) = travel::tomorrow() {
             if bot.state().announced_trip == trip.start {
                 continue;
             }
             bot.state().announced_trip = trip.start;
-            LEAVING
+            prompts::current().leaving
         } else {
             if rand::random::<f64>() > POKE_CHANCE * growth::stage(&bot.state().growth).poke {
                 continue;
@@ -53,7 +53,7 @@ async fn poke_cycle(bot: Arc<Bot>, ctx: Context) {
                 }
                 continue;
             }
-            OUT_OF_THE_BLUE
+            prompts::current().out_of_the_blue
         };
         let Some((channel, recent)) = idle_channel(&bot) else {
             continue;

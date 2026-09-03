@@ -72,7 +72,7 @@ impl Bot {
     async fn post_problem(&self, ctx: &Context, channel: ChannelId) {
         let recent = recent_messages(&self.state(), 30);
         match self
-            .generate(&[user(recent)], PROBLEM, Some(160), "sorun")
+            .generate(&[user(recent)], prompts::current().problem, Some(160), "sorun")
             .await
         {
             Ok(line) => match self
@@ -119,7 +119,7 @@ impl Bot {
         let intro = match self
             .generate(
                 &[user(item.title.clone())],
-                NEWS_INTRO,
+                prompts::current().news_intro,
                 Some(200),
                 "haber_tanit",
             )
@@ -158,14 +158,15 @@ impl Bot {
     /// (`cycle_background.rs`), `Bot::cmd_prank`/`cmd_hack` (`command/actions.rs`).
     async fn run_prank(&self, ctx: &Context, channel: ChannelId, hack: bool) {
         let Some(image) = random_image() else {
-            let msg = CreateMessage::new().embed(modal::info_embed("Şaka", "resimler klasörü boş"));
+            let msg = CreateMessage::new()
+                .embed(modal::info_embed(strings::t("prank.title"), strings::t("prank.no_images")));
             let _ = channel.send_message(&ctx.http, msg).await;
             return;
         };
         let text = if hack {
             self.generate(
                 &[user("şaka başlıyor")],
-                HACK_ENTER,
+                prompts::current().hack_enter,
                 Some(150),
                 "hack_giris",
             )

@@ -27,7 +27,7 @@ async fn cmd_settings(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
 /// `modal::mind_message`, `send_response`. Registered as `run` for `"zihin"` in
 /// `registration_table.rs`.
 async fn cmd_mind(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
-    if option_bool(cmd, "test").unwrap_or(false) {
+    if option_bool(cmd, strings::t("cmd.zihin.opt.test.name")).unwrap_or(false) {
         defer(ctx, cmd).await;
         // diagnostic: feed this channel's recent lines straight to the diarist, so
         // whether the mind pipeline works can be seen without waiting 40 minutes (it was
@@ -41,7 +41,13 @@ async fn cmd_mind(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
                 .unwrap_or_default()
         };
         if lines.is_empty() {
-            report_result(ctx, cmd, "Zihin testi", "bu kanalda hatırladığım satır yok").await;
+            report_result(
+                ctx,
+                cmd,
+                strings::t("mind_test.title"),
+                strings::t("mind_test.no_lines"),
+            )
+            .await;
             return;
         }
         lines.reverse();
@@ -54,13 +60,15 @@ async fn cmd_mind(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
             .diarist(lines.join("\n"), "zihin testi", &channel_name)
             .await;
         let description = match result {
-            Ok(summary) => format!(
-                "günlükçü: {} kişi, {} konu, {} olay yazıldı · model çıktısı {} karakter",
-                summary.people, summary.topics, summary.events, summary.output_chars
-            ),
-            Err(e) => format!("günlükçü başarısız: {}", memory::trim(&e.to_string(), 300)),
+            Ok(summary) => strings::t("mind_test.result")
+                .replace("{people}", &summary.people.to_string())
+                .replace("{topics}", &summary.topics.to_string())
+                .replace("{events}", &summary.events.to_string())
+                .replace("{chars}", &summary.output_chars.to_string()),
+            Err(e) => strings::t("mind_test.failed")
+                .replace("{error}", &memory::trim(&e.to_string(), 300)),
         };
-        report_result(ctx, cmd, "Zihin testi", &description).await;
+        report_result(ctx, cmd, strings::t("mind_test.title"), &description).await;
         return;
     }
     let response = modal::mind_message(&bot.state());

@@ -3,8 +3,8 @@
 fn options_reset() -> Vec<CreateCommandOption> {
     vec![CreateCommandOption::new(
         CommandOptionType::Boolean,
-        "hepsi",
-        "tüm kanalları sıfırla (yoksa yalnız bu kanal)",
+        strings::t("cmd.sifirla.opt.hepsi.name"),
+        strings::t("cmd.sifirla.opt.hepsi.description"),
     )]
 }
 
@@ -13,8 +13,8 @@ fn options_reset() -> Vec<CreateCommandOption> {
 fn options_mind() -> Vec<CreateCommandOption> {
     vec![CreateCommandOption::new(
         CommandOptionType::Boolean,
-        "test",
-        "son 30 satırı hemen günlükçüye ver (zihin zinciri teşhisi)",
+        strings::t("cmd.zihin.opt.test.name"),
+        strings::t("cmd.zihin.opt.test.description"),
     )]
 }
 
@@ -23,8 +23,8 @@ fn options_mind() -> Vec<CreateCommandOption> {
 fn options_sleep() -> Vec<CreateCommandOption> {
     vec![CreateCommandOption::new(
         CommandOptionType::Integer,
-        "saat",
-        "kaç saat uyusun (varsayılan 8)",
+        strings::t("cmd.uyu.opt.saat.name"),
+        strings::t("cmd.uyu.opt.saat.description"),
     )
     .min_int_value(1)]
 }
@@ -34,15 +34,18 @@ fn options_sleep() -> Vec<CreateCommandOption> {
 /// `command.rs`'s `thinking_mode_options_match_from_arg` test). Used by:
 /// `registration_table.rs`'s `definitions`, as `/dusunme`'s `options`.
 fn options_thinking() -> Vec<CreateCommandOption> {
+    // choice values ("goster"/"gizle"/"sessiz"/"kapat") are a wire protocol matched by
+    // ThinkingMode::from_arg — never translated, see langs/tr.json's file-top note. Only the
+    // display labels (first argument) come from strings::t.
     vec![CreateCommandOption::new(
         CommandOptionType::String,
-        "kip",
-        "boşsa mevcut kip gösterilir",
+        strings::t("cmd.dusunme.opt.kip.name"),
+        strings::t("cmd.dusunme.opt.kip.description"),
     )
-    .add_string_choice("göster", "goster")
-    .add_string_choice("gizle", "gizle")
-    .add_string_choice("sessiz", "sessiz")
-    .add_string_choice("kapat", "kapat")]
+    .add_string_choice(strings::t("cmd.dusunme.choice.goster"), "goster")
+    .add_string_choice(strings::t("cmd.dusunme.choice.gizle"), "gizle")
+    .add_string_choice(strings::t("cmd.dusunme.choice.sessiz"), "sessiz")
+    .add_string_choice(strings::t("cmd.dusunme.choice.kapat"), "kapat")]
 }
 
 /// Input: none. Output: `Vec<CreateCommandOption>` — `/model`'s `id` (string) option. Used
@@ -50,19 +53,21 @@ fn options_thinking() -> Vec<CreateCommandOption> {
 fn options_model() -> Vec<CreateCommandOption> {
     vec![CreateCommandOption::new(
         CommandOptionType::String,
-        "id",
-        "boşsa mevcut model gösterilir",
+        strings::t("cmd.model.opt.id.name"),
+        strings::t("cmd.model.opt.id.description"),
     )]
 }
 
 /// Input: none. Output: `Vec<CreateCommandOption>` — `/debug`'s `durum` (string choice)
 /// option. Used by: `registration_table.rs`'s `definitions`, as `/debug`'s `options`.
 fn options_debug() -> Vec<CreateCommandOption> {
-    vec![
-        CreateCommandOption::new(CommandOptionType::String, "durum", "boşsa tersine çevirir")
-            .add_string_choice("aç", "ac")
-            .add_string_choice("kapat", "kapat"),
-    ]
+    vec![CreateCommandOption::new(
+        CommandOptionType::String,
+        strings::t("cmd.debug.opt.durum.name"),
+        strings::t("cmd.debug.opt.durum.description"),
+    )
+    .add_string_choice(strings::t("cmd.debug.choice.ac"), "ac")
+    .add_string_choice(strings::t("cmd.debug.choice.kapat"), "kapat")]
 }
 
 // ---------- option-reading helpers ----------

@@ -93,15 +93,18 @@ older 60% is reduced to 3-5 lines). The dropped raw chunk is appended, dated, un
 
 ## prompts
 
-Live as markdown under `promptlar/`, embedded into the build with `include_str!`.
+Live as markdown under `prompts/<dil>/`, embedded into the build with `include_str!`.
 Editing the text and rebuilding is enough. Core rules are in `kisilik.md`, each agent has its
-own file.
+own file. Which language is served — both these prompts and every Discord-facing string
+(slash command names/descriptions, embeds, buttons; `langs/<dil>.json`) — is picked once at
+startup from `BOT_LANG` (`.env`, default `tr`). Only `tr` is filled in today; adding a
+language is a new `prompts/<dil>/` + `langs/<dil>.json` pair, no code change.
 
 ## setup
 
 ```
 cp .env.example .env   # DISCORD_TOKEN + OPENROUTER_KEY or MISTRAL_KEY (MODEL picks the model; API_URL for a custom router)
-                        # optional: GUILD_ID/CHANNELS (locks to a single server/channel), NEWS_CHANNEL, FIRECRAWL_KEY
+                        # optional: GUILD_ID/CHANNELS (locks to a single server/channel), NEWS_CHANNEL, FIRECRAWL_KEY, BOT_LANG (default tr)
 cargo run --release
 ```
 

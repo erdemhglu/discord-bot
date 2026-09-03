@@ -19,6 +19,9 @@ impl Bot {
     /// `Result<Arc<Bot>, BotError>`. Uses: `setting`, `State::load`, `sleep::update`,
     /// `memory::read`. Used by: `main` (both the Discord path and `cargo run -- chat`).
     fn setup() -> Result<Arc<Bot>, BotError> {
+        // BOT_LANG: resolved once here (first touch), fixed for the rest of the process —
+        // every prompts::current()/strings::t() call downstream reads this same choice.
+        log::info!("language: {:?}", lang::Lang::current());
         // provider choice: PROVIDER=mistral forces it; otherwise whichever key is set,
         // openrouter if both are
         let provider = std::env::var("PROVIDER").unwrap_or_default().to_lowercase();
@@ -124,7 +127,7 @@ impl Bot {
         log::info!("debug [{channel}]: {text}");
         let target = self.debug_channel.unwrap_or(channel);
         let body: String = text.chars().take(300).collect();
-        let msg = CreateMessage::new().embed(modal::info_embed("⚙ Debug", &body));
+        let msg = CreateMessage::new().embed(modal::info_embed(strings::t("debug.title"), &body));
         if let Err(e) = target.send_message(&ctx.http, msg).await {
             log::warn!("couldn't send debug line ({target}): {e}");
         }

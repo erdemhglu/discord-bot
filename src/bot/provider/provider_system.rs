@@ -37,8 +37,9 @@ fn system_json(fixed: &str, variable: &str, api_url: &str) -> serde_json::Value 
 /// (`prompts.rs`), `growth::stage_text`, `sleep::status_text`, `travel::status_text`. Used
 /// by: `Bot::chat_system` (`provider_generate.rs`), `Bot::image_commenter` (`agents.rs`).
 fn system_text(state: &State, instruction: &str, retrieved: &str) -> (String, String) {
+    let p = prompts::current();
     let favorite_line = match &state.favorite_name {
-        Some(f) => FAVORITE_LINE.replace("{favori}", f),
+        Some(f) => p.favorite_line.replace("{favori}", f),
         None => String::new(),
     };
     let section = |s: &mut String, title: &str, content: &str| {
@@ -52,7 +53,8 @@ fn system_text(state: &State, instruction: &str, retrieved: &str) -> (String, St
         }
     };
 
-    let mut fixed = PERSONALITY
+    let mut fixed = p
+        .personality
         .replace("{ad}", &state.bot_name)
         .replace("{favori_satiri}", &favorite_line);
     section(

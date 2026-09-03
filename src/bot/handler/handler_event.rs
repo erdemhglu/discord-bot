@@ -80,8 +80,11 @@ impl EventHandler for Handler {
                     let state = self.bot.state();
                     (state.model.clone(), state.thinking_mode.label())
                 };
-                let description = format!("model {model} · düşünme {mode}");
-                let embed = modal::info_embed(&format!("geldim · {}", version_text()), &description);
+                let description = strings::t("announce.description")
+                    .replace("{model}", &model)
+                    .replace("{mode}", mode);
+                let title = format!("{} · {}", strings::t("announce.title"), version_text());
+                let embed = modal::info_embed(&title, &description);
                 let msg = CreateMessage::new().embed(embed);
                 if let Err(e) = channel.send_message(&ctx.http, msg).await {
                     log::warn!("couldn't send version announcement ({channel}): {e}");
@@ -134,7 +137,7 @@ impl EventHandler for Handler {
             .bot
             .generate(
                 &[user(format!("{name} sunucuya yeni katıldı."))],
-                WELCOME,
+                prompts::current().welcome,
                 Some(200),
                 "hos_geldin",
             )

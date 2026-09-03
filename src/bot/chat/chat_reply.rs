@@ -22,9 +22,9 @@ impl Bot {
                     return;
                 };
                 let instruction = if chat.hacked > 1 {
-                    HACK_CONTINUE
+                    prompts::current().hack_continue
                 } else if chat.hacked == 1 {
-                    HACK_EXIT
+                    prompts::current().hack_exit
                 } else {
                     ""
                 };

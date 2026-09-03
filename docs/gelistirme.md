@@ -7,16 +7,30 @@ güncel halini önce oku (`cargo fmt` satırları akıtır, hizalı yorumları k
 
 ## Bitti demeden
 `cargo fmt` → `cargo clippy` (0 uyarı) → `cargo test` → `cargo build --release` → ilgili
-`docs/` dosyasını güncelle (moduller/akislar/sabitler/promptlar) → `docs/kararlar.md`'ye
+`docs/` dosyasını güncelle (moduller/akislar/sabitler/prompts) → `docs/kararlar.md`'ye
 gerekçe → commit (Türkçe, ne+neden) → push.
 
 ## Tarifler
 
 ### Yeni prompt
-1. `promptlar/<ad>.md` yaz; ilk satır `# Başlık`; yer tutucular `{x}`. (Bu dosya Türkçe kalır.)
-2. `src/prompts.rs`'e `pub const AD: &str = include_str!("../promptlar/<ad>.md");` (sabit adı İngilizce).
-3. Kullanan yerde `.replace("{x}", ..)`.
-4. `docs/promptlar.md` tablosuna satır.
+1. `prompts/tr/<ad>.md` yaz; ilk satır `# Başlık`; yer tutucular `{x}`. (Bu dosya Türkçe kalır.)
+2. `src/prompts.rs`'nin `tr` alt modülüne `pub const AD: &str = include_str!("../prompts/tr/<ad>.md");`
+   (sabit adı İngilizce), `Prompts` struct'ına ve `TR` sabitine karşılık gelen alan.
+3. Kullanan yerde `prompts::current().alan_adi.replace("{x}", ..)`.
+4. `docs/prompts.md` tablosuna satır.
+
+### Yeni Discord-facing metin (komut adı/açıklaması, embed, buton)
+1. `langs/tr.json`'a `"anahtar": "değer"` ekle (nokta ayraçlı ad alanı, ör. `cmd.x.name`).
+2. Kullanan yerde `strings::t("anahtar")`; yer tutucu varsa `.replace("{x}", ..)`.
+3. Komut seçeneği/choice ise: **değer** (Discord'a kayıtlı wire protokolü, `option_text`/
+   `add_string_choice`'ın ikinci argümanı) hiç çevrilmez, yalnız görünen **etiket** `strings::t`'ten gelir.
+
+### Yeni dil
+1. `prompts/<dil>/` klasörü: `prompts/tr/`'deki her dosyanın çevirisi, aynı dosya adlarıyla.
+2. `langs/<dil>.json`: `langs/tr.json`'daki her anahtarın çevirisi (anahtarlar ve
+   `{yer_tutucu}`'lar birebir aynı kalır).
+3. `src/lang.rs`'nin `Lang` enum'ına yeni varyant + `parse`'a eşleşme; `src/prompts.rs`'nin
+   `get`'ine ve `src/strings.rs`'nin `table`'ına birer `match` kolu.
 
 ### Yeni ajan (arka plan değerlendirme)
 1. `src/agents.rs` içinde `impl Bot { pub async fn <ad>(&self, ...) }`. Girdi `State`'den kilit
@@ -37,7 +51,7 @@ gerekçe → commit (Türkçe, ne+neden) → push.
 `docs/durum-dosyalari.md` tablosuna satır.
 
 ### Kişilik davranışını değiştirmek
-Sabit kural → `promptlar/kisilik.md`. Zamanla değişmesi gereken şey → `hoca.md`'nin karar
+Sabit kural → `prompts/kisilik.md`. Zamanla değişmesi gereken şey → `hoca.md`'nin karar
 alanına ekle (kod değişmez). Sohbet sonrası düzeltme → `elestirmen.md`.
 
 ### Sabit değiştirmek
@@ -53,9 +67,9 @@ alanına ekle (kod değişmez). Sohbet sonrası düzeltme → `elestirmen.md`.
   döner; id'yi kopyala, guard'ı await'e taşıma.
 - **Ready birden fazla kez gelir** (yeniden bağlanma). Döngüleri `started` korur.
 - **`guild_create` her bağlanmada gelir.** `scanned` seti tekrar taramayı önler.
-- **`include_str!` yolu `src/`'ye göredir:** `"../promptlar/x.md"`.
+- **`include_str!` yolu `src/`'ye göredir:** `"../prompts/x.md"`.
 - **Tanımlayıcı İngilizce ve ASCII olmalı** (kod tarafı, bkz AGENTS.md madde 8); rustc
-  uncommon_codepoints uyarır. `promptlar/*.md` ve `durum/` dosya alanları bu kuralın dışında,
+  uncommon_codepoints uyarır. `prompts/*.md` ve `durum/` dosya alanları bu kuralın dışında,
   Türkçe kalır — model JSON çıktısıyla/mevcut disk verisiyle eşleşmeleri gerekiyor.
 - **`cargo fmt` uzun `let … else { continue };`** satırlarını çok satıra böler; yama
   eşleştirmesi kırılır.

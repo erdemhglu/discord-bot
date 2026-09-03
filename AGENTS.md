@@ -11,9 +11,10 @@ tokio + reqwest), cevaplar OpenRouter (varsayılan `openai/gpt-4o-mini`) ya da M
 sağlayıcıya özel tek fark `cache_control` (prompt cache), hedef adrese göre koşullu eklenir
 (`supports_cache`, src/main.rs — openrouter.ai'ye giden her istekte eklenir, karar openrouter'a
 bırakılır; mistral native api'de ve özel `API_URL` router'larında eklenmez). Kişiliği kod değil,
-arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Promptlar `promptlar/*.md`,
-`include_str!` ile derlemeye gömülür (bu dizin ve dosya adları bilerek Türkçe bırakıldı — botun
-Türkçe çalışma şeklinin bir parçası; kod tarafı İngilizce'dir, bkz. madde 8).
+arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Promptlar
+`prompts/<dil>/*.md`, `include_str!` ile derlemeye gömülür (bu dizin ve dosya adları bilerek
+Türkçe bırakıldı — botun Türkçe çalışma şeklinin bir parçası; kod tarafı İngilizce'dir, bkz.
+madde 8). Bot tek dilde çalışır, seçim `.env`'deki `BOT_LANG` (varsayılan `tr`, madde 12).
 
 ## Hızlı komutlar
 ```
@@ -34,11 +35,11 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
 | Bir olay olunca sırayla ne oluyor (mesaj, sohbet, uyku, seyahat, şaka, haber) | docs/akislar.md |
 | Çıktı protokolü (satır = mesaj, `-` susma, `tepki:` emoji, resim, CLI tezgâh) | docs/akislar.md ("Çıktı protokolü", "CLI sohbet") |
 | `durum/` dosya biçimleri, sınırlar, özetleme | docs/durum-dosyalari.md |
-| Hangi prompt nerede kullanılıyor, yer tutucular, max_tokens | docs/promptlar.md |
+| Hangi prompt nerede kullanılıyor, yer tutucular, max_tokens | docs/prompts.md |
 | Bütün sabitler ve anlamları | docs/sabitler.md |
 | Neden böyle yapıldı (kararlar + gerekçe) | docs/kararlar.md |
 | Yeni ajan/prompt/döngü/durum dosyası ekleme, tuzaklar, kontrol listesi | docs/gelistirme.md |
-| Türkçe kalan çalışma zamanı kelime dağarcığı (promptlar, durum/ alanları, ajan adları) | docs/sozluk.md |
+| Türkçe kalan çalışma zamanı kelime dağarcığı (prompts, durum/ alanları, ajan adları) | docs/sozluk.md |
 | Gelişim evreleri ve isim seçme | docs/moduller.md (growth), docs/akislar.md |
 
 ## Değişmez kurallar (kodda da böyle)
@@ -62,13 +63,16 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
    fonksiyon `Bot::analyze`. Ajanlar kişiliksizdir. Yeni bir "konuşma" mutlaka `generate`'ten
    (sohbet cevabı stream'de `generate_stream`'ten), yeni bir "değerlendirme" mutlaka
    `analyze`'den geçer.
-7. **Prompt metni Rust'a yazılmaz**, `promptlar/*.md`'ye yazılır ve `src/prompts.rs`'de
-   `include_str!` ile bağlanır. Yer tutucular `{ad}` gibi süslü parantezli, `replace` ile dolar.
+7. **Prompt metni Rust'a yazılmaz**, `prompts/<dil>/*.md`'ye yazılır ve `src/prompts.rs`'de
+   `include_str!` ile bağlanır; Discord'a çıkan metin (komut adı/açıklaması, embed, buton) de
+   Rust'a yazılmaz, `langs/<dil>.json`'a yazılır ve `src/strings.rs`'nin `t(anahtar)`'ıyla
+   okunur (madde 12). Yer tutucular `{ad}` gibi süslü parantezli, `replace` ile dolar.
 8. **Tanımlayıcılar İngilizce ve ASCII, yorumlar İngilizce** — ama botun Türkçe çalışma şekli
-   koda dokunmaz: `promptlar/*.md` (dizin+dosya adı+içerik), `durum/` dosya biçimleri (alan
-   adları, dosya adları), ve Discord'a çıkan her şey (slash komut adları/açıklamaları, embed
-   metni, buton/menü etiketleri, model çıktısı) Türkçe kalır. Kod "yapay zeka yazmış" gibi
-   durmamalı: kısa, düz, açıklamalar sebep söyler. Türkçe kalan çalışma zamanı terimleri için
+   koda dokunmaz: `prompts/<dil>/*.md` ve `langs/<dil>.json` (dizin+dosya adı+içerik), `durum/`
+   dosya biçimleri (alan adları, dosya adları), ve Discord'a çıkan her şey (slash komut
+   adları/açıklamaları, embed metni, buton/menü etiketleri, model çıktısı) Türkçe kalır. Kod
+   "yapay zeka yazmış" gibi durmamalı: kısa, düz, açıklamalar sebep söyler. Türkçe kalan
+   çalışma zamanı terimleri için
    bkz. docs/sozluk.md.
 9. `cargo fmt` satırları yeniden akıtır; metin eşleştirmeli yama yapacaksan önce dosyanın
    güncel halini oku (docs/gelistirme.md "tuzaklar").
@@ -82,6 +86,12 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
     `interaction_create` (main.rs) `Interaction::Command`'ı isme göre tabloda bulup çalıştırır.
     Her komut embed döner (düz metin yok); 3 sn'yi aşabilecek komutlar (ağ/model çağrısı yapanlar)
     önce `defer` ile erteleyip `report_result` ile sonucu düzenler.
+12. **Bot tek dilde çalışır, süreç boyunca sabit.** Seçim `.env`'deki `BOT_LANG`
+    (`src/lang.rs`'nin `Lang::current()`'ı, ilk çağrıda okunur ve önbelleğe alınır; `LANG`
+    değil — çoğu kabuk `LANG`'ı zaten işletim sistemi yereli için ayarlar). Kişilik/ajan
+    promptları `prompts/<dil>/`'den (`prompts::current()`), Discord'a çıkan her şey
+    `langs/<dil>.json`'den (`strings::t(anahtar)`) gelir. Bugün yalnız `tr` dolu; yeni dil eklemek
+    bu iki dizine birer dosya eklemek + `prompts.rs`/`strings.rs`'e birer `match` kolu.
 
 ## Durum klasörü (çalışma zamanı, git'e girmez)
 `durum/INDEX.md` işaretçi · `kisiler/` `konular/` `olaylar/` içerik · `arsiv/` taşan ·
@@ -126,7 +136,13 @@ cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, y
   canlıda gecikme/rate limit görülmedi.
 - **2026-09-03: kod tabanı (src/**/*.rs, README.md) Türkçe'den İngilizceye çevrildi**
   (tanımlayıcılar, yorumlar, dosya/dizin adları, .env değişken adları). Botun çalışma şekli
-  (promptlar/, durum/ dosya biçimleri, Discord'a çıkan her şey) bilerek Türkçe bırakıldı — bkz.
+  (prompts/, durum/ dosya biçimleri, Discord'a çıkan her şey) bilerek Türkçe bırakıldı — bkz.
   madde 8. Bu çeviri canlı Discord'da doğrulanmadı; yalnız derleyici + 76 birim test + clippy
   ile kontrol edildi. AGENTS.md/docs/dev/ içindeki düzyazı Türkçe kaldı, yalnız kod
   referansları (fonksiyon/dosya/env değişken adları) güncellendi.
+- **2026-09-03: çok dilli altyapı eklendi (madde 12), yalnız `tr` dolu.** `BOT_LANG`/`Lang`
+  seçimi, prompt+string dispatch canlı Discord'da hiç görülmedi; yalnız derleyici + 82 birim
+  test + clippy ile doğrulandı. `langs/tr.json`'daki ~160 anahtarın gerçek Discord embed/buton
+  boyut sınırlarına (`modal.rs`'nin `LABEL_LIMIT`/`FIELD_LIMIT` vb.) uyduğu yalnız statik
+  olarak (aynı uzunlukta Türkçe metin) doğrulandı, canlı render edilmedi. İkinci bir dil
+  eklendiğinde bu sınırlara o dilin metinleriyle de uyulduğu ayrıca kontrol edilmeli.

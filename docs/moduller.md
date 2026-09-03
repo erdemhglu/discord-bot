@@ -173,7 +173,7 @@ select menü ≤25 seçenek (etiket ≤45, açıklama ≤100).
 
 ## src/agents.rs (impl Bot)
 - `profiler()` — son 600 satır → `analyze(PROFILE_EXTRACT, 1200)` → `profil.md` + `State.profile`.
-- `diarist(dokum, kaynak, kanal)` — `analyze(DIARIST{ad,kaynak,favori}, 1200)` → JSON `Record{olay, kisiler[{isim,puan_degisimi,not,bilgiler,etiketler}], konular[{ad,not}], kendim}` (alan adları model çıktısıyla eşleşsin diye Türkçe bırakıldı, bkz promptlar/gunlukcu.md); JSON çözülemezse ham çıktı `arsiv/gunlukcu-<kaynak>.md`'ye kurtarılır (emek kaybolmaz). → olay satırı (`memory::add_event`, saniyeli), her kişi: isim `State.name_to_id` ile id'ye çevrilir (çözülemeyen atlanır, loglanır), `kisiler/<id>.md` oku, ad değiştiyse eskisi `previous_names`'e, puan += clamp(-3..3) sonra clamp(-10..10), not/bilgiler/etiketler, favori ise +10 ve sabit not, `memory::write_person`; konular `memory::add_topic`; kendim → `kendim.md`; dizin yenile; sonra `summarizer`.
+- `diarist(dokum, kaynak, kanal)` — `analyze(DIARIST{ad,kaynak,favori}, 1200)` → JSON `Record{olay, kisiler[{isim,puan_degisimi,not,bilgiler,etiketler}], konular[{ad,not}], kendim}` (alan adları model çıktısıyla eşleşsin diye Türkçe bırakıldı, bkz prompts/gunlukcu.md); JSON çözülemezse ham çıktı `arsiv/gunlukcu-<kaynak>.md`'ye kurtarılır (emek kaybolmaz). → olay satırı (`memory::add_event`, saniyeli), her kişi: isim `State.name_to_id` ile id'ye çevrilir (çözülemeyen atlanır, loglanır), `kisiler/<id>.md` oku, ad değiştiyse eskisi `previous_names`'e, puan += clamp(-3..3) sonra clamp(-10..10), not/bilgiler/etiketler, favori ise +10 ve sabit not, `memory::write_person`; konular `memory::add_topic`; kendim → `kendim.md`; dizin yenile; sonra `summarizer`.
 - `summarizer()` — `memory::over_limit()` için: kişi → `analyze(SUMMARIZER_PERSON{sinir=1000}, 700)`, konu → `SUMMARIZER_TOPIC{800}`, olay → eski %60 satır `SUMMARIZER_EVENTS` ile 3-5 satıra, yeni %40 kalır. Sonuç boş değil ve eskisinden kısaysa: kişi/konu için eski dosya arşive, yeni yazılır; olayda taşınan satırlar arşive. Küçülmediyse dokunmaz. Dizin yenile.
 - `send_news(ctx, kanal, item) -> bool` — seçilmiş haberi paylaşır (tur haberi ya da uyku stoku); tanıtım `generate(NEWS_INTRO)`, sohbet açılır, 2 saat yorum beklenir.
 - `coach()` — profil + dizin + gündem + kendim + mevcut huy + son 200 satır + botun son mesajları → `analyze(COACH{ad}, 800)` → `huy.md`.
@@ -234,7 +234,7 @@ select menü ≤25 seçenek (etiket ≤45, açıklama ≤100).
 - `Bot::pick_name(ctx)` (main.rs) — `generate(NAME_PICK, 12)` → `clean_name` → her sunucuda `edit_nickname` → `growth.name`, `bot_name` → varsayılan kanala `generate(NAME_ANNOUNCE{isim})` + sohbet. Etiket algısı hem seçilen adı hem kullanıcı adını tanır.
 
 ## src/prompts.rs
-Yalnız `pub const X: &str = include_str!("../promptlar/x.md");` satırları. Bkz docs/promptlar.md.
+Yalnız `pub const X: &str = include_str!("../prompts/x.md");` satırları. Bkz docs/prompts.md.
 
 ## Bugün eklenenler (2026-09-02, sürüm/debug/ayarlar/reasoning)
 - `response_content(&Content, kategori)`, `thought_length`, `JSON_CATEGORIES`, `Bot::grow_budget`,
@@ -251,7 +251,7 @@ Yalnız `pub const X: &str = include_str!("../promptlar/x.md");` satırları. Bk
 ## 2026-09-03: kod İngilizceye çevrildi
 Tanımlayıcılar, yorumlar, dosya/dizin adları İngilizceye çevrildi (bkz AGENTS.md madde 8 ve
 dev/ilerleme.md). Bu dosyadaki tüm kod referansları yeni adlarla güncellendi. Türkçe kalanlar
-değişmedi: `promptlar/*.md` (dizin+dosya adı+içerik), `durum/` dosya biçimleri (alan adları,
+değişmedi: `prompts/*.md` (dizin+dosya adı+içerik), `durum/` dosya biçimleri (alan adları,
 dosya adları — `Person`/`Record` gibi tiplerin JSON/dosya alanları model promptlarıyla eşleşsin
 diye Türkçe bırakıldı), Discord'a çıkan her şey (slash komut adları, embed metni, buton/menü
 etiketleri).

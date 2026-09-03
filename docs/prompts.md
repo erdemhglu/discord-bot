@@ -1,10 +1,19 @@
 # Promptlar
 
-Hepsi `promptlar/<ad>.md`, `src/prompts.rs`'de `SABIT = include_str!(...)`. Dosyanın ilk
-satırı `# Başlık` da modele gider. Yer tutucular `.replace("{x}", ..)` ile kodda dolar;
+Hepsi `prompts/<dil>/<ad>.md`, `src/prompts.rs`'de `mod tr { pub const SABIT =
+include_str!(...); }` — her dil kendi alt modülü, hepsi tek bir `Prompts` struct'ında toplanır,
+`prompts::current()` süreç boyunca sabit olan `Lang::current()`'a göre doğru struct'ı döner
+(çağrı yerleri `prompts::current().alan_adi` — bkz `src/lang.rs`, AGENTS.md madde 12). Dosyanın
+ilk satırı `# Başlık` da modele gider. Yer tutucular `.replace("{x}", ..)` ile kodda dolar;
 doldurulmayan yer tutucu olduğu gibi gider, o yüzden yeni yer tutucu eklerken kodu da güncelle.
-(`promptlar/` dizini, dosya adları ve içerikleri bilerek Türkçe bırakıldı — botun kişiliği,
-bkz AGENTS.md madde 8. Rust sabitleri aşağıda İngilizce.)
+(`prompts/` altındaki dosya adları ve içerikleri bilerek Türkçe bırakıldı — botun kişiliği,
+bkz AGENTS.md madde 8. Rust tarafı aşağıda İngilizce. Bugün yalnız `tr/` dolu.)
+
+Discord'a çıkan metin (slash komut adı/açıklaması, embed, buton, `/yardim`'in metni) ayrı bir
+sistemde: `langs/<dil>.json` — düz `{"anahtar": "değer"}`, `src/strings.rs`'nin `t(anahtar)`'ı
+okur. Aynı `Lang::current()`'a göre seçilir, aynı `{ad}` yer tutucu kuralı geçerli. Hangi
+anahtarın nerede kullanıldığı için `langs/tr.json`'ın kendisine bakılır (kod tarafında her
+`strings::t("...")` çağrısı hangi anahtarı okuduğunu gösterir); ayrı bir tablo tutulmuyor.
 
 | Sabit | Dosya | Mod | Kullanan | Yer tutucular | max_tokens |
 |---|---|---|---|---|---|
@@ -42,7 +51,7 @@ bkz AGENTS.md madde 8. Rust sabitleri aşağıda İngilizce.)
 `ŞU ANKİ GÖREVİN\n<talimat>`. Boş talimat bölümü atlar. Aktif sohbet geçmişi ayrıca gider;
 sunucu-geneli ham mesajlar few-shot örneği olarak sistem promptuna eklenmez.
 
-## JSON bekleyen promptlar
+## JSON bekleyen prompts
 DIARIST, WILLINGNESS, TARGET_PICK, WAKING, MOOD. Kod `extract_json` ile `{…}` arasını alır,
 `serde(default)` ile eksik alanları tolere eder; çözülemezse (DIARIST) log'a "diarist: couldn't
 parse json" düşer, hafıza değişmez; mini çağrılarda (ör. MOOD) sessizce `None`/yedek davranışa
@@ -50,7 +59,7 @@ düşülür. (JSON alan adları — `puan`, `sebep`, `hedef`, `durum`, `yogunluk
 `isim`, vb. — bilerek Türkçe: model bu adlarla üretiyor, Rust struct alanları bunlarla eşleşmek
 zorunda, bkz AGENTS.md madde 8.)
 
-## Sayı bekleyen promptlar
+## Sayı bekleyen prompts
 NEWS_PICK (tek numara), WANDERER_PICK (virgüllü). Kod rakam dışını atar; aralık dışıysa 0 / boş.
 
 ## Çıktı protokolünü anlatan prompt

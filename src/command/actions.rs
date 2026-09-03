@@ -2,7 +2,7 @@
 /// Output: none. Uses: `option_bool`, `bot.state()`, `reply_info`. Registered as `run` for
 /// `"sifirla"` in `registration_table.rs`.
 async fn cmd_reset(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
-    let all = option_bool(cmd, "hepsi").unwrap_or(false);
+    let all = option_bool(cmd, strings::t("cmd.sifirla.opt.hepsi.name")).unwrap_or(false);
     {
         let mut state = bot.state();
         if all {
@@ -18,11 +18,11 @@ async fn cmd_reset(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
     reply_info(
         ctx,
         cmd,
-        "Sıfırlandı",
+        strings::t("reset.title"),
         if all {
-            "tüm kanallar sıfırlandı"
+            strings::t("reset.all")
         } else {
-            "bu kanal sıfırlandı"
+            strings::t("reset.channel")
         },
     )
     .await;
@@ -38,11 +38,11 @@ async fn cmd_news(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
     report_result(
         ctx,
         cmd,
-        "Haber",
+        strings::t("news.title"),
         if found {
-            "gönderildi"
+            strings::t("common.sent")
         } else {
-            "haber bulamadım"
+            strings::t("news.not_found")
         },
     )
     .await;
@@ -55,7 +55,7 @@ async fn cmd_problem(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
     defer(ctx, cmd).await;
     bot.state().chats.remove(&cmd.channel_id);
     bot.post_problem(ctx, cmd.channel_id).await;
-    report_result(ctx, cmd, "Sorun", "gönderildi").await;
+    report_result(ctx, cmd, strings::t("problem.title"), strings::t("common.sent")).await;
 }
 
 /// `/gez`. Input: `bot: &Bot`; `ctx: &Context`; `cmd: &CommandInteraction`. Output: none.
@@ -64,7 +64,7 @@ async fn cmd_problem(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
 async fn cmd_wander(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
     defer(ctx, cmd).await;
     bot.wander().await;
-    report_result(ctx, cmd, "Gezinti", "tamamlandı").await;
+    report_result(ctx, cmd, strings::t("wander.title"), strings::t("wander.done")).await;
 }
 
 /// `/saka`. Input: `bot: &Bot`; `ctx: &Context`; `cmd: &CommandInteraction`. Output: none.
@@ -88,7 +88,12 @@ async fn prank_shared(bot: &Bot, ctx: &Context, cmd: &CommandInteraction, hack: 
     defer(ctx, cmd).await;
     bot.state().chats.remove(&cmd.channel_id);
     bot.run_prank(ctx, cmd.channel_id, hack).await;
-    report_result(ctx, cmd, if hack { "Hack" } else { "Şaka" }, "gönderildi").await;
+    let title = if hack {
+        strings::t("prank.title_hack")
+    } else {
+        strings::t("prank.title_saka")
+    };
+    report_result(ctx, cmd, title, strings::t("common.sent")).await;
 }
 
 /// `/ajanlar`. Input: `bot: &Bot`; `ctx: &Context`; `cmd: &CommandInteraction`. Output:
@@ -99,7 +104,13 @@ async fn cmd_agents(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
     bot.profiler().await;
     bot.coach().await;
     bot.state().index = memory::refresh_index();
-    report_result(ctx, cmd, "Ajanlar", "profilci ve hoca çalıştı").await;
+    report_result(
+        ctx,
+        cmd,
+        strings::t("agents_cmd.title"),
+        strings::t("agents_cmd.done"),
+    )
+    .await;
 }
 
 /// `/uyan`. Input: `bot: &Bot`; `ctx: &Context`; `cmd: &CommandInteraction`. Output: none.
@@ -109,7 +120,7 @@ async fn cmd_wake(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
     defer(ctx, cmd).await;
     bot.wake();
     bot.sleep_transition(ctx).await;
-    report_result(ctx, cmd, "Uyandı", "uyku kesildi").await;
+    report_result(ctx, cmd, strings::t("wake.title"), strings::t("wake.done")).await;
 }
 
 /// `/uyu [saat]`. Input: `bot: &Bot`; `ctx: &Context`; `cmd: &CommandInteraction`. Output:
@@ -118,8 +129,9 @@ async fn cmd_wake(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
 /// `"uyu"` in `registration_table.rs`.
 async fn cmd_sleep(bot: &Bot, ctx: &Context, cmd: &CommandInteraction) {
     defer(ctx, cmd).await;
-    let hours = option_int(cmd, "saat").unwrap_or(8);
+    let hours = option_int(cmd, strings::t("cmd.uyu.opt.saat.name")).unwrap_or(8);
     bot.put_to_sleep(hours);
     bot.sleep_transition(ctx).await;
-    report_result(ctx, cmd, "Uyutuldu", &format!("{hours} saat")).await;
+    let description = strings::t("sleep_cmd.hours").replace("{saat}", &hours.to_string());
+    report_result(ctx, cmd, strings::t("sleep_cmd.title"), &description).await;
 }

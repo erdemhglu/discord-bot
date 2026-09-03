@@ -1,7 +1,7 @@
 # Sözlük (Türkçe kalan çalışma zamanı terimleri)
 
 Kod tarafındaki tanımlayıcılar İngilizce (bkz AGENTS.md madde 8). Bu sözlük artık bir kod
-sözlüğü değil: botun **Türkçe kalan** yüzeyini (promptlar, `durum/` dosya alanları, Discord'a
+sözlüğü değil: botun **Türkçe kalan** yüzeyini (prompts, `durum/` dosya alanları, Discord'a
 çıkan kategori etiketleri, slash komut adları) İngilizce okuyan bir geliştiriciye açıklar.
 
 | Türkçe terim | Anlamı / nerede geçer |
@@ -49,7 +49,7 @@ sözlüğü değil: botun **Türkçe kalan** yüzeyini (promptlar, `durum/` dosy
 | dogum | birth — ilk çalıştığı an (unix zaman damgası) |
 
 ## Model JSON çıktısındaki Türkçe alan adları (bilerek çevrilmedi)
-Bu alanlar Rust struct'larında da aynen Türkçe: promptlar Türkçe olduğu için model bu adlarla
+Bu alanlar Rust struct'larında da aynen Türkçe: prompts Türkçe olduğu için model bu adlarla
 JSON üretir, serde alan adı eşleşmesine bakar — çevrilseydi sessizce boş/0 dönerdi.
 - İsteklilik (`WILLINGNESS`): `puan` (0-10 puan), `sebep` (tek cümle gerekçe)
 - Hedef seçimi (`TARGET_PICK`): `hedef` (kişi adı)

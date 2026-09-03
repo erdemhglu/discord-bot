@@ -107,7 +107,7 @@ impl Bot {
         let reply = match self
             .generate(
                 &[user("isim seçme vakti")],
-                NAME_PICK,
+                prompts::current().name_pick,
                 Some(12),
                 "isim_sec",
             )
@@ -138,7 +138,7 @@ impl Bot {
         match self
             .generate(
                 &[user("ismini seçtin")],
-                &NAME_ANNOUNCE.replace("{isim}", &name),
+                &prompts::current().name_announce.replace("{isim}", &name),
                 Some(150),
                 "isim_duyuru",
             )

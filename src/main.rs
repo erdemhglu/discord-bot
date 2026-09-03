@@ -3,11 +3,13 @@ mod agents;
 mod chat_cli;
 mod command;
 mod growth;
+mod lang;
 mod logging;
 mod memory;
 mod modal;
 mod prompts;
 mod sleep;
+mod strings;
 mod travel;
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -17,7 +19,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use agents::random_image;
-use prompts::*;
 use serde::{Deserialize, Serialize};
 use serenity::all::*;
 use serenity::async_trait;

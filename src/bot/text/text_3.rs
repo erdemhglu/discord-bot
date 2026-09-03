@@ -132,7 +132,7 @@ fn extract_json(text: &str) -> &str {
 /// Input: `reply: &str` — raw model output for a `WILLINGNESS` call. Output:
 /// `Option<(u8, String)>` — (score, reason), or `None` if the JSON doesn't parse. Note:
 /// the intermediate `Score` struct's fields (`puan`/`sebep`) are Turkish on purpose — they
-/// must match the JSON keys the model is instructed to produce (see `promptlar/isteklilik.md`).
+/// must match the JSON keys the model is instructed to produce (see `prompts/isteklilik.md`).
 /// Uses: `extract_json`. Used by: `Bot::willingness` (`provider_generate.rs`).
 fn parse_willingness(reply: &str) -> Option<(u8, String)> {
     #[derive(Deserialize)]
@@ -157,7 +157,7 @@ fn willingness_score(reply: &str) -> Option<u8> {
 /// Input: `reply: &str` — raw model output for a `TARGET_PICK` call; `known: &[String]` —
 /// the candidate names that were offered. Output: `Option<String>` — the matched known name
 /// if one fits (case-insensitively), else the raw candidate, else `None` if empty. Note: the
-/// intermediate `Target.hedef` field is Turkish on purpose (matches `promptlar/hedef-sec.md`'s
+/// intermediate `Target.hedef` field is Turkish on purpose (matches `prompts/hedef-sec.md`'s
 /// JSON key). Uses: `extract_json`. Used by: `Bot::pick_target` (`provider_generate.rs`).
 fn extract_target(reply: &str, known: &[String]) -> Option<String> {
     #[derive(Deserialize)]
@@ -191,7 +191,7 @@ fn extract_target(reply: &str, known: &[String]) -> Option<String> {
 /// Input: `reply: &str` — raw model output for a `MOOD` call. Output: `Option<String>` —
 /// `"<state> (<intensity>)"`, or `None` if the JSON doesn't parse, the state is empty, or
 /// intensity is below 3 (treated as neutral). Note: the intermediate `Mood` struct's fields
-/// (`durum`/`yogunluk`) are Turkish on purpose (match `promptlar/ruh-hali.md`'s JSON keys).
+/// (`durum`/`yogunluk`) are Turkish on purpose (match `prompts/ruh-hali.md`'s JSON keys).
 /// Uses: `extract_json`. Used by: `Bot::determine_mood` (`provider_generate.rs`).
 fn extract_mood(reply: &str) -> Option<String> {
     #[derive(Deserialize)]

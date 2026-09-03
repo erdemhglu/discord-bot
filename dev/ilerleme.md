@@ -4,6 +4,34 @@ Kronolojik. En yeni üstte. Her satır: tarih · commit (varsa) · ne+neden · d
 
 ---
 
+## 2026-09-03 · Çok dilli altyapı: BOT_LANG, prompts/<dil>/, langs/<dil>.json
+Kullanıcı: ".env de dil girelim promptlar/<dil> altından seçsin, slash komutlar içinde bir
+dil sistemi olsun, langs klasörüne localization dosyaları yazalım" → netleştirme turunda
+(altyapı hazır, yalnız tr dolu / komut adı+açıklama+embed+buton hepsi / tek global .env
+dili, Discord native locale değil) → sırasında iki ek düzeltme: "langs/ .md değil json
+olsun" ve "promptlar klasörünün ismini prompts yap".
+- `src/lang.rs`: `Lang` enum (yalnız `Tr`), `Lang::current()` — `BOT_LANG`'ı ilk çağrıda okur,
+  `OnceLock` ile süreç boyunca sabitler (`LANG` değil `BOT_LANG`: kabuklar `LANG`'ı zaten OS
+  yereli için kullanıyor, karışmasın diye).
+- `prompts/<ad>.md` (31 dosya) → `prompts/tr/<ad>.md`; `src/prompts.rs` artık `mod tr {
+  include_str! }` + `Prompts` struct + `prompts::current()` — ~40 çağrı yeri (`agents.rs`,
+  `agenda.rs`, `src/bot/**`) bağımsız `PROMPT_ADI` sabitlerinden `prompts::current().alan`'a
+  geçti (global `OnceLock` sayesinde hiçbiri `self.lang` taşımak zorunda kalmadı).
+- `langs/tr.json` (158 anahtar, düz `{"anahtar":"değer"}`) + `src/strings.rs`'nin
+  `strings::t(anahtar)`'ı: slash komut tablosu (ad/açıklama/seçenek/choice — komut
+  seçeneklerinin **değeri** hiç çevrilmez, yalnız görünen etiket), `HELP` metni (eskiden
+  `command.rs`'de Rust sabitiydi, şimdi `help.text`), `modal.rs`'nin bütün embed
+  başlığı/alan etiketi/buton metni/ay adları, `command/{actions,settings,cards}.rs`'nin
+  yanıt embed'leri, birkaç olay duyurusu (`geldim`, debug iz başlığı, "resimler klasörü
+  boş"). Çevrilmeyenler bilinçli: `ThinkingMode::label()`'ın "gizli"/"kapalı" gibi
+  betimleyici formu, `growth`/`sleep`/`travel`'ın kendi durum kelimeleri — bunlar botun
+  durum sözlüğü, Discord kabuğu değil; bir sonraki dil eklenene kadar ayrı bir katman
+  olarak kalması makul.
+- `langs/tr.json` ayrıştırması `serde_json` ile (zaten bağımlıydı, yeni bağımlılık eklenmedi).
+- Doğrulama: 82 test (81→82, yeni `lang`/`prompts`/`strings` testleri), clippy 0 uyarı, fmt
+  temiz. Canlı Discord'da hiç görülmedi — bkz AGENTS.md "Bilinen açıklar" (embed/buton boyut
+  sınırlarına ikinci dilde uyum ayrıca kontrol edilmeli).
+
 ## 2026-09-02 · Canlı hatalar: kirp() off-by-one, geldim/debug embed, reasoning öğrenme
 İlk canlı log turu. Üç ayrı düzeltme (her biri kendi commit'inde, ayrıntı commit mesajlarında):
 - `hafiza::kirp` "…" eklerken sınırı 1 aşıyordu → `/zihin` kişi menüsü Discord'un description

@@ -45,7 +45,7 @@ impl Bot {
             match self
                 .generate(
                     &[user(format!("uyurken sana yazılanlar:\n{list}"))],
-                    WOKE_UP,
+                    prompts::current().woke_up,
                     Some(200),
                     "uyandim",
                 )
@@ -92,7 +92,7 @@ impl Bot {
         let night_text = night.join("\n");
         let instruction = {
             let state = self.state();
-            WAKING.replace("{ad}", &state.bot_name)
+            prompts::current().waking.replace("{ad}", &state.bot_name)
         };
         #[derive(Deserialize)]
         struct WakingResult {
@@ -124,7 +124,8 @@ impl Bot {
         }
         let instruction = {
             let state = self.state();
-            WAKING_REPLY
+            prompts::current()
+                .waking_reply
                 .replace("{ad}", &state.bot_name)
                 .replace("{konu}", &parsed.konu)
         };

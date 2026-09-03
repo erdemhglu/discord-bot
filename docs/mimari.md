@@ -45,7 +45,8 @@ biten sohbet → ajanlar hafızayı ve kişiliği günceller → dosyalar (`duru
 | `src/sleep.rs` | ~130 | uyku planı, yerel saat, uykusuz gece, "ŞU AN" satırı |
 | `src/travel.rs` | ~240 | yıllık etkinlik takvimi, seyahat penceresi, "ŞU AN" eki |
 | `src/prompts.rs` | 33 | her prompt için `include_str!` sabiti |
-| `promptlar/*.md` | 30 dosya | prompt metinleri (dizin+dosya adı+içerik Türkçe, bkz AGENTS.md madde 8) |
+| `prompts/tr/*.md` | 31 dosya | prompt metinleri (dosya adı+içerik Türkçe, bkz AGENTS.md madde 8) |
+| `langs/tr.json` | 1 dosya | Discord-facing metin (komut adı/açıklaması, embed, buton — bkz `docs/prompts.md`) |
 | `Cargo.toml` | | serenity(cache), tokio, reqwest(rustls), serde, serde_json, dotenvy, rand, base64 |
 
 Modüller `main.rs`'in çocuğudur; `use super::*` ile kökün özel öğelerine (sabitler, `State`,

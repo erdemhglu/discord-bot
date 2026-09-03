@@ -15,19 +15,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::OnceLock;
 
-pub const HELP: &str = "\
-komutlar (hepsi slash):
-`/sifirla [hepsi]` kanal yasağını ve açık sohbeti sıfırlar
-`/haber` şimdi haber atar · `/sorun` kod derdi sorar · `/gez` gündem gezintisi yapar
-`/saka` / `/hack` görsel şakası / hacklenmiş taklidi
-`/ajanlar` profilci ve hocayı şimdi çalıştırır
-`/uyan` uykuyu keser · `/uyu [saat]` test için uyutur
-`/durum` evre, sayaçlar, model, düşünme, uyku, seyahat
-`/zihin [test]` kişi/konu/olay kartı + menü/butonlarla detay modalları; `test` son 30 satırı hemen günlükçüye verir (zihin zinciri teşhisi)
-`/dusunme [kip]` düşünme kipi (göster: cevapla spoiler'da · gizle: düşünürken \"Düşünüyorum...\", cevap sonra · sessiz: arka planda düşünür, hiç iz göstermez · kapat: istekler reasoning'siz)
-`/model [id]` modeli gösterir/değiştirir (yalnız favori)
-`/debug [durum]` karar izleri kanala düşer: isteklilik puanı/sebebi, hedef, ruh hali, sus/tepki, sohbet kapanışı
-`/ayarlar` butonlu ayar paneli: düşünme kipi, debug, uyku";
+// /yardim's embed description used to live here as a Rust `HELP` const; it's
+// `langs/tr.json`'s `help.text` now (see AGENTS.md rule 7), read directly by
+// `modal::help_message`.
 
 // ---------- command registration table ----------
 
@@ -77,63 +67,98 @@ pub fn definitions() -> &'static [CommandDefinition] {
     TABLE.get_or_init(|| {
         vec![
             define_command!(
-                "durum",
-                "Botun şu anki halini kart olarak gösterir",
+                strings::t("cmd.durum.name"),
+                strings::t("cmd.durum.description"),
                 Vec::new,
                 cmd_status
             ),
             define_command!(
-                "yardim",
-                "Komut listesini kart olarak gösterir",
+                strings::t("cmd.yardim.name"),
+                strings::t("cmd.yardim.description"),
                 Vec::new,
                 cmd_help
             ),
             define_command!(
-                "zihin",
-                "Botun bildiklerini interaktif kart + menü/butonlarla gösterir",
+                strings::t("cmd.zihin.name"),
+                strings::t("cmd.zihin.description"),
                 options_mind,
                 cmd_mind
             ),
             define_command!(
-                "ayarlar",
-                "Butonlu ayar paneli: düşünme kipi, debug, uyku",
+                strings::t("cmd.ayarlar.name"),
+                strings::t("cmd.ayarlar.description"),
                 Vec::new,
                 cmd_settings
             ),
             define_command!(
-                "sifirla",
-                "Kanal yasağını ve açık sohbeti sıfırlar",
+                strings::t("cmd.sifirla.name"),
+                strings::t("cmd.sifirla.description"),
                 options_reset,
                 cmd_reset
             ),
-            define_command!("haber", "Şimdi haber atar", Vec::new, cmd_news),
-            define_command!("sorun", "Kod derdi sorar", Vec::new, cmd_problem),
-            define_command!("gez", "Gündem gezintisi yapar", Vec::new, cmd_wander),
-            define_command!("saka", "Görsel şakası yapar", Vec::new, cmd_prank),
-            define_command!("hack", "Hacklenmiş taklidi yapar", Vec::new, cmd_hack),
             define_command!(
-                "ajanlar",
-                "Profilci ve hocayı şimdi çalıştırır",
+                strings::t("cmd.haber.name"),
+                strings::t("cmd.haber.description"),
+                Vec::new,
+                cmd_news
+            ),
+            define_command!(
+                strings::t("cmd.sorun.name"),
+                strings::t("cmd.sorun.description"),
+                Vec::new,
+                cmd_problem
+            ),
+            define_command!(
+                strings::t("cmd.gez.name"),
+                strings::t("cmd.gez.description"),
+                Vec::new,
+                cmd_wander
+            ),
+            define_command!(
+                strings::t("cmd.saka.name"),
+                strings::t("cmd.saka.description"),
+                Vec::new,
+                cmd_prank
+            ),
+            define_command!(
+                strings::t("cmd.hack.name"),
+                strings::t("cmd.hack.description"),
+                Vec::new,
+                cmd_hack
+            ),
+            define_command!(
+                strings::t("cmd.ajanlar.name"),
+                strings::t("cmd.ajanlar.description"),
                 Vec::new,
                 cmd_agents
             ),
-            define_command!("uyan", "Uykuyu keser", Vec::new, cmd_wake),
-            define_command!("uyu", "Test için uyutur", options_sleep, cmd_sleep),
             define_command!(
-                "dusunme",
-                "Düşünme kipini gösterir/değiştirir",
+                strings::t("cmd.uyan.name"),
+                strings::t("cmd.uyan.description"),
+                Vec::new,
+                cmd_wake
+            ),
+            define_command!(
+                strings::t("cmd.uyu.name"),
+                strings::t("cmd.uyu.description"),
+                options_sleep,
+                cmd_sleep
+            ),
+            define_command!(
+                strings::t("cmd.dusunme.name"),
+                strings::t("cmd.dusunme.description"),
                 options_thinking,
                 cmd_thinking
             ),
             define_command!(
-                "model",
-                "Modeli gösterir/değiştirir (yalnız favori)",
+                strings::t("cmd.model.name"),
+                strings::t("cmd.model.description"),
                 options_model,
                 cmd_model
             ),
             define_command!(
-                "debug",
-                "Karar izlerini kanala düşürür/kapatır",
+                strings::t("cmd.debug.name"),
+                strings::t("cmd.debug.description"),
                 options_debug,
                 cmd_debug
             ),

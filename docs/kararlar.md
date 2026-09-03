@@ -569,7 +569,7 @@ Tarih sırasıyla. Bir kararı değiştirirken buraya yeni satır ekle, eskisini
   `.env` değişken adları (`SAGLAYICI→PROVIDER`, `KANALLAR→CHANNELS`, `HABER_KANALI→NEWS_CHANNEL`,
   `DEBUG_KANALI→DEBUG_CHANNEL`, `RESIM_ANALIZI→IMAGE_ANALYSIS`, `API_ADRES→API_URL`,
   `LOG_SEVIYE→LOG_LEVEL`, `LOG_RENK→LOG_COLOR`), CLI bayrağı (`cargo run -- sohbet` →
-  `cargo run -- chat`). Türkçe bilerek bırakılanlar: `promptlar/*.md` (dizin+dosya adı+içerik —
+  `cargo run -- chat`). Türkçe bilerek bırakılanlar: `prompts/*.md` (dizin+dosya adı+içerik —
   botun kişiliği), `durum/` dosya biçimleri (alan adları, dosya adları — model JSON çıktısıyla
   ya da mevcut disk verisiyle eşleşmesi gerekenler, ör. `Person`/`Record` tiplerinin `isim`/
   `puan`/`not` alanları), ve Discord'a çıkan her şey (slash komut adları/açıklamaları, embed
