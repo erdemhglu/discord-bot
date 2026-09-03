@@ -1,168 +1,197 @@
-# discord-bot — ajanlar için giriş noktası
+# discord-bot — entry point for agents
 
-Bu dosya projeyi geliştirecek yapay zeka ajanlarının İLK okuyacağı yerdir. Kısa tutulur;
-ayrıntı `docs/` altındadır. Kural: buraya ancak "her an geçerli" bilgi girer.
+This is the file AI agents developing this project should read FIRST. Kept short; detail
+lives under `docs/`. Rule: only "always-true" information goes here.
 
-## Ne bu
-Bir discord sunucusunda yıllardır takılan bir üye gibi davranan bot. Rust (serenity 0.12 +
-tokio + reqwest), cevaplar OpenRouter (varsayılan `openai/gpt-4o-mini`) ya da Mistral
-(`mistral-medium-latest`) üzerinden; ikisi de OpenAI uyumlu chat/completions, seçim `.env`'den.
-`MODEL` ile OpenRouter üzerinden herhangi bir model seçilebilir (GLM, Grok, Gemini, Claude, ...);
-sağlayıcıya özel tek fark `cache_control` (prompt cache), hedef adrese göre koşullu eklenir
-(`supports_cache`, src/main.rs — openrouter.ai'ye giden her istekte eklenir, karar openrouter'a
-bırakılır; mistral native api'de ve özel `API_URL` router'larında eklenmez). Kişiliği kod değil,
-arka planda çalışan ajanlar ve dosya tabanlı hafıza (`durum/`) belirler. Promptlar
-`prompts/<dil>/*.md`, `include_str!` ile derlemeye gömülür (bu dizin ve dosya adları bilerek
-Türkçe bırakıldı — botun Türkçe çalışma şeklinin bir parçası; kod tarafı İngilizce'dir, bkz.
-madde 8). Bot tek dilde çalışır, seçim `.env`'deki `BOT_LANG` (varsayılan `tr`, madde 12).
+## What this is
+A bot that acts like a member who's been hanging around a Discord server for years. Rust
+(serenity 0.12 + tokio + reqwest), replies through OpenRouter (default `openai/gpt-4o-mini`)
+or Mistral (`mistral-medium-latest`); both are OpenAI-compatible chat/completions, picked via
+`.env`. `MODEL` lets you pick any model through OpenRouter (GLM, Grok, Gemini, Claude, ...);
+the only provider-specific difference is `cache_control` (prompt cache), added conditionally
+based on the target address (`supports_cache`, src/main.rs — added on every request going to
+openrouter.ai, the decision is left to openrouter; not added on Mistral's native API or on a
+custom `API_URL` router). Personality isn't code — it comes from background agents and
+file-based memory (`durum/`). Prompts live in `prompts/<lang>/*.md`, embedded at compile time
+via `include_str!` (this directory and its filenames are deliberately kept Turkish — part of
+the bot's Turkish way of operating; the code side is English, see item 8). The bot runs in a
+single language, chosen via `.env`'s `BOT_LANG` (default `tr`, item 12).
 
-## Hızlı komutlar
+## Quick commands
 ```
-cargo build            # derle
-cargo test             # 77 birim test (memory, agenda, travel, stream, willingness, target, cache, çıktı protokolü, chat_cli, komut tablosu, yanıt çözümü, tepki etiketi)
-cargo clippy           # 0 uyarı beklenir
-cargo fmt              # commit'ten önce
-cargo run --release    # .env: DISCORD_TOKEN + (OPENROUTER_KEY ya da MISTRAL_KEY); MODEL, PROVIDER, API_URL, FIRECRAWL_KEY, NEWS_CHANNEL, GUILD_ID, CHANNELS, DEBUG_CHANNEL, IMAGE_ANALYSIS isteğe bağlı
-cargo run -- chat      # discord'suz terminal sohbet tezgâhı (token istemez, yalnız model anahtarı); çıktı protokolünü denemek için
+cargo build            # build
+cargo test              # 86 unit tests (memory, agenda, travel, stream, willingness, target, cache, output protocol, chat_cli, command table, reply parsing, reaction label)
+cargo clippy             # 0 warnings expected
+cargo fmt                # before every commit
+cargo run --release      # .env: DISCORD_TOKEN + (OPENROUTER_KEY or MISTRAL_KEY); MODEL, PROVIDER, API_URL, FIRECRAWL_KEY, NEWS_CHANNEL, GUILD_ID, CHANNELS, DEBUG_CHANNEL, IMAGE_ANALYSIS optional
+cargo run -- chat        # terminal chat bench without Discord (no token needed, just a model key); for trying out the output protocol
 ```
 
-## Yön levhası
-| İhtiyaç | Nereye bak |
+## Signpost
+| Need | Where to look |
 |---|---|
-| Oturum durumu: yapılanlar, açık plan (compact sonrası İLK buraya bak) | dev/ilerleme.md, dev/yol-haritasi.md |
-| Genel resim, katmanlar, veri akışı | docs/mimari.md |
-| Bir fonksiyonun ne yaptığı, kim çağırıyor, kilit kuralı | docs/moduller.md |
-| Bir olay olunca sırayla ne oluyor (mesaj, sohbet, uyku, seyahat, şaka, haber) | docs/akislar.md |
-| Çıktı protokolü (satır = mesaj, `-` susma, `tepki:` emoji, resim, CLI tezgâh) | docs/akislar.md ("Çıktı protokolü", "CLI sohbet") |
-| `durum/` dosya biçimleri, sınırlar, özetleme | docs/durum-dosyalari.md |
-| Hangi prompt nerede kullanılıyor, yer tutucular, max_tokens | docs/prompts.md |
-| Bütün sabitler ve anlamları | docs/sabitler.md |
-| Neden böyle yapıldı (kararlar + gerekçe) | docs/kararlar.md |
-| Yeni ajan/prompt/döngü/durum dosyası ekleme, tuzaklar, kontrol listesi | docs/gelistirme.md |
-| Türkçe kalan çalışma zamanı kelime dağarcığı (prompts, durum/ alanları, ajan adları) | docs/sozluk.md |
-| Gelişim evreleri ve isim seçme | docs/moduller.md (growth), docs/akislar.md |
+| Session state: what's done, open plan (read this FIRST after a compact) | docs/progress.md, docs/roadmap.md |
+| Big picture, layers, data flow | docs/architecture.md |
+| What a function does, who calls it, locking rules | docs/modules.md |
+| Step-by-step what happens on an event (message, chat, sleep, travel, prank, news) | docs/flows.md |
+| Output protocol (line = message, `-` silence, `tepki:` emoji, image, CLI bench) | docs/flows.md ("Output protocol", "CLI chat") |
+| `durum/` file formats, limits, summarization | docs/state-files.md |
+| Which prompt is used where, placeholders, max_tokens | docs/prompts.md |
+| All constants and what they mean | docs/constants.md |
+| Why things were built this way (decisions + rationale) | docs/decisions.md |
+| Adding a new agent/prompt/cycle/state file, pitfalls, checklist | docs/development.md |
+| Runtime vocabulary that stays Turkish (prompts, `durum/` fields, agent names) | docs/glossary.md |
+| Growth stages and name-picking | docs/modules.md (growth), docs/flows.md |
 
-## Değişmez kurallar (kodda da böyle)
-1. **Kilit await üstünde tutulmaz.** `Bot::state()` `std::sync::MutexGuard` döner; her zaman
-   `{ let state = bot.state(); ... }` bloğunda alınır, `.await` görmeden bırakılır.
-2. **Model çıktısı sınırlanır, koda güvenilir.** Puanlar `clamp`, dosya boyları sabit, mesaj
-   başına 1900 karakter (aşan cevap kırpılmaz, yeni mesaja bölünür). Cevap satır bazlı bir
-   protokoldür (`parse_reply`): her satır ayrı mesaj, **tur başına en çok 4 satır**
-   (`BURST_LIMIT`) — normalde 4 mesaj; 1900'ü aşan satır ayrıca bölünür, düşünme "göster"
-   kipinde düşünce mesajları da eklenir. Tek başına `-` susma, `tepki: 💀` yazı yerine emoji
-   tepkisi (yalnız bilinen emoji blokları kabul edilir).
-   Sohbet cevabı bütçesi
-   `reply_budget!()` makrosunda: debug `Some(2000)`, release `Some(REPLY_CAP=4096)` — ikisinde
-   de üst sınır var, sıradan cevap altında kalır, yalnız tekrar/döngü gibi kaçak durumları keser;
-   diğer çağrılarda max_tokens sabit. Model ne derse desin favori +10.
-3. **Mention'lar kapalı gider** (`CreateAllowedMentions::new()`), yalnız hoş geldin pingler.
-4. **Botlara, webhook'lara, DM'lere cevap yok.** Uyurken yazmaz ama dinler: mesajlar zihne
-   işlenir, uyanınca gece yazılanlar değerlendirilir (etiket varsa kesin dönüş).
-5. **Hiçbir hafıza silinmez**: sınırı aşan dosya özetlenir, ham parça `durum/arsiv/`'e gider.
-6. **Kişilikle konuşan tek yol `Bot::generate` / `Bot::generate_stream`**, analiz yapan tek
-   fonksiyon `Bot::analyze`. Ajanlar kişiliksizdir. Yeni bir "konuşma" mutlaka `generate`'ten
-   (sohbet cevabı stream'de `generate_stream`'ten), yeni bir "değerlendirme" mutlaka
-   `analyze`'den geçer.
-7. **Prompt metni Rust'a yazılmaz**, `prompts/<dil>/*.md`'ye yazılır ve `src/prompts.rs`'de
-   `include_str!` ile bağlanır; Discord'a çıkan metin (komut adı/açıklaması, embed, buton) de
-   Rust'a yazılmaz, `langs/<dil>.json`'a yazılır ve `src/strings.rs`'nin `t(anahtar)`'ıyla
-   okunur (madde 12). Yer tutucular `{ad}` gibi süslü parantezli, `replace` ile dolar.
-8. **Tanımlayıcılar İngilizce ve ASCII, yorumlar İngilizce** — ama botun Türkçe çalışma şekli
-   koda dokunmaz: `prompts/<dil>/*.md` ve `langs/<dil>.json` (dizin+dosya adı+içerik), `durum/`
-   dosya biçimleri (alan adları, dosya adları), ve Discord'a çıkan her şey (slash komut
-   adları/açıklamaları, embed metni, buton/menü etiketleri, model çıktısı) Türkçe kalır. Kod
-   "yapay zeka yazmış" gibi durmamalı: kısa, düz, açıklamalar sebep söyler. Türkçe kalan
-   çalışma zamanı terimleri için
-   bkz. docs/sozluk.md.
-9. `cargo fmt` satırları yeniden akıtır; metin eşleştirmeli yama yapacaksan önce dosyanın
-   güncel halini oku (docs/gelistirme.md "tuzaklar").
-10. **Oturum hafızası `dev/` klasöründedir.** Context compact edilirse ya da yeni oturumda
-    önce `dev/ilerleme.md` ve `dev/yol-haritasi.md` okunur; her anlamlı adımda (commit
-    ölçeğinde) `dev/ilerleme.md`'ye kronolojik not düşülür, plan değişirse `yol-haritasi.md`
-    güncellenir.
-11. **Bot yalnız slash (`/`) komutlarla yönetilir**, `!`/metin komut yok. Komutlar tek kayıt
-    tablosunda (`command::definitions()`, src/command.rs): ad, açıklama, Discord seçenekleri ve
-    çalıştırıcı bir arada; `modal::register_commands` bu tablodan Discord'a kayıt çıkarır,
-    `interaction_create` (main.rs) `Interaction::Command`'ı isme göre tabloda bulup çalıştırır.
-    Her komut embed döner (düz metin yok); 3 sn'yi aşabilecek komutlar (ağ/model çağrısı yapanlar)
-    önce `defer` ile erteleyip `report_result` ile sonucu düzenler.
-12. **Bot tek dilde çalışır, süreç boyunca sabit.** Seçim `.env`'deki `BOT_LANG`
-    (`src/lang.rs`'nin `Lang::current()`'ı, ilk çağrıda okunur ve önbelleğe alınır; `LANG`
-    değil — çoğu kabuk `LANG`'ı zaten işletim sistemi yereli için ayarlar). Kişilik/ajan
-    promptları `prompts/<dil>/`'den (`prompts::current()`), Discord'a çıkan her şey
-    `langs/<dil>.json`'den (`strings::t(anahtar)`) gelir. `tr` ve `en` dolu; yeni dil eklemek
-    bu iki dizine birer dosya eklemek + `prompts.rs`/`strings.rs`'e birer `match` kolu.
+## Invariant rules (also true in the code)
+1. **A lock is never held across an await.** `Bot::state()` returns a `std::sync::MutexGuard`;
+   it's always taken inside a `{ let state = bot.state(); ... }` block and dropped before any
+   `.await`.
+2. **Model output is bounded, the code doesn't trust it.** Scores are `clamp`ed, file sizes are
+   fixed, 1900 characters per message (an over-limit reply isn't truncated, it's split into a
+   new message). A reply is a line-based protocol (`parse_reply`): every line is its own
+   message, **at most 4 lines per turn** (`BURST_LIMIT`) — normally 4 messages; a line over
+   1900 characters is further split, thought messages are also added in thinking "show" mode.
+   A lone `-` means silence, `tepki: 💀` is an emoji reaction instead of text (only known emoji
+   blocks are accepted). The chat-reply budget lives in the `reply_budget!()` macro: debug
+   `Some(2000)`, release `Some(REPLY_CAP=4096)` — both have an upper bound, an ordinary reply
+   stays well under it, it only cuts off runaway cases like repetition/loops; other calls use a
+   fixed max_tokens. Whatever the model says, the favorite gets +10.
+3. **Mentions go out disabled** (`CreateAllowedMentions::new()`), only the welcome ping pings.
+4. **No replies to bots, webhooks, or DMs.** It doesn't write while asleep but still listens:
+   messages are processed into memory, and on waking it evaluates what was written overnight
+   (a definite reply if it was tagged).
+5. **Nothing in memory is ever deleted**: a file over its limit gets summarized, the raw chunk
+   goes to `durum/arsiv/`.
+6. **The only path that talks with personality is `Bot::generate` / `Bot::generate_stream`**,
+   the only function that does analysis is `Bot::analyze`. Agents are personality-free. Any new
+   "conversation" must go through `generate` (or `generate_stream` for a streamed chat reply),
+   any new "evaluation" must go through `analyze`.
+7. **Prompt text is never written into Rust** — it goes in `prompts/<lang>/*.md` and is wired
+   up in `src/prompts.rs` via `include_str!`; text that reaches Discord (command name/
+   description, embed, button) likewise isn't written into Rust — it goes in `langs/<lang>.json`
+   and is read via `src/strings.rs`'s `t(key)` (item 12). Placeholders are curly-braced like
+   `{name}`, filled in with `replace`.
+8. **Identifiers are English and ASCII, comments are English** — but the bot's Turkish way of
+   operating doesn't touch the code: `prompts/<lang>/*.md` and `langs/<lang>.json` (directory +
+   filename + content), `durum/` file formats (field names, filenames), and everything that
+   reaches Discord (slash command names/descriptions, embed text, button/menu labels, model
+   output) stays Turkish. Code shouldn't read like "an AI wrote this": short, plain, comments
+   state the reason. For the runtime vocabulary that stays Turkish, see docs/glossary.md.
+9. `cargo fmt` reflows lines; if you're going to do a text-matching patch, read the file's
+   current state first (docs/development.md "pitfalls").
+10. **Session memory lives in the `docs/` folder.** If context gets compacted, or in a new
+    session, read `docs/progress.md` and `docs/roadmap.md` first; drop a chronological note in
+    `docs/progress.md` at every meaningful step (commit-sized), update `docs/roadmap.md` if the
+    plan changes.
+11. **The bot is managed only through slash (`/`) commands**, no `!`/text commands. Commands
+    live in a single registration table (`command::definitions()`, src/command.rs): name,
+    description, Discord options, and executor together; `modal::register_commands` generates
+    the Discord registration from this table, `interaction_create` (main.rs) looks up
+    `Interaction::Command` by name in the table and runs it. Every command returns an embed (no
+    plain text); commands that might take over 3s (ones making a network/model call) `defer`
+    first and edit the result in with `report_result`.
+12. **The bot runs in a single language, fixed for the life of the process.** Chosen via
+    `.env`'s `BOT_LANG` (`src/lang.rs`'s `Lang::current()`, read once on first call and
+    cached; not `LANG` — most shells already set `LANG` for the OS locale). Personality/agent
+    prompts come from `prompts/<lang>/` (`prompts::current()`), everything reaching Discord
+    comes from `langs/<lang>.json` (`strings::t(key)`). `tr` and `en` are filled in; adding a
+    new language means adding one file to each of these two directories plus one `match` arm
+    each in `prompts.rs`/`strings.rs`.
 
-## Durum klasörü (çalışma zamanı, git'e girmez)
-`durum/hafiza.redb` (redb, tek dosya): `INDEX.md` işaretçi · `kisiler/` `konular/` `olaylar/`
-içerik · `huy.md profil.md duzeltmeler.md kendim.md gundem.md` ajan çıktıları — hepsi eski
-dosya yolu aynı string anahtarla saklanır, biçimler değişmedi (bkz docs/durum-dosyalari.md).
-`durum/arsiv/` taşan: tek istisna, hâlâ gerçek `.md` dosyaları (yalnız insan içindir). Eski
-bir `durum/` ağacından geçiş `cargo run -- migrate-durum` ile (`src/migrate.rs`).
+## State folder (runtime, not tracked by git)
+`durum/hafiza.redb` (redb, a single file): `INDEX.md` pointer · `kisiler/` `konular/`
+`olaylar/` content · `huy.md profil.md duzeltmeler.md kendim.md gundem.md` agent outputs — all
+stored under the same string key as their old file path, formats unchanged (see
+docs/state-files.md). `durum/arsiv/` overflow: the one exception, still real `.md` files (for
+human eyes only). Migrating from an older `durum/` tree: `cargo run -- migrate-durum`
+(`src/migrate.rs`).
 
-## Bilinen açıklar / doğrulanmamış
-- Canlı Discord akışı hiç test edilmedi (token yok). Serenity çağrıları derleyiciden geçti.
-- **Slash komut tablosu (`command::definitions()`) canlı Discord'da hiç görülmedi.** Kayıt
-  (`register_commands`), seçenekler (choice/min/max), erteleme+düzenleme akışı (`defer` /
-  `report_result`, 3 sn sınırı) ve embed çıktıları yalnız derleyici+birim testleriyle
-  doğrulandı; gerçek Discord istemcisinde seçenek adları/görünümü kontrol edilmedi.
-- Stream + thinking yalnızca birim testleriyle doğrulandı (sahte SSE sunucusu); canlı edit
-  temposu (1,2 sn) Discord'ta ayrıca görülmedi.
-- Thinking yalnız model üretirse görünür (`reasoning` / `reasoning_content`); gpt-4o-mini
-  üretmez, o modelde bugünkü davranış aynen sürer.
-- gpt-4o-mini görsel yorumu (image_commenter) canlıda görülmedi; başarısızsa metin yedeğine düşer.
-- Kişi dosyaları id bazlı (`kisiler/<id>.md`); isim→id çevrilemeyen kayıt o tur atlanır
-  (`State.name_to_id`). Eski slug dosyaları okunmaz.
-- İsteklilik/hedef/uyanış mini çağrıları yalnız birim testleriyle doğrulandı; canlı davranış
-  eşikleri (WILLINGNESS_THRESHOLD=6, ilgi≥5) ayarlanmak isteyebilir.
-- Anahtar kelime eşleme düz alt-dize; kök bulma yok.
-- Bayram tarihleri 2026-2027 için elle yazılı (`src/travel.rs`), sonraki yıllar eklenmeli.
-- Takma ad değiştirme (isim seçme) botun sunucuda CHANGE_NICKNAME iznine bağlı; yoksa log'a düşer, isim yine kullanılır.
-- Mistral'de görsel yorumu modele bağlı (`mistral-medium-latest` görsel destekler); desteklemezse metin yedeği.
-- `supports_cache` hedef adrese bakar (yalnız `openrouter.ai`); openrouter'ın cache_control'ü
-  desteklemeyen modelde gerçekten sessizce yok saydığı varsayımı canlıda doğrulanmadı.
-- GUILD_ID/CHANNELS filtreleri ve reply-to'nun koşullu hale gelmesi (`last_was_tagged`) canlıda
-  hiç görülmedi, yalnız derleyici+testlerle doğrulandı.
-- Emoji tepkisi (`create_reaction`), satır patlaması (satır = ayrı mesaj) ve susma (`-`) canlıda
-  görülmedi; yalnız birim testleriyle doğrulandı. Tepki hız sınırı davranışı (Discord emoji
-  route'ları ayrı kotaya tabi) canlıda ölçülmedi.
-- `send_lines` satır arası gecikme sabitleri (300 ms + 15 ms/karakter, tavan 1500 ms)
-  ölçülmedi, kabaca seçildi; canlıda ayarlanmak isteyebilir.
-- CLI sohbet modu (`cargo run -- chat`) gerçek model anahtarıyla denenmedi (bu makinede
-  anahtar yok): anahtarsız hata yolu ve birim testleri dışında **doğrulanmadı**.
-- Reasoning zorunlu model (glm-5.3-flash) için ajan dayanıklılığı (bütçe ×2, effort=low, düşünceden JSON) canlıda
-  doğrulanmadı; `/zihin test:true` ile denenir. Debug modu ve ayar paneli butonları canlı Discord'da görülmedi.
-- `Handler::reaction_add` (botun kendi mesajına atılan tepkileri değerlendirir) ve
-  `GUILD_MESSAGE_REACTIONS` intent'i canlıda hiç görülmedi; yalnız derleyici + `reaction_label`
-  birim testiyle doğrulandı. Reactor bilgisi ve tepki verilen mesaj metni her seferinde
-  `add_reaction.user`/`.message` ile HTTP'den çekiliyor (Reaction olayı ikisini de taşımıyor) —
-  canlıda gecikme/rate limit görülmedi.
-- **2026-09-03: kod tabanı (src/**/*.rs, README.md) Türkçe'den İngilizceye çevrildi**
-  (tanımlayıcılar, yorumlar, dosya/dizin adları, .env değişken adları). Botun çalışma şekli
-  (prompts/, durum/ dosya biçimleri, Discord'a çıkan her şey) bilerek Türkçe bırakıldı — bkz.
-  madde 8. Bu çeviri canlı Discord'da doğrulanmadı; yalnız derleyici + 76 birim test + clippy
-  ile kontrol edildi. AGENTS.md/docs/dev/ içindeki düzyazı Türkçe kaldı, yalnız kod
-  referansları (fonksiyon/dosya/env değişken adları) güncellendi.
-- **2026-09-03: çok dilli altyapı eklendi (madde 12), yalnız `tr` dolu.** `BOT_LANG`/`Lang`
-  seçimi, prompt+string dispatch canlı Discord'da hiç görülmedi; yalnız derleyici + 82 birim
-  test + clippy ile doğrulandı. `langs/tr.json`'daki ~160 anahtarın gerçek Discord embed/buton
-  boyut sınırlarına (`modal.rs`'nin `LABEL_LIMIT`/`FIELD_LIMIT` vb.) uyduğu yalnız statik
-  olarak (aynı uzunlukta Türkçe metin) doğrulandı, canlı render edilmedi. İkinci bir dil
-  eklendiğinde bu sınırlara o dilin metinleriyle de uyulduğu ayrıca kontrol edilmeli.
-- **2026-09-03: `en` (İngilizce) dolduruldu — `prompts/en/*.md` (31 dosya) ve `langs/en.json`
-  (158 anahtar), elle çevrildi.** JSON alan adları (Record/PersonRecord/TopicRecord'un
-  `olay`/`kisiler`/`isim`/`puan_degisimi`/`not`/`bilgiler`/`etiketler`/`konular`/`ad`/`kendim`
-  anahtarları) İngilizce promptlarda da Türkçe bırakıldı — Rust struct'ları hâlâ bu adları
-  bekliyor, çevrilirse JSON çözülemez. Slash komut adları da çevrildi (`durum→status`,
-  `dusunme→thinking` vb.); komut seçeneklerinin değerleri (`goster`/`gizle`/`ac`/`kapat` gibi)
-  hiç çevrilmedi, yalnız görünen etiketler. `BOT_LANG=en` ile `cargo run -- chat` çalıştırılıp
-  loga "language: En" düştüğü ve panik olmadığı elle doğrulandı (bkz `dev/ilerleme.md`); gerçek
-  bir modelle İngilizce cevap üretimi hiç denenmedi — yalnız derleyici + 86 birim test + clippy.
-  İngilizce metnin Discord embed/buton boyut sınırlarına uyduğu da doğrulanmadı (yukarıdaki
-  madde).
-- **2026-09-03: `durum/` markdown dosyalarından `durum/hafiza.redb`'e geçildi.** Bu ortamda
-  gerçek üretim `durum/` verisi yok (boş, hiç canlı çalıştırılmamış); geçiş yalnız 85 birim
-  test + elle kurulmuş uydurma bir dosya ağacı üzerinde `migrate-durum` çalıştırıp
-  `cargo run -- chat` ile geri okunarak (model.md doğru geldi) doğrulandı. Gerçek bir
-  `durum/` ağacına karşı hiç denenmedi — operatör kendi ağacında önce `--dry-run`, sonra
-  gerçek geçiş yapıp `/durum`/`/zihin` ile karşılaştırmalı.
+## Known gaps / unverified
+- Live Discord flow has never been tested (no token). Serenity calls passed the compiler.
+- **The slash command table (`command::definitions()`) has never been seen on live Discord.**
+  Registration (`register_commands`), options (choice/min/max), the defer+edit flow (`defer` /
+  `report_result`, the 3s limit), and embed output were verified only by the compiler + unit
+  tests; option names/appearance weren't checked in a real Discord client.
+- Stream + thinking were verified only by unit tests (a fake SSE server); the live edit cadence
+  (1-2s) wasn't separately observed on Discord.
+- Thinking only shows up if the model produces it (`reasoning` / `reasoning_content`);
+  gpt-4o-mini doesn't produce it, so today's behavior stands unchanged on that model.
+- gpt-4o-mini's image commentary (image_commenter) hasn't been seen live; falls back to text if
+  it fails.
+- Person files are id-based (`kisiler/<id>.md`); a record whose name can't be resolved to an id
+  is skipped for that round (`State.name_to_id`). Old slug files aren't read.
+- Willingness/target/waking mini-calls were verified only by unit tests; live behavior
+  thresholds (WILLINGNESS_THRESHOLD=6, interest≥5) might need tuning.
+- Keyword matching is a plain substring; no stemming.
+- Holiday dates are hand-written for 2026-2027 (`src/travel.rs`), later years need adding.
+- Nickname changing (name picking) depends on the bot having CHANGE_NICKNAME permission on the
+  server; if not, it's logged and the name is used anyway.
+- On Mistral, image commentary depends on the model (`mistral-medium-latest` supports images);
+  falls back to text if unsupported.
+- `supports_cache` looks at the target address (only `openrouter.ai`); the assumption that
+  openrouter genuinely and silently ignores `cache_control` on a model that doesn't support it
+  hasn't been verified live.
+- GUILD_ID/CHANNELS filters and reply-to becoming conditional (`last_was_tagged`) have never
+  been seen live, only verified by compiler+tests.
+- Emoji reactions (`create_reaction`), line bursting (line = separate message), and silence
+  (`-`) haven't been seen live; verified only by unit tests. Reaction rate-limit behavior
+  (Discord's emoji routes have their own separate quota) hasn't been measured live.
+- `send_lines`'s inter-line delay constants (300ms + 15ms/character, capped at 1500ms) weren't
+  measured, roughly chosen; might need tuning live.
+- CLI chat mode (`cargo run -- chat`) hasn't been tried with a real model key (no key on this
+  machine): **unverified** beyond the no-key error path and unit tests.
+- Agent resilience for a reasoning-mandatory model (glm-5.3-flash) (budget ×2, effort=low, JSON
+  from the thinking) hasn't been verified live; tried via `/zihin test:true`. Debug mode and the
+  settings-panel buttons haven't been seen on live Discord.
+- `Handler::reaction_add` (evaluates reactions left on the bot's own messages) and the
+  `GUILD_MESSAGE_REACTIONS` intent have never been seen live; verified only by the compiler +
+  the `reaction_label` unit test. Reactor info and the reacted-to message's text are fetched
+  fresh over HTTP every time via `add_reaction.user`/`.message` (the Reaction event carries
+  neither) — latency/rate-limiting hasn't been observed live.
+- **2026-09-03: the codebase (src/**/*.rs, README.md) was translated from Turkish to English**
+  (identifiers, comments, file/directory names, .env variable names). The bot's way of
+  operating (prompts/, `durum/` file formats, everything reaching Discord) was deliberately
+  left Turkish — see item 8. This translation wasn't verified on live Discord; only checked via
+  the compiler + 76 unit tests + clippy. AGENTS.md/docs/dev/ prose stayed Turkish, only code
+  references (function/file/env variable names) were updated.
+- **2026-09-03: multilingual infrastructure added (item 12), only `tr` filled in.** The
+  `BOT_LANG`/`Lang` selection and prompt+string dispatch have never been seen on live Discord;
+  verified only by the compiler + 82 unit tests + clippy. That the ~160 keys in `langs/tr.json`
+  fit Discord's actual embed/button size limits (`modal.rs`'s `LABEL_LIMIT`/`FIELD_LIMIT` etc.)
+  was only checked statically (Turkish text of the same length), not rendered live. When a
+  second language is added, that language's text needs the same check against these limits.
+- **2026-09-03: `en` (English) was filled in — `prompts/en/*.md` (31 files) and `langs/en.json`
+  (158 keys), translated by hand.** JSON field names (the `Record`/`PersonRecord`/`TopicRecord`
+  keys `olay`/`kisiler`/`isim`/`puan_degisimi`/`not`/`bilgiler`/`etiketler`/`konular`/`ad`/
+  `kendim`) were left Turkish in the English prompts too — the Rust structs still expect these
+  names, translating them would break JSON parsing. Slash command names were translated too
+  (`durum→status`, `dusunme→thinking` etc.); command option values (things like
+  `goster`/`gizle`/`ac`/`kapat`) weren't translated at all, only the visible labels. Running
+  `cargo run -- chat` with `BOT_LANG=en` and seeing "language: En" in the log with no panic was
+  manually verified (see `docs/progress.md`); actually generating an English reply with a real
+  model was never tried — only the compiler + 86 unit tests + clippy. Whether the English text
+  fits Discord's embed/button size limits also wasn't verified (see the item above).
+- **2026-09-03: moved from `durum/` markdown files to `durum/hafiza.redb`.** This environment
+  has no real production `durum/` data (empty, never run live); the migration was verified only
+  by 85 unit tests + running `migrate-durum` against a hand-built made-up file tree and reading
+  it back with `cargo run -- chat` (model.md came through correctly). Never tried against a real
+  `durum/` tree — the operator should run `--dry-run` first on their own tree, then the real
+  migration, and compare with `/durum`/`/zihin`.
+- **2026-09-03: the `resimler/` folder was moved to `photos/`** (code, `.gitignore`, docs
+  updated); since it's an empty folder holding only `.gitkeep`, there's nothing extra to verify
+  live.
+- **2026-09-03: the `dev/` folder was merged into `docs/`, and all doc content (architecture,
+  modules, flows, state files, prompts, constants, decisions, development, glossary, progress,
+  roadmap) was translated from Turkish to English.** Filenames went English too (see the table
+  in `docs/README.md`). This reverses item 8's earlier "AGENTS.md/docs/dev/ prose stayed
+  Turkish" decision for these two folders — AGENTS.md/CLAUDE.md itself is still Turkish at that
+  point, only the content under `docs/` is English. The translation was checked only by the
+  compiler + clippy + tests (doc content doesn't affect live behavior); cross-references between
+  files (`see docs/...`) were updated by hand, some may have been missed.
+- **2026-09-04: AGENTS.md itself translated from Turkish to English**, at the user's explicit
+  request (this reverses the "AGENTS.md ... stays Turkish" part of the note above; `docs/` was
+  already English as of the previous day). CLAUDE.md's pointer text was updated to match.
+  Content/meaning unchanged, translation only; checked by re-reading against the previous
+  Turkish version, not by any live/build verification (this is prose, doesn't affect runtime
+  behavior).

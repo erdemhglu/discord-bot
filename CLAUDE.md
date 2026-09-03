@@ -1,7 +1,7 @@
-# Çekirdek tek yerde: AGENTS.md
+# Single source of truth: AGENTS.md
 
 @AGENTS.md
 
-> Bu dosya yalnız Claude Code uyumluluğu için duran bir işaretçidir. Kural buraya yazılmaz.
-> Oturum hafızası (yapılanlar + açık plan): `dev/ilerleme.md` ve `dev/yol-haritasi.md`.
-> Context compact sonrası ilk okunacak yer `dev/` klasörüdür.
+> This file is only a pointer for Claude Code compatibility. Rules don't go here.
+> Session memory (what's done + open plan): `docs/progress.md` and `docs/roadmap.md`.
+> The first place to read after a context compact is the `docs/` folder.
